@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import itertools
 import os
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -175,7 +176,11 @@ def learn_dict_seq(tsList, max_len=2048):
     plt.show()
 
 
-def plot_dset(d, numbits=8):
+DEFAULT_MAX_NN_IDX = (1 << 11) - 1
+
+
+def plot_dset(d, numbits=8, offset_algo='minimax', nn_step=4,
+              num_neighbors=DEFAULT_MAX_NN_IDX):
 
     maxval = (1 << numbits) - 1
     _, axes = plt.subplots(4, 2, figsize=(10, 8))
@@ -200,14 +205,61 @@ def plot_dset(d, numbits=8):
     blocks = blocks.reshape((-1, 8))
     absBlocks = np.abs(blocks)
 
-    prev_vals = np.insert(blocks[:-1, -1], 0, 0).reshape((-1, 1))
-    offsetBlocks = blocks - prev_vals
-    absOffsetBlocks = np.abs(offsetBlocks)
+    if offset_algo == 'minimax':
+        mins = np.min(blocks, axis=1)
+        ranges = np.max(blocks, axis=1) - mins
+        sub_vals = (mins + ranges / 2).astype(np.int32)
+        offsetBlocks = blocks - sub_vals.reshape((-1, 1))
+    elif offset_algo == 'nn7':
+        diff_windows = window.sliding_window_1D(diffs.ravel(), 8, step=8)
+        sub_windows = np.zeros_like(diff_windows)
+        N = len(diff_windows)
 
+        zero_samples = np.zeros(8, dtype=np.int32)
+        for n in range(6 * nn_step + 8, N):
+            assert nn_step == 4  # below only handles this value
+            neighbors_slice = diff_windows[(n-4):n].ravel()
+            neighbors = window.sliding_window_1D(neighbors_slice, 8, step=4)
+            neighbors = np.vstack((neighbors, zero_samples))
+            assert len(neighbors) == 8
+
+            costs = np.abs(neighbors - diff_windows[n])
+            costs = np.max(costs, axis=1)
+            nn_idx = np.argmin(costs)
+            sub_windows[n] = neighbors[nn_idx]
+
+        offsetBlocks = blocks - sub_windows
+
+    elif offset_algo == 'nn':
+        assert nn_step == 4  # we only handle 4 for now
+        diff_windows = window.sliding_window_1D(diffs.ravel(), 8, step=8)
+        # nn_windows = window.sliding_window_1D(diffs.ravel(), 8, step=4)
+        offsetBlocks = np.zeros_like(diff_windows)
+
+        zero_samples = np.zeros(8, dtype=np.int32)
+        N = len(diff_windows)
+
+        for n in range(1, N):
+            start_idx = int(max(0, n - (nn_step / 8.) * num_neighbors))
+            end_idx = n
+            history = diff_windows[start_idx:end_idx].ravel()
+            nn_windows = window.sliding_window_1D(history, 8, step=4)
+            neighbors = np.vstack((nn_windows, zero_samples))
+
+            costs = np.abs(neighbors - diff_windows[n])
+            costs = np.max(costs, axis=1)
+            nn_idx = np.argmin(costs)
+            offsetBlocks[n] = diff_windows[n] - neighbors[nn_idx]
+
+    else:
+        raise ValueError("Unrecognized offset algorithm: {}".format(
+            offset_algo))
+
+    absOffsetBlocks = np.abs(offsetBlocks)
     absDiffs = np.abs(absBlocks).ravel()
     absOffsetDiffs = absOffsetBlocks.ravel()
 
-    # "examples" stitched together from blocks with prev vals subbed off
+    # "examples" stitched together from blocks with vals subbed off
     use_shape = diffs.shape[0] - 1, diffs.shape[1]
     use_size = use_shape[0] * use_shape[1]
     diffs_offset = offsetBlocks.ravel()[:use_size].reshape(use_shape)
@@ -261,11 +313,11 @@ def plot_dset(d, numbits=8):
     axes[2].set_title("Deltas ({:.2f}% {}bit overflow)".format(
         100 * overflow_frac4, int(np.log2(cutoff + 1) + 1)))
 
-    axes[-2].set_title("Deltas after subbing prev delta ({:.2f}% {}bit overflow)".format(
+    axes[-2].set_title("Deltas after offseting ({:.2f}% {}bit overflow)".format(
         100 * overflow_frac4_offset, int(np.log2(cutoff + 1) + 1)))
 
     axes[3].set_title("PDF/CDF of |max block delta| (with nbits lines)")
-    axes[-1].set_title("PDF/CDF of |max block delta| after subbing prev delta")
+    axes[-1].set_title("PDF/CDF of |max block delta| after offseting")
 
     axes[0].set_ylim((0, maxval))
     axes[1].set_ylim((-maxval/2, maxval/2))
@@ -298,7 +350,7 @@ def plot_dset(d, numbits=8):
 
     def plot_uresiduals_bits(resids, ax):
 
-        sb.distplot(resids, ax=ax)
+        sb.distplot(resids, ax=ax, kde=False, hist_kws={'normed': True})
 
         ax.set_xlim((0, min(np.max(resids), 256)))
         ax = ax.twinx()
@@ -325,7 +377,80 @@ def plot_dset(d, numbits=8):
     plt.tight_layout()
 
 
+def create_perm_lut():
+    lut = np.zeros(64, dtype=np.uint8) + 255
+
+    def perm_number(perm):
+        # comparisons order:
+        #   (0,1), (0,2), (0,3), (1,2), (1,3), (2,3)
+        #
+        # I'm using > instead of >= because I'm more certain that there are
+        # only 24 combos of these, since strict inequality is never symmetric
+        ret = 0
+        if perm[0] > perm[1]:
+            ret += 32
+        if perm[0] > perm[2]:
+            ret += 16
+        if perm[0] > perm[3]:
+            ret += 8
+        if perm[1] > perm[2]:
+            ret += 4
+        if perm[1] > perm[3]:
+            ret += 2
+        if perm[2] > perm[3]:
+            ret += 1
+
+        return ret
+
+    perms = itertools.permutations(range(4))
+    perms = np.array(list(perms))  # since we'll return it
+    for i, perm in enumerate(perms):
+        lut[perm_number(perm)] = i
+
+    # this returns the lut:
+    # [  0   1 255   3   2 255   4   5 255 255 255   9 255 255 255  11 255 255
+    # 255 255   8 255  10 255 255 255 255 255 255 255  16  17   6   7 255 255
+    # 255 255 255 255 255  13 255  15 255 255 255 255  12 255 255 255  14 255
+    # 255 255  18  19 255  21  20 255  22  23]
+    #
+    # Note that, to be super safe, should use 0 instead of 255 as placeholder
+    return lut, perms
+
+
+def hash_block(samples, lut, perms):
+    """maps 8 samples to an index in {0,1,...,31}
+
+    Assumes latter params are from create_perm_lut()"""
+
+    sums = samples.reshape((4, 2)).sum(axis=1)
+    idx = int(sums[0] > sums[1]) << 5
+    idx += (sums[0] > sums[2]) << 4
+    idx += (sums[0] > sums[3]) << 3
+    idx += (sums[1] > sums[2]) << 2
+    idx += (sums[1] > sums[3]) << 1
+    idx += (sums[2] > sums[3])
+
+    perm_idx = lut[idx]
+
+    # if largest/smallest sum much bigger than others, use that
+    perm = perms[perm_idx]
+    if sums[perm[0]] > (sums[perm[1]] << 1):
+        return 24 + perm[0]
+    if sums[perm[3]] < (sums[perm[2]] << 1):
+        return 28 + perm[3]
+
+    # otherwise, return bucket based on overall shape
+    return perm_idx
+
+
 def main():
+    # # uncomment this to get the LUT for mapping comparison bytes to indices
+    lut, perms = create_perm_lut()
+    print "perm lut, perms: ", lut, "\n", perms
+    assert len(np.unique(lut)) == 25
+    import sys
+    sys.exit()
+
     # dsets = ds.smallUCRDatasets()
 
     # dset = list(dsets)[2]
@@ -339,102 +464,26 @@ def main():
 
     # mpl.rcParams.update({'figure.autolayout': True})  # make twinx() not suck
 
-    # dsets = ds.allUCRDatasets()
-    dsets = ds.smallUCRDatasets()
+    dsets = ds.allUCRDatasets()
+    # dsets = ds.smallUCRDatasets()
 
     # numbits = 16
     # numbits = 12
     numbits = 8
 
     # print [d.name for d in dsets]
-    # for d in list(dsets)[2:3]:
     # for d in list(dsets)[9:10]:
+    # for d in list(dsets)[2:3]:
     for d in dsets:
-        plot_dset(d, numbits=numbits)
-        save_current_plot(d.name, subdir='small/deltas/{}b'.format(numbits))
+        # plot_dset(d, numbits=numbits, offset_algo='nn7')
+        plot_dset(d, numbits=numbits, offset_algo='nn')
+        # save_current_plot(d.name, subdir='small/deltas/{}b_nn'.format(numbits))
+        # save_current_plot(d.name, subdir='small/deltas/{}b_nn7'.format(numbits))
+        # save_current_plot(d.name, subdir='small/deltas/{}b'.format(numbits))
+        save_current_plot(d.name, subdir='deltas/{}b_nn'.format(numbits))
+        # save_current_plot(d.name, subdir='deltas/{}b_nn7'.format(numbits))
         # save_current_plot(d.name, subdir='deltas/{}b'.format(numbits))
 
-        # # if d.name not in ('Two_Patterns', 'synthetic_control'):  # TODO rm
-        # #     continue
-
-        # # _, axes = plt.subplots(3, figsize=(6, 8))
-        # _, axes = plt.subplots(4, figsize=(6, 8))
-
-        # # ------------------------ data munging
-
-        # X = d.X[:100]
-        # X = X - np.min(X)
-        # X = (255. / np.max(X) * X).astype(np.int32)
-        # # axes[1].set_ylim((0, 255))
-
-        # diffs = X[:, 1:] - X[:, :-1]
-        # absDiffs = np.abs(diffs)
-
-        # # 8bit overflow
-        # x_bad = np.where(absDiffs.ravel() > 127)[0]
-        # y_bad = diffs.ravel()[x_bad]
-        # x_bad = np.mod(x_bad, diffs.shape[1])
-        # overflow_frac = len(x_bad) / float(X.size)
-
-        # # 4bit overflow
-        # x_bad4 = np.where(absDiffs.ravel() > 7)[0]
-        # y_bad4 = diffs.ravel()[x_bad4]
-        # x_bad4 = np.mod(x_bad4, diffs.shape[1])
-        # overflow_frac4 = len(x_bad4) / float(X.size)
-
-        # # ------------------------ actual plotting
-
-        # axes[0].set_title(d.name)
-        # axes[1].set_title("{} deltas ({:.2f}% overflow)".format(
-        #     d.name, 100 * overflow_frac))
-        # axes[2].set_title("{} deltas ({:.2f}% 4bit overflow)".format(
-        #     d.name, 100 * overflow_frac4))
-        # axes[3].set_title("PDF/CDF of {} |deltas| (with nbits lines)".format(d.name))
-
-        # axes[0].set_ylim((0, 255))
-        # axes[1].set_ylim((-127, 127))
-        # axes[2].set_ylim((-8, 7))
-        # axes[3].set_xlim((0, np.max(absDiffs)))
-        # # axes[3].set_ylim((0, .5))
-
-        # plot_examples(X, ax=axes[0])
-
-        # plot_examples(diffs, ax=axes[1])
-        # axes[1].scatter(x_bad, y_bad, s=np.pi * 10*10,
-        #                 facecolors='none', edgecolors='r')
-
-        # plot_examples(diffs, ax=axes[2])
-        # axes[2].scatter(x_bad4, y_bad4, s=np.pi * 10*10,
-        #                 facecolors='none', edgecolors='r')
-
-        # sb.distplot(absDiffs.ravel(), ax=axes[3])
-        # # axes[3].hist(absDiffs.ravel())
-        # # sb.distplot(absDiffs.ravel(), kde=False, ax=axes[3])
-        # # sb.distplot(absDiffs.ravel(), ax=axes[3],
-        #             # hist_kws=dict(cumulative=True),
-        #             # kde_kws=dict(cumulative=True))
-
-        # ax = axes[3].twinx()
-        # ax.set_xlim(axes[3].get_xlim())
-        # ax.set_ylim((0, 1))
-        # sb.distplot(absDiffs.ravel(), ax=ax, hist=False, color='brown',
-        #             kde_kws={'cumulative': True})
-
-        # # cutoffs = [2, 4, 8, 16, 32, 64]
-        # cutoffs = [4, 8, 16, 32, 64]
-        # max_nbits_left = ax.get_xlim()[1]
-        # if max_nbits_left > 128:
-        #     cutoffs.append(128)
-        # for i, cutoff in enumerate(cutoffs):
-        #     ax.plot([cutoff, cutoff], [0, 1], 'k--', lw=1)
-        #     x = cutoff / float(max_nbits_left)
-        #     y = .05 + (.8 * (i % 2)) + (.025 * (i % 4))  # stagger heights
-        #     nbits = str(int(np.log2(cutoff) + 1))
-        #     ax.annotate(nbits, xy=(x, y), xycoords='axes fraction')
-
-        # plt.tight_layout()
-        # save_current_plot(d.name, subdir='small/deltas')
-        # save_current_plot(d.name, subdir='deltas')
     # plt.show()
 
 
