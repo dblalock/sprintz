@@ -179,6 +179,60 @@ def learn_dict_seq(tsList, max_len=2048):
 DEFAULT_MAX_NN_IDX = (1 << 11) - 1
 
 
+def nn_encode(diffs, num_neighbors, nn_step=4, hash_algo=None):
+
+    if hash_algo is None or hash_algo == 'none':
+        assert nn_step == 4  # we only handle 4 for now
+        diff_windows = window.sliding_window_1D(diffs.ravel(), 8, step=8)
+        offsetBlocks = np.zeros_like(diff_windows)
+
+        zero_samples = np.zeros(8, dtype=np.int32)
+        N = len(diff_windows)
+
+        for n in range(1, N):
+            start_idx = int(max(0, n - (nn_step / 8.) * num_neighbors))
+            end_idx = n
+            history = diff_windows[start_idx:end_idx].ravel()
+            nn_windows = window.sliding_window_1D(history, 8, step=4)
+            neighbors = np.vstack((nn_windows, zero_samples))
+
+            costs = np.abs(neighbors - diff_windows[n])
+            costs = np.max(costs, axis=1)
+            nn_idx = np.argmin(costs)
+            offsetBlocks[n] = diff_windows[n] - neighbors[nn_idx]
+
+        return offsetBlocks
+
+    if hash_algo == 'perm':
+        assert nn_step == 4  # we only handle 4 for now
+        diff_windows = window.sliding_window_1D(diffs.ravel(), 8, step=8)
+        # nn_windows = window.sliding_window_1D(diffs.ravel(), 8, step=4)
+        offsetBlocks = np.zeros_like(diff_windows)
+
+        zero_samples = np.zeros(8, dtype=np.int32)
+        N = len(diff_windows)
+
+
+        # SELF: pick up here
+
+
+    raise ValueError("Unrecognized hash_algo: '{}'".format(hash_algo))
+
+
+def quantize_diff_block(X, numbits, keep_nrows=100):
+    maxval = (1 << numbits) - 1
+    X = X[:100]
+    X = X - np.min(X)
+    X = (maxval / float(np.max(X)) * X).astype(np.int32)
+    diffs = X[:, 1:] - X[:, :-1]
+
+    tail = diffs.size % 8
+    blocks = diffs.ravel()[:-tail] if tail > 0 else diffs.ravel()
+    blocks = blocks.reshape((-1, 8))
+
+    return X, diffs, blocks
+
+
 def plot_dset(d, numbits=8, offset_algo='minimax', nn_step=4,
               num_neighbors=DEFAULT_MAX_NN_IDX):
 
@@ -192,17 +246,19 @@ def plot_dset(d, numbits=8, offset_algo='minimax', nn_step=4,
 
     # ------------------------ data munging
 
-    X = d.X[:100]
-    X = X - np.min(X)
-    X = (maxval / float(np.max(X)) * X).astype(np.int32)
-    # axes[1].set_ylim((0, 255))
+    # X = d.X[:100]
+    # X = X - np.min(X)
+    # X = (maxval / float(np.max(X)) * X).astype(np.int32)
+    # # axes[1].set_ylim((0, 255))
 
-    diffs = X[:, 1:] - X[:, :-1]
-    # absDiffs = np.abs(diffs)
-    tail = diffs.size % 8
+    # diffs = X[:, 1:] - X[:, :-1]
+    # # absDiffs = np.abs(diffs)
+    # tail = diffs.size % 8
 
-    blocks = diffs.ravel()[:-tail] if tail > 0 else diffs.ravel()
-    blocks = blocks.reshape((-1, 8))
+    # blocks = diffs.ravel()[:-tail] if tail > 0 else diffs.ravel()
+    # blocks = blocks.reshape((-1, 8))
+
+    X, diffs, blocks = quantize_diff_block(d.X, numbits, )
     absBlocks = np.abs(blocks)
 
     if offset_algo == 'minimax':
@@ -231,25 +287,27 @@ def plot_dset(d, numbits=8, offset_algo='minimax', nn_step=4,
         offsetBlocks = blocks - sub_windows
 
     elif offset_algo == 'nn':
-        assert nn_step == 4  # we only handle 4 for now
-        diff_windows = window.sliding_window_1D(diffs.ravel(), 8, step=8)
-        # nn_windows = window.sliding_window_1D(diffs.ravel(), 8, step=4)
-        offsetBlocks = np.zeros_like(diff_windows)
+        offsetBlocks = nn_encode(diffs, num_neighbors)
 
-        zero_samples = np.zeros(8, dtype=np.int32)
-        N = len(diff_windows)
+        # assert nn_step == 4  # we only handle 4 for now
+        # diff_windows = window.sliding_window_1D(diffs.ravel(), 8, step=8)
+        # # nn_windows = window.sliding_window_1D(diffs.ravel(), 8, step=4)
+        # offsetBlocks = np.zeros_like(diff_windows)
 
-        for n in range(1, N):
-            start_idx = int(max(0, n - (nn_step / 8.) * num_neighbors))
-            end_idx = n
-            history = diff_windows[start_idx:end_idx].ravel()
-            nn_windows = window.sliding_window_1D(history, 8, step=4)
-            neighbors = np.vstack((nn_windows, zero_samples))
+        # zero_samples = np.zeros(8, dtype=np.int32)
+        # N = len(diff_windows)
 
-            costs = np.abs(neighbors - diff_windows[n])
-            costs = np.max(costs, axis=1)
-            nn_idx = np.argmin(costs)
-            offsetBlocks[n] = diff_windows[n] - neighbors[nn_idx]
+        # for n in range(1, N):
+        #     start_idx = int(max(0, n - (nn_step / 8.) * num_neighbors))
+        #     end_idx = n
+        #     history = diff_windows[start_idx:end_idx].ravel()
+        #     nn_windows = window.sliding_window_1D(history, 8, step=4)
+        #     neighbors = np.vstack((nn_windows, zero_samples))
+
+        #     costs = np.abs(neighbors - diff_windows[n])
+        #     costs = np.max(costs, axis=1)
+        #     nn_idx = np.argmin(costs)
+        #     offsetBlocks[n] = diff_windows[n] - neighbors[nn_idx]
 
     else:
         raise ValueError("Unrecognized offset algorithm: {}".format(
@@ -263,25 +321,6 @@ def plot_dset(d, numbits=8, offset_algo='minimax', nn_step=4,
     use_shape = diffs.shape[0] - 1, diffs.shape[1]
     use_size = use_shape[0] * use_shape[1]
     diffs_offset = offsetBlocks.ravel()[:use_size].reshape(use_shape)
-
-    # print "diffs.shape", absBlocks.shape
-    # print "absDiffs.shape", absBlocks.shape
-    # print "tail len", tail
-    # print "absBlocks.shape", absBlocks.shape
-    # return
-
-    # 8bit overflow
-    # x_bad = np.where(absDiffs > int(maxval / 2))[0]
-    # y_bad = diffs.ravel()[x_bad]
-    # x_bad = np.mod(x_bad, diffs.shape[1])
-    # overflow_frac = len(x_bad) / float(X.size)
-
-    # 4bit overflow (or 8bit for 16bit values)
-    # cutoff = int(2**(numbits - 5)) - 1
-    # x_bad4 = np.where(absDiffs > cutoff)[0]
-    # y_bad4 = diffs.ravel()[x_bad4]
-    # x_bad4 = np.mod(x_bad4, diffs.shape[1])
-    # overflow_frac4 = len(x_bad4) / float(X.size)
 
     def compute_signed_overflow(resids, nbits):
         cutoff = int(2**(nbits - 1)) - 1
@@ -323,7 +362,6 @@ def plot_dset(d, numbits=8, offset_algo='minimax', nn_step=4,
     axes[1].set_ylim((-maxval/2, maxval/2))
     axes[2].set_ylim((-cutoff - 1, cutoff))
     axes[-2].set_ylim((-cutoff - 1, cutoff))
-    # axes[3].set_ylim((0, .5))
 
     # plot raw data
     plot_examples(X, ax=axes[0])
@@ -353,18 +391,21 @@ def plot_dset(d, numbits=8, offset_algo='minimax', nn_step=4,
         sb.distplot(resids, ax=ax, kde=False, hist_kws={'normed': True})
 
         ax.set_xlim((0, min(np.max(resids), 256)))
-        ax = ax.twinx()
-        ax.set_xlim(axes[3].get_xlim())
-        ax.set_ylim((0, 1))
-        sb.distplot(np.max(absBlocks, axis=1), ax=ax, hist=False, color='brown',
-                    kde_kws={'cumulative': True})
+        # ax = ax.twinx()
+        # ax.set_xlim(axes[3].get_xlim())
+        # ax.set_ylim((0, 1))
+        # sb.distplot(np.max(absBlocks, axis=1), ax=ax, hist=False, color='brown',
+        # sb.distplot(np.max(resids, axis=1), ax=ax, hist=False, color='brown',
+        #             kde_kws={'cumulative': True})
 
-        # cutoffs = [2, 4, 8, 16, 32, 64]
+        _, ymax = ax.get_ylim()
+        ax.set_ylim([0, ymax])
         cutoffs = [4, 8, 16, 32, 64]
         max_nbits_left = ax.get_xlim()[1]
         if max_nbits_left > 128:
             cutoffs.append(128)
         for i, cutoff in enumerate(cutoffs):
+            # ax.plot([cutoff, cutoff], [0, ymax], 'k--', lw=1)
             ax.plot([cutoff, cutoff], [0, 1], 'k--', lw=1)
             x = cutoff / float(max_nbits_left)
             y = .05 + (.8 * (i % 2)) + (.025 * (i % 4))  # stagger heights
@@ -373,6 +414,11 @@ def plot_dset(d, numbits=8, offset_algo='minimax', nn_step=4,
 
     plot_uresiduals_bits(absDiffs, ax=axes[3])
     plot_uresiduals_bits(absOffsetDiffs, ax=axes[-1])
+
+    _, ymax_left = axes[3].get_ylim()
+    _, ymax_right = axes[-1].get_ylim()
+    ymax = max(ymax_left, ymax_right)
+    [ax.set_ylim([0, ymax]) for ax in (axes[3], axes[-1])]
 
     plt.tight_layout()
 
@@ -443,13 +489,17 @@ def hash_block(samples, lut, perms):
     return perm_idx
 
 
+def plot_hash_func(d, numbits, num_neighbors=256, nn_step=4):
+    pass
+
+
 def main():
-    # # uncomment this to get the LUT for mapping comparison bytes to indices
-    lut, perms = create_perm_lut()
-    print "perm lut, perms: ", lut, "\n", perms
-    assert len(np.unique(lut)) == 25
-    import sys
-    sys.exit()
+    # # # uncomment this to get the LUT for mapping comparison bytes to indices
+    # lut, perms = create_perm_lut()
+    # print "perm lut, perms: ", lut, "\n", perms
+    # assert len(np.unique(lut)) == 25
+    # import sys
+    # sys.exit()
 
     # dsets = ds.smallUCRDatasets()
 
@@ -464,23 +514,23 @@ def main():
 
     # mpl.rcParams.update({'figure.autolayout': True})  # make twinx() not suck
 
-    dsets = ds.allUCRDatasets()
-    # dsets = ds.smallUCRDatasets()
+    # dsets = ds.allUCRDatasets()
+    dsets = ds.smallUCRDatasets()
 
     # numbits = 16
-    # numbits = 12
-    numbits = 8
+    numbits = 12
+    # numbits = 8
 
     # print [d.name for d in dsets]
-    # for d in list(dsets)[9:10]:
     # for d in list(dsets)[2:3]:
+    # for d in list(dsets)[9:10]:
     for d in dsets:
         # plot_dset(d, numbits=numbits, offset_algo='nn7')
         plot_dset(d, numbits=numbits, offset_algo='nn')
-        # save_current_plot(d.name, subdir='small/deltas/{}b_nn'.format(numbits))
+        save_current_plot(d.name, subdir='small/deltas/{}b_nn'.format(numbits))
         # save_current_plot(d.name, subdir='small/deltas/{}b_nn7'.format(numbits))
         # save_current_plot(d.name, subdir='small/deltas/{}b'.format(numbits))
-        save_current_plot(d.name, subdir='deltas/{}b_nn'.format(numbits))
+        # save_current_plot(d.name, subdir='deltas/{}b_nn'.format(numbits))
         # save_current_plot(d.name, subdir='deltas/{}b_nn7'.format(numbits))
         # save_current_plot(d.name, subdir='deltas/{}b'.format(numbits))
 
