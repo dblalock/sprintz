@@ -19,9 +19,6 @@ using Vec_i8 = Vec<int8_t>;
 using Vec_u8 = Vec<uint8_t>;
 using Vec_i16 = Vec<int16_t>;
 using Vec_u16 = Vec<uint16_t>;
-//using Vec_u8 = Eigen::Array<uint8_t, Eigen::Dynamic, 1>;
-//using Vec_i16 = Eigen::Array<int16_t, Eigen::Dynamic, 1>;
-//using Vec_u16 = Eigen::Array<uint16_t, Eigen::Dynamic, 1>;
 
 
 TEST_CASE("smoke test", "[sanity]") {
@@ -29,7 +26,7 @@ TEST_CASE("smoke test", "[sanity]") {
     REQUIRE(x == 0);
 }
 
-TEST_CASE("naiveDelta", "[sanity]") {
+TEST_CASE("building blocks", "[sanity]") {
     uint16_t sz = 256;
     Vec_u8 raw(sz);
     raw.setRandom();
@@ -37,11 +34,39 @@ TEST_CASE("naiveDelta", "[sanity]") {
     Vec_i8 compressed(sz);
     Vec_u8 decompressed(sz);
 
-    auto len = compress8b_naiveDelta(raw.data(), sz, compressed.data());
-    REQUIRE(len == sz);
-    auto len2 = decompress8b_naiveDelta(compressed.data(), sz, decompressed.data());
-    REQUIRE(len2 == sz);
-
+    SECTION("naiveDelta") {
+        auto len = compress8b_naiveDelta(raw.data(), sz, compressed.data());
+        REQUIRE(len == sz);
+        auto len2 = decompress8b_naiveDelta(compressed.data(), sz, decompressed.data());
+        REQUIRE(len2 == sz);
+        
+        REQUIRE(ar::all_eq(raw, decompressed));
+    }
     
-    REQUIRE(ar::all_eq(raw, decompressed));
+    SECTION("bitshuf_8b") {
+        for (uint8_t nbits = 0; nbits <= 8; nbits++) {
+            auto len = compress8b_bitshuf_8b(raw.data(), sz, compressed.data());
+            REQUIRE(len == sz);
+            auto len2 = decompress8b_bitshuf(compressed.data(), sz, decompressed.data());
+            REQUIRE(len2 == sz);
+            
+            REQUIRE(ar::all_eq(raw, decompressed));
+        }
+    }
 }
+
+//TEST_CASE("naiveDelta", "[sanity]") {
+//    uint16_t sz = 256;
+//    Vec_u8 raw(sz);
+//    raw.setRandom();
+//    raw *= 127;
+//    Vec_i8 compressed(sz);
+//    Vec_u8 decompressed(sz);
+//    
+//    auto len = compress8b_naiveDelta(raw.data(), sz, compressed.data());
+//    REQUIRE(len == sz);
+//    auto len2 = decompress8b_naiveDelta(compressed.data(), sz, decompressed.data());
+//    REQUIRE(len2 == sz);
+//    
+//    REQUIRE(ar::all_eq(raw, decompressed));
+//}
