@@ -433,8 +433,7 @@ def my_transform_orig(blocks):
 def my_old_transform(blocks):  # old version that loses LSBs
     offsetBlocks2 = np.empty(blocks.shape, dtype=np.int32)
     for i in range(1, blocks.shape[1], 2):
-        offsetBlocks2[:, i] = blocks[:, i-1] >> 1 + blocks[:, i] >> 1 + \
-            np.bitwise_and(blocks[:, i], 1)
+        offsetBlocks2[:, i] = (blocks[:, i-1] >> 1) + (blocks[:, i] >> 1)
         offsetBlocks2[:, i-1] = blocks[:, i-1] - offsetBlocks2[:, i]
     return offsetBlocks2
 
@@ -455,16 +454,187 @@ def my_transform_inverse(blocks):
     return blocks
 
 
+def canal_transform(blocks):
+    # note that this is not the exact transform; just an easy approx to see
+    # how much it helps
+    blocks_out = -np.sort(-blocks, axis=1)  # negate so sort is descending
+    # blocks_out = blocks_out[:, ::-1]
+    for i in range(7):
+        increase = (blocks_out[:, i] - blocks_out[:, i+1]) / (8-i)
+        blocks_out[:, i+1:] += increase.reshape((-1, 1))
+        blocks_out[:, i] = blocks_out[:, i+1]
+    return blocks_out
+
+
 def inflection_encode(blocks):
+    """
+    >>> inflection_encode([2, -2, 1, 0])
+    array([ 2,  0, -1, -1])
+    """
+    blocks = np.asarray(blocks)
     shape = blocks.shape
-    blocks = np.copy(blocks.ravel())
+    blocks = blocks.ravel()
+    blocks_out = np.copy(blocks)
     for i in range(1, len(blocks)):
-        pass
+        val0 = blocks[i] - blocks[i-1]
+        val1 = blocks[i] + blocks[i-1]
+        blocks_out[i] = val0 if np.abs(val0) <= np.abs(val1) else val1
 
-def plot_dset(d, numbits=8, offset_algo='center', n=100, **nn_kwargs):
+    return blocks_out.reshape(shape)
 
-    if offset_algo is None or isinstance(offset_algo, str):
-        offset_algo = (offset_algo,)  # it's a collection
+
+def take_best_of_each(blocks_list):
+    """for each row idx, takes the row from any matrix in blocks_list that has
+    the smallest max abs value"""
+    best_blocks = np.copy(blocks_list[0])
+    best_costs = np.max(np.abs(best_blocks), axis=1)
+    for other_blocks in blocks_list[1:]:
+        costs = np.max(np.abs(other_blocks), axis=1)
+        take_idxs = costs < best_costs
+        best_costs = np.minimum(costs, best_costs)
+        best_blocks[take_idxs] = other_blocks[take_idxs]
+
+    return best_blocks
+
+
+def compute_deltas(blocks):
+    blocks_diff = np.zeros(blocks.size)
+    blocks_diff[0] = blocks.ravel()[0]
+    blocks_diff[1:] = np.diff(blocks.ravel())
+    return blocks_diff.reshape(blocks.shape)
+
+
+def encode_fir(blocks, filt):
+    """
+    Note that this includes the prefixes that aren't encoded (eg, first element,
+    and first two elements, in below examples)
+
+    >>> encode_fir([0,1,2,2,0,0], [1])  # delta coding
+    array([ 0,  1,  1,  0, -2,  0])
+    >>> encode_fir([0,1,2,2,0,0], [2, -1])  # double delta coding
+    array([ 0,  1,  0, -1, -2,  2])
+    """
+    # pretty sure this is equivalent to just convolving with [1, -filt]
+    ret = np.copy(blocks).ravel()
+    filt = np.asarray([0] + list(filt)).ravel()
+    predicted = np.convolve(ret, filt, mode='valid')
+    # return predicted
+    ret[(len(filt)-1):] -= predicted
+    return ret
+
+
+def possibly_delta_encode(blocks):
+    return take_best_of_each([blocks, compute_deltas(blocks)])
+
+
+def split_dyn_delta(blocks):
+    blocks_diff = compute_deltas(blocks)
+    blocks_out = np.empty(blocks.shape)
+    blocks_out[:, :4] = take_best_of_each([blocks[:, :4], blocks_diff[:, :4]])
+    blocks_out[:, 4:] = take_best_of_each([blocks[:, 4:], blocks_diff[:, 4:]])
+    return blocks_out
+
+
+def dyn_filt(blocks):
+    blocks_delta = compute_deltas(blocks)
+
+
+
+def learn_them_filters(blocks):
+    pass  # TODO
+
+
+def name_transforms(transforms):
+    if not isinstance(transforms, (list, tuple)):
+        transforms = [transforms]
+    return '|'.join([str(s) for s in transforms])
+
+
+def apply_transforms(diffs, blocks, transform_names):
+
+    # first round of transforms; defines offsetBlocks var
+    if 'double_delta' in transform_names:  # delta encode deltas
+        double_diffs = np.copy(diffs)
+        double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
+        offsetBlocks = convert_to_blocks(double_diffs)
+
+    # elif '1.5_delta' in transform_names:  # sub only half of previous delta
+    #     semi_diffs = np.copy(diffs)
+    #     semi_diffs[:, 1:] = diffs[:, 1:] - (diffs[:, :-1] >> 1)
+    #     offsetBlocks = convert_to_blocks(semi_diffs)
+
+    elif 'dyn_delta' in transform_names:  # pick delta or delta-delta
+        offsetBlocks = possibly_delta_encode(blocks)
+
+    elif 'split_dyn' in transform_names:
+        offsetBlocks = split_dyn_delta(blocks)
+
+        # double_diffs = np.copy(diffs)
+        # double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
+        # blocks_dbl = convert_to_blocks(double_diffs)
+
+        # costs_single = np.max(np.abs(blocks), axis=1)
+        # costs_dbl = np.max(np.abs(blocks_dbl), axis=1)
+        # better_idxs = costs_dbl < costs_single
+
+        # offsetBlocks = np.copy(blocks)
+        # offsetBlocks[better_idxs] = blocks_dbl[better_idxs]
+    else:
+        offsetBlocks = np.copy(blocks)
+
+    if 'center' in transform_names:
+        mins = np.min(offsetBlocks, axis=1)
+        ranges = np.max(offsetBlocks, axis=1) - mins
+        sub_vals = (mins + ranges / 2).astype(np.int32)
+        offsetBlocks -= sub_vals.reshape((-1, 1))
+
+    if 'scaled_signs' in transform_names:
+        offsetBlocks = scaled_signs_encode(offsetBlocks)
+
+    if 'nn' in transform_names:
+        offsetBlocks = nn_encode(offsetBlocks, **nn_kwargs)
+
+    if 'avg' in transform_names:
+        offsetBlocks2 = np.empty(offsetBlocks.shape, dtype=np.int32)
+        for i in range(1, 8):
+            offsetBlocks2[:, i] = offsetBlocks[:, i-1] >> 1 + offsetBlocks[:, i] >> 1
+        offsetBlocks2[:, 0] = offsetBlocks[:, 0] - offsetBlocks2[:, 1]
+        offsetBlocks = np.copy(offsetBlocks2)
+
+    transform_names_copy = [el for el in transform_names]
+    while 'mine' in transform_names_copy:
+        # offsetBlocks = my_transform(offsetBlocks)
+        offsetBlocks = my_old_transform(offsetBlocks)
+        transform_names_copy.remove('mine')
+        if 'mine' in transform_names_copy:
+            perm = [1, 2, 5, 6, 7, 4, 3, 0]
+            offsetBlocks = offsetBlocks[:, perm]
+
+    # if transform_names[0] == 'inflection' :
+    if 'inflection' in transform_names:
+        offsetBlocks = inflection_encode(offsetBlocks)
+
+    # if transform_names[0] == 'can:
+    if 'canal' in transform_names:
+        offsetBlocks = canal_transform(offsetBlocks)
+
+    # "examples" stitched together from blocks with vals subbed off
+    # if diffs_offset is None:
+    use_shape = diffs.shape[0] - 1, diffs.shape[1]
+    use_size = use_shape[0] * use_shape[1]
+    diffs_offset = offsetBlocks.ravel()[:use_size].reshape(use_shape)
+
+    return offsetBlocks, diffs_offset
+
+
+def plot_dset(d, numbits=8, left_transforms=None,
+              right_transforms=None, n=100, **nn_kwargs):
+
+    # force transforms to be collections
+    if right_transforms is None or isinstance(right_transforms, str):
+        right_transforms = (right_transforms,)
+    if left_transforms is None or isinstance(left_transforms, str):
+        left_transforms = (left_transforms,)
 
     _, axes = plt.subplots(4, 2, figsize=(10, 8))
     axes = np.concatenate([axes[:, 0], axes[:, 1]])
@@ -473,66 +643,77 @@ def plot_dset(d, numbits=8, offset_algo='center', n=100, **nn_kwargs):
 
     X, diffs, blocks = quantize_diff_block(d.X, numbits, keep_nrows=n)
 
-    # first round of transforms; defines offsetBlocks var
-    if 'double_delta' in offset_algo:  # delta encode deltas
-        double_diffs = np.copy(diffs)
-        double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
-        offsetBlocks = convert_to_blocks(double_diffs)
+    offsetBlocksLeft, diffs_left = apply_transforms(
+        diffs, blocks, left_transforms)
+    offsetBlocksRight, diffs_right = apply_transforms(
+        diffs, blocks, right_transforms)
 
-    elif '1.5_delta' in offset_algo:  # sub only half of previous delta
-        semi_diffs = np.copy(diffs)
-        semi_diffs[:, 1:] = diffs[:, 1:] - (diffs[:, :-1] >> 1)
-        offsetBlocks = convert_to_blocks(semi_diffs)
+    # # first round of transforms; defines offsetBlocks var
+    # if 'double_delta' in right_transforms:  # delta encode deltas
+    #     double_diffs = np.copy(diffs)
+    #     double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
+    #     offsetBlocks = convert_to_blocks(double_diffs)
 
-    elif 'dyn_delta' in offset_algo:  # pick delta or delta-delta
-        double_diffs = np.copy(diffs)
-        double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
-        blocks_dbl = convert_to_blocks(double_diffs)
+    # elif '1.5_delta' in right_transforms:  # sub only half of previous delta
+    #     semi_diffs = np.copy(diffs)
+    #     semi_diffs[:, 1:] = diffs[:, 1:] - (diffs[:, :-1] >> 1)
+    #     offsetBlocks = convert_to_blocks(semi_diffs)
 
-        costs_single = np.max(np.abs(blocks), axis=1)
-        costs_dbl = np.max(np.abs(blocks_dbl), axis=1)
-        better_idxs = costs_dbl < costs_single
+    # elif 'dyn_delta' in right_transforms:  # pick delta or delta-delta
+    #     double_diffs = np.copy(diffs)
+    #     double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
+    #     blocks_dbl = convert_to_blocks(double_diffs)
 
-        offsetBlocks = np.copy(blocks)
-        offsetBlocks[better_idxs] = blocks_dbl[better_idxs]
-    else:
-        offsetBlocks = np.copy(blocks)
+    #     costs_single = np.max(np.abs(blocks), axis=1)
+    #     costs_dbl = np.max(np.abs(blocks_dbl), axis=1)
+    #     better_idxs = costs_dbl < costs_single
 
-    if 'center' in offset_algo:
-        mins = np.min(offsetBlocks, axis=1)
-        ranges = np.max(offsetBlocks, axis=1) - mins
-        sub_vals = (mins + ranges / 2).astype(np.int32)
-        offsetBlocks -= sub_vals.reshape((-1, 1))
+    #     offsetBlocks = np.copy(blocks)
+    #     offsetBlocks[better_idxs] = blocks_dbl[better_idxs]
+    # else:
+    #     offsetBlocks = np.copy(blocks)
 
-    if 'scaled_signs' in offset_algo:
-        offsetBlocks = scaled_signs_encode(offsetBlocks)
+    # if 'center' in right_transforms:
+    #     mins = np.min(offsetBlocks, axis=1)
+    #     ranges = np.max(offsetBlocks, axis=1) - mins
+    #     sub_vals = (mins + ranges / 2).astype(np.int32)
+    #     offsetBlocks -= sub_vals.reshape((-1, 1))
 
-    if 'nn' in offset_algo:
-        offsetBlocks = nn_encode(offsetBlocks, **nn_kwargs)
+    # if 'scaled_signs' in right_transforms:
+    #     offsetBlocks = scaled_signs_encode(offsetBlocks)
 
-    if 'avg' in offset_algo:
-        offsetBlocks2 = np.empty(offsetBlocks.shape, dtype=np.int32)
-        for i in range(1, 8):
-            offsetBlocks2[:, i] = offsetBlocks[:, i-1] >> 1 + offsetBlocks[:, i] >> 1
-        offsetBlocks2[:, 0] = offsetBlocks[:, 0] - offsetBlocks2[:, 1]
-        offsetBlocks = np.copy(offsetBlocks2)
+    # if 'nn' in right_transforms:
+    #     offsetBlocks = nn_encode(offsetBlocks, **nn_kwargs)
 
-    offset_algo_copy = [el for el in offset_algo]
-    while 'mine' in offset_algo_copy:
-        offsetBlocks = my_transform(offsetBlocks)
-        offset_algo_copy.remove('mine')
-        if 'mine' in offset_algo_copy:
-            perm = [1, 2, 5, 6, 7, 4, 3, 0]
-            offsetBlocks = offsetBlocks[:, perm]
+    # if 'avg' in right_transforms:
+    #     offsetBlocks2 = np.empty(offsetBlocks.shape, dtype=np.int32)
+    #     for i in range(1, 8):
+    #         offsetBlocks2[:, i] = offsetBlocks[:, i-1] >> 1 + offsetBlocks[:, i] >> 1
+    #     offsetBlocks2[:, 0] = offsetBlocks[:, 0] - offsetBlocks2[:, 1]
+    #     offsetBlocks = np.copy(offsetBlocks2)
 
-    # "examples" stitched together from blocks with vals subbed off
-    # if diffs_offset is None:
-    use_shape = diffs.shape[0] - 1, diffs.shape[1]
-    use_size = use_shape[0] * use_shape[1]
-    diffs_offset = offsetBlocks.ravel()[:use_size].reshape(use_shape)
+    # right_transforms_copy = [el for el in right_transforms]
+    # while 'mine' in right_transforms_copy:
+    #     # offsetBlocks = my_transform(offsetBlocks)
+    #     offsetBlocks = my_old_transform(offsetBlocks)
+    #     right_transforms_copy.remove('mine')
+    #     if 'mine' in right_transforms_copy:
+    #         perm = [1, 2, 5, 6, 7, 4, 3, 0]
+    #         offsetBlocks = offsetBlocks[:, perm]
+
+    # if 'inflection' in right_transforms:
+    #     offsetBlocks = inflection_encode(offsetBlocks)
+
+    # # "examples" stitched together from blocks with vals subbed off
+    # # if diffs_offset is None:
+    # use_shape = diffs.shape[0] - 1, diffs.shape[1]
+    # use_size = use_shape[0] * use_shape[1]
+    # diffs_offset = offsetBlocks.ravel()[:use_size].reshape(use_shape)
 
     # nbits_blocks = np.max(nbits_cost(offsetBlocks), axis=1)
     # TODO
+
+    # ------------------------ compute where overflows are
 
     def compute_signed_overflow(resids, nbits):
         cutoff = int(2**(nbits - 1)) - 1
@@ -542,30 +723,38 @@ def plot_dset(d, numbits=8, offset_algo='center', n=100, **nn_kwargs):
         overflow_frac = len(x_bad) / float(resids.size)
         return x_bad, y_bad, cutoff, overflow_frac
 
-    x_bad, y_bad, _, overflow_frac = \
-        compute_signed_overflow(diffs, numbits)
-    x_bad4, y_bad4, cutoff, overflow_frac4 = \
-        compute_signed_overflow(diffs, numbits - 4)
+    # uncomment if we want offsets for raw diffs again
+    # x_bad, y_bad, _, overflow_frac = \
+    #     compute_signed_overflow(diffs, numbits)
+    # x_bad4, y_bad4, cutoff, overflow_frac4 = \
+    #     compute_signed_overflow(diffs, numbits - 4)
 
-    x_bad_offset, y_bad_offset, _, overflow_frac_offset = \
-        compute_signed_overflow(diffs_offset, numbits)
-    x_bad4_offset, y_bad4_offset, _, overflow_frac4_offset = \
-        compute_signed_overflow(diffs_offset, numbits - 4)
+    x_bad_left, y_bad_left, _, overflow_frac_left = \
+        compute_signed_overflow(diffs_left, numbits)
+    x_bad4_left, y_bad4_left, _, overflow_frac4_left = \
+        compute_signed_overflow(diffs_left, numbits - 4)
+
+    x_bad_right, y_bad_right, _, overflow_frac_right = \
+        compute_signed_overflow(diffs_right, numbits)
+    x_bad4_right, y_bad4_right, _, overflow_frac4_right = \
+        compute_signed_overflow(diffs_right, numbits - 4)
 
     # ------------------------ actual plotting
 
     axes[0].set_title("{} ({} bits)".format(d.name, numbits))
 
-    axes[1].set_title("{} deltas ({:.2f}% overflow)".format(
-        d.name, 100 * overflow_frac))
-    axes[-3].set_title("{} offset deltas ({:.2f}% overflow)".format(
-        d.name, 100 * overflow_frac_offset))
+    left_names = name_transforms(left_transforms)
+    right_names = name_transforms(right_transforms)
+
+    axes[1].set_title("{} deltas ({:.2f}% overflow)\n{}".format(
+        d.name, 100 * overflow_frac_left, left_names))
+    axes[-3].set_title("{} deltas ({:.2f}% overflow)\n{}".format(
+        d.name, 100 * overflow_frac_right, right_names))
 
     axes[2].set_title("Deltas ({:.2f}% {}bit overflow)".format(
-        100 * overflow_frac4, int(np.log2(cutoff + 1) + 1)))
-
-    axes[-2].set_title("Deltas after offsetting ({:.2f}% {}bit overflow)".format(
-        100 * overflow_frac4_offset, int(np.log2(cutoff + 1) + 1)))
+        100 * overflow_frac4_left, numbits - 4))
+    axes[-2].set_title("Deltas ({:.2f}% {}bit overflow)".format(
+        100 * overflow_frac4_right, numbits - 4))
 
     axes[3].set_title("PDF of delta bits, max block bits")
     axes[-1].set_title("PDF of deltas, max block delta after offseting")
@@ -575,35 +764,32 @@ def plot_dset(d, numbits=8, offset_algo='center', n=100, **nn_kwargs):
     maxval = (1 << numbits) - 1
     axes[0].set_ylim((0, maxval))
     axes[1].set_ylim((-maxval/2, maxval/2))
+    cutoff = int(2**(numbits - 1 - 4)) - 1
     axes[2].set_ylim((-cutoff - 1, cutoff))
     axes[-2].set_ylim((-cutoff - 1, cutoff))
 
     # plot raw data
     plot_examples(X, ax=axes[0])
 
-    # plot diffs
-    plot_examples(diffs, ax=axes[1])
-    axes[1].scatter(x_bad, y_bad, s=np.pi * 10*10,
+    # plot transformed deltas
+    plot_examples(diffs_left, ax=axes[1])
+    axes[1].scatter(x_bad_left, y_bad_left, s=np.pi * 10*10,
                     facecolors='none', edgecolors='r')
-    # plot offset diffs
-    plot_examples(diffs_offset, ax=axes[-3])
-    axes[-3].scatter(x_bad_offset, y_bad_offset, s=np.pi * 10*10,
+    plot_examples(diffs_right, ax=axes[-3])
+    axes[-3].scatter(x_bad_right, y_bad_right, s=np.pi * 10*10,
                      facecolors='none', edgecolors='r')
     axes[-3].set_ylim(axes[1].get_ylim())
 
     # plot how well data fits in a smaller window
-    plot_examples(diffs, ax=axes[2])
-    axes[2].scatter(x_bad4, y_bad4, s=np.pi * 10*10,
+    plot_examples(diffs_left, ax=axes[2])
+    axes[2].scatter(x_bad4_left, y_bad4_left, s=np.pi * 10*10,
                     facecolors='none', edgecolors='r')
-
-    # plot blocks after subtracting values at end of previous blocks
-    plot_examples(diffs_offset, ax=axes[-2])
-    axes[-2].scatter(x_bad4_offset, y_bad4_offset, s=np.pi * 10*10,
+    plot_examples(diffs_right, ax=axes[-2])
+    axes[-2].scatter(x_bad4_right, y_bad4_right, s=np.pi * 10*10,
                      facecolors='none', edgecolors='r')
 
     # plot numbers of bits taken by each resid
-    resids_nbits = nbits_cost(diffs_offset)
-    # imshow_better(resids_nbits, ax=axes[-4], cmap='Blues')
+    resids_nbits = nbits_cost(diffs_right)
     img = imshow_better(resids_nbits, ax=axes[-4], cmap='gnuplot2')
     plt.colorbar(img, ax=axes[-4])
 
@@ -682,8 +868,8 @@ def plot_dset(d, numbits=8, offset_algo='center', n=100, **nn_kwargs):
 
     # plot_uresiduals_bits(absDiffs, ax=axes[3])
     # plot_uresiduals_bits(absOffsetDiffs, ax=axes[-1])
-    plot_uresiduals_bits(diffs, ax=axes[3])
-    plot_uresiduals_bits(diffs_offset, ax=axes[-1])
+    plot_uresiduals_bits(diffs_left, ax=axes[3])
+    plot_uresiduals_bits(diffs_right, ax=axes[-1])
 
     _, ymax_left = axes[3].get_ylim()
     _, ymax_right = axes[-1].get_ylim()
@@ -722,18 +908,24 @@ def main():
     numbits = 12
     # numbits = 8
 
-    # offset_algo = None
-    # offset_algo = 'nn'
-    # offset_algo = 'nn7'
-    # offset_algo = 'double_delta'  # delta encode deltas
-    # offset_algo = '1.5_delta'  # sub half of prev delta from each delta
-    offset_algo = 'dyn_delta'  # pick single or double delta for each block
-    # offset_algo = ['dyn_delta', 'nn']
-    # offset_algo = ['dyn_delta', 'scaled_signs']
-    # offset_algo = ['dyn_delta', 'avg']
-    # offset_algo = ['dyn_delta', 'mine']
-    # offset_algo = ['dyn_delta', 'mine', 'mine']
-    # offset_algo = ['dyn_delta', 'mine', 'mine', 'mine']
+    left_transforms = None
+    left_transforms = 'dyn_delta'
+    # right_transforms = None
+    # right_transforms = 'nn'
+    # right_transforms = 'nn7'
+    # right_transforms = 'double_delta'  # delta encode deltas
+    # right_transforms = '1.5_delta'  # sub half of prev delta from each delta
+    # right_transforms = 'dyn_delta'  # pick single or double delta for each block
+    # right_transforms = ['dyn_delta', 'nn']
+    # right_transforms = ['dyn_delta', 'scaled_signs']
+    # right_transforms = ['dyn_delta', 'avg']
+    # right_transforms = ['dyn_delta', 'mine']
+    # right_transforms = ['dyn_delta', 'mine', 'mine']
+    # right_transforms = ['dyn_delta', 'mine', 'mine', 'mine']
+    # right_transforms = ['dyn_delta', 'inflection']
+    # right_transforms = ['dyn_delta', 'canal']
+    # right_transforms = ['inflection']
+    right_transforms = 'split_dyn'
 
     num_neighbors = 256
     # num_neighbors = 1024
@@ -752,13 +944,16 @@ def main():
 
     # for d in list(dsets)[1:2]:
     for d in dsets:
-        plot_dset(d, numbits=numbits, offset_algo=offset_algo,
-                  num_neighbors=num_neighbors, scale_factors=neighbor_scales,
-                  try_invert=invert_neighbors, n=n)
+        plot_dset(d, numbits=numbits, n=n,
+                  left_transforms=left_transforms,
+                  right_transforms=right_transforms,
+                  num_neighbors=num_neighbors,
+                  scale_factors=neighbor_scales,
+                  try_invert=invert_neighbors)
         if save:
             prefix = "small/" if small else ""
             suffix = ""
-            if "nn" in offset_algo:
+            if "nn" in right_transforms:
                 suffix = "_nn{}".format(num_neighbors)
                 suffix += "_inv{}".format(1 if invert_neighbors else 0)
                 if neighbor_scales:
@@ -769,8 +964,10 @@ def main():
         if n < 50:
             suffix += "_n={}".format(n)
 
-            save_current_plot(d.name, subdir='{}{}b_{}{}'.format(
-                prefix, numbits, offset_algo, suffix))
+        transforms_str = "{}-vs-{}".format(name_transforms(left_transforms),
+                                           name_transforms(right_transforms))
+        save_current_plot(d.name, subdir='{}{}b_{}{}'.format(
+            prefix, numbits, transforms_str, suffix))
 
     if not save:
         plt.show()
@@ -779,4 +976,4 @@ def main():
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
-    main()
+    # main()
