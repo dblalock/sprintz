@@ -12,6 +12,9 @@ from . import datasets as ds
 from .utils import files
 from .utils import sliding_window as window
 
+from . import compress
+
+from .scratch2 import sort_transform
 
 SAVE_DIR = 'figs/ucr/'
 
@@ -256,39 +259,12 @@ def learn_dict_seq(tsList, max_len=2048):
 DEFAULT_MAX_NN_IDX = (1 << 11) - 1
 
 
-def nbits_cost(diffs):
-    """
-    >>> [nbits_cost(i) for i in [0, 1, 2, 3, 4, 5, 7, 8, 9]]
-    [0, 2, 3, 3, 4, 4, 4, 5, 5]
-    >>> [nbits_cost(i) for i in [-1, -2, -3, -4, -5, -7, -8, -9]]
-    [1, 2, 3, 3, 4, 4, 4, 5]
-    >>> nbits_cost([])
-    array([], dtype=int32)
-    >>> nbits_cost([0, 2, 1, 0])
-    array([0, 3, 2, 0], dtype=int32)
-    """
-    if diffs is None:
-        return None
-
-    diffs = np.asarray(diffs)
-    if diffs.size == 0:
-        return np.array([], dtype=np.int32)
-
-    shape = diffs.shape
-    diffs = diffs.ravel()
-    equiv_diffs = np.abs(diffs) + (diffs >= 0).astype(np.int32)  # +1 if < 0
-    nbits = np.ceil(np.log2(equiv_diffs)) + 1
-    nbits = np.asarray(nbits, dtype=np.int32)  # next line can't handle scalar
-    nbits[diffs == 0] = 0
-    return nbits.reshape(shape) if nbits.size > 1 else nbits[0]  # unpack if scalar
-
-
-def block_nbits_costs(blocks):
+def block_nbits_costs(blocks, signed=True):
     """max nbits cost for each row"""
     N, _ = blocks.shape
     blocks = np.abs(blocks) + (blocks >= 0).astype(np.int32)
     maxes = np.max(blocks, axis=1)
-    return nbits_cost(maxes).reshape((N, 1))
+    return compress.nbits_cost(maxes, signed=signed).reshape((N, 1))
 
 
 # def nn_encode(diffs, num_neighbors, nn_step=4, hash_algo=None):
@@ -348,8 +324,8 @@ def nn_encode(blocks, num_neighbors=256, nn_step=4, hash_algo=None,
             costs = np.max(costs, axis=1)
             nn_idx = np.argmin(costs)
 
-            nn_cost_bits = nbits_cost(costs[nn_idx])
-            zeros_cost_bits = nbits_cost(costs[0])
+            nn_cost_bits = compress.nbits_cost(costs[nn_idx])
+            zeros_cost_bits = compress.nbits_cost(costs[0])
             bitsave = zeros_cost_bits - nn_cost_bits
             saved_bits += bitsave
             saved_bits_sq += bitsave*bitsave
@@ -388,16 +364,6 @@ def quantize_diff_block(X, numbits, keep_nrows=100):
     blocks = convert_to_blocks(diffs)
 
     return X, diffs, blocks
-
-
-# def _sign_scales(nbits_costs):
-#     """
-#     >>> nbits = np.array([[0, 0], [1, 0], [2]])
-#     >>> _sign_scales(nbits)
-#     np.array([-1, ])
-
-#     """
-#     pass
 
 
 def scaled_signs_encode(blocks):
@@ -515,12 +481,14 @@ def encode_fir(blocks, filt):
     array([ 0,  1,  0, -1, -2,  2])
     """
     # pretty sure this is equivalent to just convolving with [1, -filt]
-    ret = np.copy(blocks).ravel()
+    ret = np.copy(blocks)
+    shape = ret.shape
+    ret = ret.ravel()
     filt = np.asarray([0] + list(filt)).ravel()
     predicted = np.convolve(ret, filt, mode='valid')
-    # return predicted
-    ret[(len(filt)-1):] -= predicted
-    return ret
+
+    ret[(len(filt)-1):] -= predicted.astype(ret.dtype)
+    return ret.reshape(shape)
 
 
 def possibly_delta_encode(blocks):
@@ -536,8 +504,10 @@ def split_dyn_delta(blocks):
 
 
 def dyn_filt(blocks):
-    blocks_delta = compute_deltas(blocks)
-
+    # filters = ([], [1])  # only delta and delta-delta; should match dyn_delta
+    filters = ([], [1], [2, -1], [.5, .5], [.5, 0, -.5])
+    blocks_list = [encode_fir(blocks, filt) for filt in filters]
+    return take_best_of_each(blocks_list)
 
 
 def learn_them_filters(blocks):
@@ -558,27 +528,15 @@ def apply_transforms(diffs, blocks, transform_names):
         double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
         offsetBlocks = convert_to_blocks(double_diffs)
 
-    # elif '1.5_delta' in transform_names:  # sub only half of previous delta
-    #     semi_diffs = np.copy(diffs)
-    #     semi_diffs[:, 1:] = diffs[:, 1:] - (diffs[:, :-1] >> 1)
-    #     offsetBlocks = convert_to_blocks(semi_diffs)
-
     elif 'dyn_delta' in transform_names:  # pick delta or delta-delta
         offsetBlocks = possibly_delta_encode(blocks)
 
     elif 'split_dyn' in transform_names:
         offsetBlocks = split_dyn_delta(blocks)
 
-        # double_diffs = np.copy(diffs)
-        # double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
-        # blocks_dbl = convert_to_blocks(double_diffs)
+    elif 'dyn_filt' in transform_names:
+        offsetBlocks = dyn_filt(blocks)
 
-        # costs_single = np.max(np.abs(blocks), axis=1)
-        # costs_dbl = np.max(np.abs(blocks_dbl), axis=1)
-        # better_idxs = costs_dbl < costs_single
-
-        # offsetBlocks = np.copy(blocks)
-        # offsetBlocks[better_idxs] = blocks_dbl[better_idxs]
     else:
         offsetBlocks = np.copy(blocks)
 
@@ -628,7 +586,9 @@ def apply_transforms(diffs, blocks, transform_names):
 
 
 def plot_dset(d, numbits=8, left_transforms=None,
-              right_transforms=None, n=100, **nn_kwargs):
+              right_transforms=None, prefix_nbits=None, n=100, **nn_kwargs):
+
+    plot_sort = False  # plot distros of idxs into vals sorted by rel freq
 
     # force transforms to be collections
     if right_transforms is None or isinstance(right_transforms, str):
@@ -647,71 +607,6 @@ def plot_dset(d, numbits=8, left_transforms=None,
         diffs, blocks, left_transforms)
     offsetBlocksRight, diffs_right = apply_transforms(
         diffs, blocks, right_transforms)
-
-    # # first round of transforms; defines offsetBlocks var
-    # if 'double_delta' in right_transforms:  # delta encode deltas
-    #     double_diffs = np.copy(diffs)
-    #     double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
-    #     offsetBlocks = convert_to_blocks(double_diffs)
-
-    # elif '1.5_delta' in right_transforms:  # sub only half of previous delta
-    #     semi_diffs = np.copy(diffs)
-    #     semi_diffs[:, 1:] = diffs[:, 1:] - (diffs[:, :-1] >> 1)
-    #     offsetBlocks = convert_to_blocks(semi_diffs)
-
-    # elif 'dyn_delta' in right_transforms:  # pick delta or delta-delta
-    #     double_diffs = np.copy(diffs)
-    #     double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
-    #     blocks_dbl = convert_to_blocks(double_diffs)
-
-    #     costs_single = np.max(np.abs(blocks), axis=1)
-    #     costs_dbl = np.max(np.abs(blocks_dbl), axis=1)
-    #     better_idxs = costs_dbl < costs_single
-
-    #     offsetBlocks = np.copy(blocks)
-    #     offsetBlocks[better_idxs] = blocks_dbl[better_idxs]
-    # else:
-    #     offsetBlocks = np.copy(blocks)
-
-    # if 'center' in right_transforms:
-    #     mins = np.min(offsetBlocks, axis=1)
-    #     ranges = np.max(offsetBlocks, axis=1) - mins
-    #     sub_vals = (mins + ranges / 2).astype(np.int32)
-    #     offsetBlocks -= sub_vals.reshape((-1, 1))
-
-    # if 'scaled_signs' in right_transforms:
-    #     offsetBlocks = scaled_signs_encode(offsetBlocks)
-
-    # if 'nn' in right_transforms:
-    #     offsetBlocks = nn_encode(offsetBlocks, **nn_kwargs)
-
-    # if 'avg' in right_transforms:
-    #     offsetBlocks2 = np.empty(offsetBlocks.shape, dtype=np.int32)
-    #     for i in range(1, 8):
-    #         offsetBlocks2[:, i] = offsetBlocks[:, i-1] >> 1 + offsetBlocks[:, i] >> 1
-    #     offsetBlocks2[:, 0] = offsetBlocks[:, 0] - offsetBlocks2[:, 1]
-    #     offsetBlocks = np.copy(offsetBlocks2)
-
-    # right_transforms_copy = [el for el in right_transforms]
-    # while 'mine' in right_transforms_copy:
-    #     # offsetBlocks = my_transform(offsetBlocks)
-    #     offsetBlocks = my_old_transform(offsetBlocks)
-    #     right_transforms_copy.remove('mine')
-    #     if 'mine' in right_transforms_copy:
-    #         perm = [1, 2, 5, 6, 7, 4, 3, 0]
-    #         offsetBlocks = offsetBlocks[:, perm]
-
-    # if 'inflection' in right_transforms:
-    #     offsetBlocks = inflection_encode(offsetBlocks)
-
-    # # "examples" stitched together from blocks with vals subbed off
-    # # if diffs_offset is None:
-    # use_shape = diffs.shape[0] - 1, diffs.shape[1]
-    # use_size = use_shape[0] * use_shape[1]
-    # diffs_offset = offsetBlocks.ravel()[:use_size].reshape(use_shape)
-
-    # nbits_blocks = np.max(nbits_cost(offsetBlocks), axis=1)
-    # TODO
 
     # ------------------------ compute where overflows are
 
@@ -759,8 +654,6 @@ def plot_dset(d, numbits=8, left_transforms=None,
     axes[3].set_title("PDF of delta bits, max block bits")
     axes[-1].set_title("PDF of deltas, max block delta after offseting")
 
-    axes[-4].set_title("Number of bits required for each sample in each ts")
-
     maxval = (1 << numbits) - 1
     axes[0].set_ylim((0, maxval))
     axes[1].set_ylim((-maxval/2, maxval/2))
@@ -788,12 +681,34 @@ def plot_dset(d, numbits=8, left_transforms=None,
     axes[-2].scatter(x_bad4_right, y_bad4_right, s=np.pi * 10*10,
                      facecolors='none', edgecolors='r')
 
-    # plot numbers of bits taken by each resid
-    resids_nbits = nbits_cost(diffs_right)
-    img = imshow_better(resids_nbits, ax=axes[-4], cmap='gnuplot2')
-    plt.colorbar(img, ax=axes[-4])
+    # # plot numbers of bits taken by each resid
+    # axes[-4].set_title("Number of bits required for each sample in each ts")
+    # resids_nbits = compress.nbits_cost(diffs_right)
+    # img = imshow_better(resids_nbits, ax=axes[-4], cmap='gnuplot2')
+    # plt.colorbar(img, ax=axes[-4])
+    #
+    # alternatively, plot exact distros of residuals
+    axes[-4].set_title("(Clipped) distribution of residuals")
 
-    def plot_uresiduals_bits(resids, ax):
+    clip_min, clip_max = -129, 128
+    nbins = (clip_max - clip_min) / 2
+    clipped_resids = np.clip(diffs_right, clip_min, clip_max).ravel()
+    sb.distplot(clipped_resids, ax=axes[-4], kde=False, bins=nbins, hist_kws={
+                'normed': True, 'range': [clip_min, clip_max]})
+    if plot_sort:
+        # using prefix_nbits < 10 makes it way worse for 12b stuff cuz vals
+        # with the same prefix don't get sorted like they should
+        #   -could prolly fix this by pre-sorting assuming decay in prob as
+        #   we move away from 0; gets tricky though cuz we offset everything
+        #
+        # positions = sort_transform(diffs_right, nbits=numbits, prefix_nbits=8)
+        positions = sort_transform(diffs_right, nbits=numbits, prefix_nbits=prefix_nbits)
+        clipped_positions = np.minimum(positions, clip_max).ravel()
+        sb.distplot(clipped_positions, ax=axes[-4], kde=False, bins=nbins, hist_kws={
+            'normed': True, 'range': [0, clip_max], 'color': 'g'})
+
+
+    def plot_uresiduals_bits(resids, ax, plot_sort=plot_sort):
         # have final bar in the histogram contain everything that would
         # overflow 8b
         # max_resid = 128
@@ -801,7 +716,8 @@ def plot_dset(d, numbits=8, left_transforms=None,
         # bins = [1, 2, 4, 8, 16, 32, 127, max_resid + 1]
 
         max_nbits = 16
-        resids = nbits_cost(resids).ravel()
+        raw_resids = resids
+        resids = compress.nbits_cost(resids).ravel()
         resids = np.minimum(resids, max_nbits)
         bins = np.arange(max_nbits + 1)
 
@@ -817,6 +733,12 @@ def plot_dset(d, numbits=8, left_transforms=None,
             # 'normed': True, 'color': (.8, 0, 0, .05)})
             'normed': True, 'range': [0, max_nbits], 'color': (.8, 0, 0, .05)})
 
+        if plot_sort:
+            positions = sort_transform(raw_resids, nbits=numbits, prefix_nbits=8).ravel()
+            position_costs = compress.nbits_cost(positions, signed=False)
+            sb.distplot(position_costs, ax=ax, kde=False, bins=bins, hist_kws={
+                'normed': True, 'range': [0, max_nbits], 'color': 'g'})
+
         # ax.set_xlim((0, min(np.max(resids), 256)))
         xlim = (0, max_nbits + 1)
         ax.set_xlim(xlim)
@@ -831,15 +753,18 @@ def plot_dset(d, numbits=8, left_transforms=None,
 
         # plot + annotate avg number of bits needed
         y = 8.95
-        costs = (np.mean(resids), np.mean(block_maxes))
-        styles = ('b--', 'r--')
-        for i in range(2):
-            cost = costs[i]
-            style = styles[i]
+        costs = [np.mean(resids), np.mean(block_maxes)]
+        styles = ['b--', 'r--']
+        if plot_sort:
+            costs.append(np.mean(position_costs))
+            styles.append('g--')
+        for i, (cost, style) in enumerate(zip(costs, styles)):
+            # cost = costs[i]
+            # style = styles[i]
             ax.plot([cost, cost], [0, 1], style, lw=1)
             x = cost / float(xlim[1])
             # y = .05 + (.8 * (i % 2)) + (.025 * (i % 4))  # stagger heights
-            y = .78 + (.12 * (i % 2))  # stagger heights
+            y = .66 + (.12 * (i % 3))  # stagger heights
             lbl = "{:.1f}".format(cost)
             ax.annotate(lbl, xy=(x, y), xycoords='axes fraction')
 
@@ -900,22 +825,18 @@ def main():
 
     # mpl.rcParams.update({'figure.autolayout': True})  # make twinx() not suck
 
-    save = True
-    # save = False
-    small = False
-
     # numbits = 16
-    numbits = 12
-    # numbits = 8
+    # numbits = 12
+    numbits = 8
 
-    left_transforms = None
-    left_transforms = 'dyn_delta'
+    left_transforms = None  # just delta encoding
+    # left_transforms = 'dyn_delta'
     # right_transforms = None
     # right_transforms = 'nn'
     # right_transforms = 'nn7'
     # right_transforms = 'double_delta'  # delta encode deltas
     # right_transforms = '1.5_delta'  # sub half of prev delta from each delta
-    # right_transforms = 'dyn_delta'  # pick single or double delta for each block
+    right_transforms = 'dyn_delta'  # pick single or double delta for each block
     # right_transforms = ['dyn_delta', 'nn']
     # right_transforms = ['dyn_delta', 'scaled_signs']
     # right_transforms = ['dyn_delta', 'avg']
@@ -925,7 +846,9 @@ def main():
     # right_transforms = ['dyn_delta', 'inflection']
     # right_transforms = ['dyn_delta', 'canal']
     # right_transforms = ['inflection']
-    right_transforms = 'split_dyn'
+    # right_transforms = 'split_dyn'
+    # right_transforms = 'dyn_filt'
+    # right_transforms = ['dyn_filt',
 
     num_neighbors = 256
     # num_neighbors = 1024
@@ -938,36 +861,51 @@ def main():
     # invert_neighbors = False
     invert_neighbors = True
 
+    save = True
+    # save = False
+    small = False
+
+    # prefix_nbits = 8
+    # prefix_nbits = 10
+    # prefix_nbits = 11
+    prefix_nbits = -1
+
     n = 8
+    # n = 32
+
+    # crap to name the subdirectory
+    suffix = ""
+    prefix = "small/" if small else ""
+    if "nn" in right_transforms:
+        suffix = "_nn{}".format(num_neighbors)
+        suffix += "_inv{}".format(1 if invert_neighbors else 0)
+        if neighbor_scales:
+            legible_scales = ','.join([str(s) for s in neighbor_scales])
+        suffix += "_scale{}".format(legible_scales)
+    if n < 50:
+        suffix += "_n={}".format(n)
+    if prefix_nbits > 0:
+        suffix += '_prefix={}b'.format(prefix_nbits)
+    transforms_str = "{}-vs-{}".format(name_transforms(left_transforms),
+                                       name_transforms(right_transforms))
+    subdir = '{}{}b_{}{}'.format(prefix, numbits, transforms_str, suffix)
+    print "saving to subdir: {}".format(subdir)
+
 
     dsets = ds.smallUCRDatasets() if small else ds.allUCRDatasets()
 
-    # for d in list(dsets)[1:2]:
-    for d in dsets:
+    # for d in list(dsets)[26:27]:  # olive oil
+    # for d in list(dsets)[1:2]:  # adiac
+    for i, d in enumerate(dsets):
         plot_dset(d, numbits=numbits, n=n,
                   left_transforms=left_transforms,
                   right_transforms=right_transforms,
                   num_neighbors=num_neighbors,
                   scale_factors=neighbor_scales,
-                  try_invert=invert_neighbors)
+                  try_invert=invert_neighbors,
+                  prefix_nbits=prefix_nbits)
         if save:
-            prefix = "small/" if small else ""
-            suffix = ""
-            if "nn" in right_transforms:
-                suffix = "_nn{}".format(num_neighbors)
-                suffix += "_inv{}".format(1 if invert_neighbors else 0)
-                if neighbor_scales:
-                    # legible_scales = [((2 << s[0]) >> s[1])/2. for s in neighbor_scales]
-                    legible_scales = ','.join([str(s) for s in neighbor_scales])
-                suffix += "_scale{}".format(legible_scales)
-
-        if n < 50:
-            suffix += "_n={}".format(n)
-
-        transforms_str = "{}-vs-{}".format(name_transforms(left_transforms),
-                                           name_transforms(right_transforms))
-        save_current_plot(d.name, subdir='{}{}b_{}{}'.format(
-            prefix, numbits, transforms_str, suffix))
+            save_current_plot(d.name, subdir=subdir)
 
     if not save:
         plt.show()
@@ -976,4 +914,4 @@ def main():
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
-    # main()
+    main()
