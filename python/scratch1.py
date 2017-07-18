@@ -451,16 +451,27 @@ def inflection_encode(blocks):
     return blocks_out.reshape(shape)
 
 
-def take_best_of_each(blocks_list):
+def take_best_of_each(blocks_list, loss='linf', axis=-1, return_counts=False):
     """for each row idx, takes the row from any matrix in blocks_list that has
-    the smallest max abs value"""
+    the smallest loss (max abs value by default)"""
     best_blocks = np.copy(blocks_list[0])
-    best_costs = np.max(np.abs(best_blocks), axis=1)
-    for other_blocks in blocks_list[1:]:
-        costs = np.max(np.abs(other_blocks), axis=1)
+    # best_costs = np.max(np.abs(best_blocks), axis=1)
+    best_costs = learning.compute_loss(best_blocks, loss=loss, axis=axis)
+    if return_counts:
+        counts = np.zeros(len(blocks_list), dtype=np.int32)
+    for i, other_blocks in enumerate(blocks_list[1:]):
+        # costs = np.max(np.abs(other_blocks), axis=1)
+        costs = learning.compute_loss(other_blocks, loss=loss, axis=axis)
         take_idxs = costs < best_costs
         best_costs = np.minimum(costs, best_costs)
         best_blocks[take_idxs] = other_blocks[take_idxs]
+
+        if return_counts:
+            counts[i + 1] = np.sum(take_idxs)
+
+    if return_counts:
+        counts[0] = len(best_blocks) - np.sum(counts)
+        return best_blocks, counts
 
     return best_blocks
 
@@ -508,24 +519,53 @@ def split_dyn_delta(blocks):
 def dyn_filt(blocks, filters=None):
     # filters = ([], [1])  # only delta and delta-delta; should match dyn_delta
     # filters = ([], [1], [2, -1], [.5, .5], [.5, 0, -.5])
+    # filters = ([1], [2, -1])  # only delta and delta-delta; should match dyn_delta
+    # filters = ([1, 0, 0, 0], [2, -1, 0, 0])  # only delta and delta-delta; should match dyn_delta
 
     if filters is None:
-        filters = learning.learn_filters(blocks)[:, ::-1]  # reverse for conv
+        # filters = learning.greedy_brute_filters(blocks, nfilters=2)
+        filters = learning.greedy_brute_filters(
+            # blocks, block_sz=8, nfilters=16, nbits=3, verbose=2)
+            blocks, block_sz=8, nfilters=16, nbits=4, verbose=2, step_sz=.25)
+
+        # print "got filters:", filters[:, ::-1]
+        # import sys; sys.exit()
+
+        # filters = learning.learn_filters(blocks)[:, ::-1]
+        # filters = learning.learn_filters(blocks)[:, ::-1]  # reverse for conv
         # filters = ([0], [1], [2, -1])  # nothing, delta, double delta # TODO rm
-    blocks_list = [encode_fir(blocks, filt) for filt in filters]
-    return take_best_of_each(blocks_list).astype(np.int32)
 
-    # if filters is None:
-        # filters = learning.learn_filters(blocks)
+        # filters = filters[:, ::-1]  # reverse for conv
 
-    # # TODO prolly write an sklearn estimator to avoid this dup code
-    # ntaps = filters.shape[1]
-    # y = x[ntaps:].astype(np.float32).reshape((-1, 1))  # col vect
-    # x = blocks.astype(np.float32).ravel()
-    # X = window.sliding_window_1D(x[:-1], ntaps)
-    # predictions = np.dot(X, filters.T)
-    # errs = predictions - y
-    # abs_errs
+    # if True:  # let it cheat and pick 8 filters
+    filter_for_each_sample = False
+    if filter_for_each_sample:  # let it cheat and pick 8 filters
+
+        ntaps = filters.shape[1]
+        x = np.asarray(blocks, dtype=np.float32).ravel()
+        X = window.sliding_window_1D(x[:-1], ntaps).astype(np.float32)
+        y = x[ntaps:].astype(np.float32).reshape((-1, 1))  # col vect
+
+        predictions = np.dot(X, filters.T)
+        raw_errs = y - predictions
+        losses = raw_errs * raw_errs
+
+        assigs = np.argmin(losses, axis=1)
+        print "    selected counts: ", np.bincount(assigs) / float(len(X))
+
+        ret = np.zeros_like(blocks).ravel()
+        all_idxs = np.arange(len(predictions))
+        ret[ntaps:] = predictions[all_idxs, assigs]
+        ret = blocks.ravel() - ret
+        return ret.reshape(blocks.shape)
+
+    blocks_list = [encode_fir(blocks, filt) for filt in filters[:, ::-1]]
+    return take_best_of_each(blocks_list, loss='l2').astype(np.int32)
+    # blocks, counts = take_best_of_each(
+    #     blocks_list, loss='l2', return_counts=True)
+    # print "  approx fraction each filter chosen:\n     ", counts / float(np.sum(counts))
+    # return blocks.astype(np.int32)
+
 
 def name_transforms(transforms):
     if not isinstance(transforms, (list, tuple)):
@@ -533,16 +573,20 @@ def name_transforms(transforms):
     return '|'.join([str(s) for s in transforms])
 
 
-def apply_transforms(diffs, blocks, transform_names):
+def apply_transforms(X, diffs, blocks, transform_names, diffs_is_cheating=True):
+
+    if diffs_is_cheating:
+        # diffs = encode_fir(X, [1])
+        diffs = compute_deltas(X)
 
     # first round of transforms; defines offsetBlocks var
     if 'delta' in transform_names:  # delta encode deltas
         offsetBlocks = convert_to_blocks(diffs)
 
     elif 'double_delta' in transform_names:  # delta encode deltas
-        double_diffs = np.copy(diffs)
-        double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
-        offsetBlocks = convert_to_blocks(double_diffs)
+        # double_diffs = np.copy(diffs)
+        # double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
+        offsetBlocks = convert_to_blocks(compute_deltas(diffs))
 
     elif 'dyn_delta' in transform_names:  # pick delta or delta-delta
         offsetBlocks = convert_to_blocks(diffs)
@@ -626,9 +670,9 @@ def plot_dset(d, numbits=8, left_transforms=None,
     blocks = convert_to_blocks(X)
 
     offsetBlocksLeft, diffs_left = apply_transforms(
-        diffs, blocks, left_transforms)
+        X, diffs, blocks, left_transforms)
     offsetBlocksRight, diffs_right = apply_transforms(
-        diffs, blocks, right_transforms)
+        X, diffs, blocks, right_transforms)
 
     # ------------------------ compute where overflows are
 
@@ -849,6 +893,8 @@ def main():
 
     # mpl.rcParams.update({'figure.autolayout': True})  # make twinx() not suck
 
+    # ------------------------ experimental params
+
     # numbits = 16
     numbits = 12
     # numbits = 8
@@ -889,6 +935,7 @@ def main():
     save = True
     # save = False
     small = False
+    small = True
 
     # prefix_nbits = 8
     # prefix_nbits = 10
@@ -898,7 +945,9 @@ def main():
     n = 8
     # n = 32
 
-    # crap to name the subdirectory
+    dsets = ds.smallUCRDatasets() if small else ds.allUCRDatasets()
+
+    # ------------------------ name output dir based on params
     suffix = ""
     prefix = "small/" if small else ""
     if "nn" in right_transforms:
@@ -916,12 +965,15 @@ def main():
     subdir = '{}{}b_{}{}'.format(prefix, numbits, transforms_str, suffix)
     print "saving to subdir: {}".format(subdir)
 
-
-    dsets = ds.smallUCRDatasets() if small else ds.allUCRDatasets()
+    # ------------------------ main loop
 
     # for d in list(dsets)[26:27]:  # olive oil
     # for d in list(dsets)[1:2]:  # adiac
-    for i, d in enumerate(dsets):
+    # for i, d in enumerate(dsets):
+    # for d in dsets:
+    # for d in list(dsets)[4:8]:
+    # for d in list(dsets)[:4]:
+    for d in list(dsets)[:16]:
         print "------------------------ {}".format(d.name)
         plot_dset(d, numbits=numbits, n=n,
                   left_transforms=left_transforms,

@@ -171,8 +171,8 @@ def compute_loss(errs, loss='l2', axis=-1):
         raise ValueError("Unrecognized loss function '{}'".format(loss))
 
 
-def greedy_brute_filters(x, nfilters, ntaps=4, nbits=4, step_sz=.25,
-                         block_sz=-1, loss='l2', verbose=2):
+def greedy_brute_filters(x, nfilters=16, ntaps=4, nbits=4, step_sz=.5,
+                         block_sz=-1, loss='l2', verbose=1):
     """
     Assess every possible filter and greedily take the best
 
@@ -202,9 +202,11 @@ def greedy_brute_filters(x, nfilters, ntaps=4, nbits=4, step_sz=.25,
     y = x[ntaps:].astype(np.float32).reshape((-1, 1))  # col vect
 
     filters = np.zeros((2, ntaps))
+    # filters = np.zeros((3, ntaps))
     filters[0, -1] = 1  # delta encoding
-    filters[1, -1] = 2  # delta-delta encoding
-    filters[1, -2] = -1
+    filters[1, -1], filters[1, -2] = 2, -1  # delta-delta encoding
+    # filters[2, -1], filters[2, -2], filters[2, -3] = 2, -3, 1  # 3delta
+
     candidates = all_possible_filters(ntaps, nbits, step_sz)
 
     # print "candidates.shape: ", candidates.shape
@@ -243,7 +245,7 @@ def greedy_brute_filters(x, nfilters, ntaps=4, nbits=4, step_sz=.25,
     all_errs = compute_loss(all_errs, loss, axis=axis)
 
     # take the best error attainable using the filters we have so far
-    errs = np.min(errs, axis=1).reshape(y.shape)  # N x 1
+    errs = np.min(errs, axis=1).reshape(-1, 1)  # N x 1
 
     # print "y shape: ", y.shape
     # print "errs shape: ", errs.shape
@@ -274,8 +276,21 @@ def greedy_brute_filters(x, nfilters, ntaps=4, nbits=4, step_sz=.25,
 
     if verbose > 0:
         final_mean_err = np.mean(errs)
-        print "-> initial err, final err: {:.3f}, {:.3f}".format(
+        print "-> initial err, final err: {:.5f}, {:.5f}".format(
                 initial_mean_err / div_by, final_mean_err / div_by)
+
+        y = x[ntaps:].astype(np.float32).reshape((-1, 1))  # col vect
+        raw_errs = y - np.dot(X, filters.T)
+        losses = raw_errs * raw_errs
+        assigs = np.argmin(losses, axis=1)
+        print "    bincounts (ignoring blocks): {}".format(
+            np.bincount(assigs) / float(len(X)))
+
+        if block_sz > 1:
+            block_losses = windows_as_dim3(losses, block_sz).sum(axis=1)
+            assigs = np.argmin(block_losses, axis=1)
+            print "    bincounts (using blocks): {}".format(
+                np.bincount(assigs) / float(len(X)))
 
         if verbose > 1:
             print "final filters:\n", filters
@@ -310,7 +325,7 @@ def main():
     block_sz = 4
 
     greedy_brute_filters(x, nfilters=8, ntaps=4, nbits=nbits,
-                     block_sz=block_sz, step_sz=step_sz)
+                     block_sz=block_sz, step_sz=step_sz, verbose=2)
 
     # print "done"
 
