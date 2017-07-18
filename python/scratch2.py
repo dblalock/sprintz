@@ -1,5 +1,6 @@
+#!/usr/bin/env python
 
-import collections
+# import collections
 # import itertools
 # import os
 # import matplotlib as mpl

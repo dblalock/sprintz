@@ -13,8 +13,10 @@ from .utils import files
 from .utils import sliding_window as window
 
 from . import compress
+from . import learning
 
 from .scratch2 import sort_transform
+
 
 SAVE_DIR = 'figs/ucr/'
 
@@ -481,10 +483,10 @@ def encode_fir(blocks, filt):
     array([ 0,  1,  0, -1, -2,  2])
     """
     # pretty sure this is equivalent to just convolving with [1, -filt]
-    ret = np.copy(blocks)
+    filt = np.asarray([0] + list(filt)).ravel()
+    ret = np.array(blocks, dtype=filt.dtype)
     shape = ret.shape
     ret = ret.ravel()
-    filt = np.asarray([0] + list(filt)).ravel()
     predicted = np.convolve(ret, filt, mode='valid')
 
     ret[(len(filt)-1):] -= predicted.astype(ret.dtype)
@@ -503,16 +505,27 @@ def split_dyn_delta(blocks):
     return blocks_out
 
 
-def dyn_filt(blocks):
+def dyn_filt(blocks, filters=None):
     # filters = ([], [1])  # only delta and delta-delta; should match dyn_delta
-    filters = ([], [1], [2, -1], [.5, .5], [.5, 0, -.5])
+    # filters = ([], [1], [2, -1], [.5, .5], [.5, 0, -.5])
+
+    if filters is None:
+        filters = learning.learn_filters(blocks)[:, ::-1]  # reverse for conv
+        # filters = ([0], [1], [2, -1])  # nothing, delta, double delta # TODO rm
     blocks_list = [encode_fir(blocks, filt) for filt in filters]
-    return take_best_of_each(blocks_list)
+    return take_best_of_each(blocks_list).astype(np.int32)
 
+    # if filters is None:
+        # filters = learning.learn_filters(blocks)
 
-def learn_them_filters(blocks):
-    pass  # TODO
-
+    # # TODO prolly write an sklearn estimator to avoid this dup code
+    # ntaps = filters.shape[1]
+    # y = x[ntaps:].astype(np.float32).reshape((-1, 1))  # col vect
+    # x = blocks.astype(np.float32).ravel()
+    # X = window.sliding_window_1D(x[:-1], ntaps)
+    # predictions = np.dot(X, filters.T)
+    # errs = predictions - y
+    # abs_errs
 
 def name_transforms(transforms):
     if not isinstance(transforms, (list, tuple)):
@@ -523,21 +536,27 @@ def name_transforms(transforms):
 def apply_transforms(diffs, blocks, transform_names):
 
     # first round of transforms; defines offsetBlocks var
-    if 'double_delta' in transform_names:  # delta encode deltas
+    if 'delta' in transform_names:  # delta encode deltas
+        offsetBlocks = convert_to_blocks(diffs)
+
+    elif 'double_delta' in transform_names:  # delta encode deltas
         double_diffs = np.copy(diffs)
         double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
         offsetBlocks = convert_to_blocks(double_diffs)
 
     elif 'dyn_delta' in transform_names:  # pick delta or delta-delta
-        offsetBlocks = possibly_delta_encode(blocks)
+        offsetBlocks = convert_to_blocks(diffs)
+        offsetBlocks = possibly_delta_encode(offsetBlocks)
 
     elif 'split_dyn' in transform_names:
-        offsetBlocks = split_dyn_delta(blocks)
+        offsetBlocks = convert_to_blocks(diffs)
+        offsetBlocks = split_dyn_delta(offsetBlocks)
 
     elif 'dyn_filt' in transform_names:
         offsetBlocks = dyn_filt(blocks)
 
     else:
+        print "warning: apply_transforms: using no filter-based transform"
         offsetBlocks = np.copy(blocks)
 
     if 'center' in transform_names:
@@ -601,7 +620,10 @@ def plot_dset(d, numbits=8, left_transforms=None,
 
     # ------------------------ data munging
 
-    X, diffs, blocks = quantize_diff_block(d.X, numbits, keep_nrows=n)
+    # NOTE: blocks used to be blocks of diffs
+    # X, diffs, blocks = quantize_diff_block(d.X, numbits, keep_nrows=n)
+    X, diffs, _ = quantize_diff_block(d.X, numbits, keep_nrows=n)
+    blocks = convert_to_blocks(X)
 
     offsetBlocksLeft, diffs_left = apply_transforms(
         diffs, blocks, left_transforms)
@@ -805,6 +827,8 @@ def plot_dset(d, numbits=8, left_transforms=None,
 
 
 def main():
+    np.set_printoptions(formatter={'float': lambda x: '{:.3f}'.format(x)})
+
     # # # uncomment this to get the LUT for mapping comparison bytes to indices
     # lut, perms = create_perm_lut()
     # print "perm lut, perms: ", lut, "\n", perms
@@ -826,17 +850,19 @@ def main():
     # mpl.rcParams.update({'figure.autolayout': True})  # make twinx() not suck
 
     # numbits = 16
-    # numbits = 12
-    numbits = 8
+    numbits = 12
+    # numbits = 8
 
-    left_transforms = None  # just delta encoding
-    # left_transforms = 'dyn_delta'
+    # left_transforms = None
+    # left_transforms = 'delta'
+    left_transforms = 'dyn_delta'
     # right_transforms = None
     # right_transforms = 'nn'
     # right_transforms = 'nn7'
     # right_transforms = 'double_delta'  # delta encode deltas
     # right_transforms = '1.5_delta'  # sub half of prev delta from each delta
-    right_transforms = 'dyn_delta'  # pick single or double delta for each block
+    # right_transforms = 'dyn_delta'  # pick single or double delta for each block
+    right_transforms = 'dyn_filt'
     # right_transforms = ['dyn_delta', 'nn']
     # right_transforms = ['dyn_delta', 'scaled_signs']
     # right_transforms = ['dyn_delta', 'avg']
@@ -848,7 +874,6 @@ def main():
     # right_transforms = ['inflection']
     # right_transforms = 'split_dyn'
     # right_transforms = 'dyn_filt'
-    # right_transforms = ['dyn_filt',
 
     num_neighbors = 256
     # num_neighbors = 1024
@@ -897,6 +922,7 @@ def main():
     # for d in list(dsets)[26:27]:  # olive oil
     # for d in list(dsets)[1:2]:  # adiac
     for i, d in enumerate(dsets):
+        print "------------------------ {}".format(d.name)
         plot_dset(d, numbits=numbits, n=n,
                   left_transforms=left_transforms,
                   right_transforms=right_transforms,
