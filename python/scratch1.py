@@ -270,8 +270,16 @@ def block_nbits_costs(blocks, signed=True):
 
 
 # def nn_encode(diffs, num_neighbors, nn_step=4, hash_algo=None):
-def nn_encode(blocks, num_neighbors=256, nn_step=4, hash_algo=None,
-              scale_factors=None, try_invert=True):
+def nn_encode(blocks, num_neighbors=256, nn_step=1, hash_algo=None,
+              scale_factors=None, try_invert=True, nn_loss='l2',
+              mean_normalize=True, nn_nblocks=1):
+
+    orig_shape = blocks.shape
+    if nn_nblocks > 1:
+        blocks = learning.trim_to_multiple_of(blocks, nn_nblocks)  # TODO move to utils
+        orig_shape = blocks.shape
+        new_shape = blocks.shape[0] / nn_nblocks, blocks.shape[1] * nn_nblocks
+        blocks = blocks.reshape(new_shape)
 
     if scale_factors is not None and 1 in scale_factors:
         scale_factors = scale_factors[:]
@@ -283,9 +291,9 @@ def nn_encode(blocks, num_neighbors=256, nn_step=4, hash_algo=None,
         # offsetBlocks = np.zeros_like(diff_windows)
         offsetBlocks = np.copy(blocks)
 
-        zero_samples = np.zeros(8, dtype=np.int32)
         # N = len(diff_windows)
-        N = len(blocks)
+        N, M = blocks.shape
+        zero_samples = np.zeros(M, dtype=np.int32)
 
         times_nonzero = 0
         saved_bits = 0
@@ -299,12 +307,12 @@ def nn_encode(blocks, num_neighbors=256, nn_step=4, hash_algo=None,
 
             # this isn't exactly where we'd start in the flattened array,
             # but whatever
-            start_idx = n - 1 - ((num_neighbors - 1) * nn_step / 8)
+            start_idx = n - 1 - ((num_neighbors - 1) * nn_step / M)
             start_idx = max(0, start_idx)
             end_idx = n
             history = blocks[start_idx:end_idx].ravel()
 
-            nn_windows = window.sliding_window_1D(history, 8, step=nn_step)
+            nn_windows = window.sliding_window_1D(history, M, step=nn_step)
             all_neighbors = [nn_windows]
 
             if try_invert:
@@ -322,28 +330,43 @@ def nn_encode(blocks, num_neighbors=256, nn_step=4, hash_algo=None,
             all_neighbors = [zero_samples] + all_neighbors
             neighbors = np.vstack(all_neighbors)
 
-            costs = np.abs(neighbors - blocks[n])
-            costs = np.max(costs, axis=1)
+            query = blocks[n]
+            query_mean = 0
+            if mean_normalize:
+                neighbors -= np.mean(neighbors, axis=1, keepdims=True).astype(np.int32)
+                query_mean = np.mean(query).astype(np.int32)
+                query -= query_mean
+
+            # costs = np.abs(neighbors - blocks[n])
+            # costs = np.max(costs, axis=1)
+            errs = neighbors - query
+            costs = learning.compute_loss(errs, loss=nn_loss)
             nn_idx = np.argmin(costs)
 
-            nn_cost_bits = compress.nbits_cost(costs[nn_idx])
-            zeros_cost_bits = compress.nbits_cost(costs[0])
-            bitsave = zeros_cost_bits - nn_cost_bits
-            saved_bits += bitsave
-            saved_bits_sq += bitsave*bitsave
+            if nn_loss == 'linf':
+                nn_cost_bits = compress.nbits_cost(costs[nn_idx])
+                zeros_cost_bits = compress.nbits_cost(costs[0])
+                bitsave = zeros_cost_bits - nn_cost_bits
+                saved_bits += bitsave
+                saved_bits_sq += bitsave*bitsave
+            # elif nn_loss == 'l2':
+            #     nn_cost = costs[nn_idx]
+            #     zeros_cost = np.var(query)
+            #     # if zeros_cost < nn_
 
-            offsetBlocks[n] -= neighbors[nn_idx]
+            offsetBlocks[n] -= neighbors[nn_idx] + query_mean
 
             times_nonzero += int(nn_idx > 0)
 
-        N_f = float(N)
-        expected_bitsave = saved_bits / N_f
-        std_bitsave = saved_bits_sq / N_f - expected_bitsave * expected_bitsave
-        print "nn nonzero {}/{} ({:.1f}%) and saved {:.2f} +/-{:.2f} bits" \
-            .format(times_nonzero, N, 100 * times_nonzero / N_f,
-                    expected_bitsave, std_bitsave)
+        if nn_loss == 'linf':
+            N_f = float(N)
+            expected_bitsave = saved_bits / N_f
+            std_bitsave = saved_bits_sq / N_f - expected_bitsave * expected_bitsave
+            print "nn nonzero {}/{} ({:.1f}%) and saved {:.2f} +/-{:.2f} bits" \
+                .format(times_nonzero, N, 100 * times_nonzero / N_f,
+                        expected_bitsave, std_bitsave)
 
-        return offsetBlocks
+        return offsetBlocks.reshape(orig_shape)
 
         # TODO option to use various hash funcs here
 
@@ -516,7 +539,22 @@ def split_dyn_delta(blocks):
     return blocks_out
 
 
-def dyn_filt(blocks, filters=None):
+def split_dyn_filt(blocks):
+    # blocks_out = np.empty(blocks.shape)
+    # filters = learning.greedy_brute_filters(
+        # blocks, block_sz=4, nfilters=4, nbits=4, verbose=2, step_sz=.25,
+        # blocks, block_sz=4, nfilters=4, nbits=3, verbose=2, step_sz=.5,
+        # loss='l2')
+    shape = blocks.shape
+    assert shape[1] == 8
+    new_shape = (shape[0] * 2, shape[1] / 2)
+    blocks_out = dyn_filt(blocks.reshape(new_shape), block_sz=4, nfilters=4)
+    # blocks_out[:, :4] = dyn_filt(blocks[:, :4], filters=filters)
+    # blocks_out[:, 4:] = dyn_filt(blocks[:, 4:], filters=filters)
+    return blocks_out.reshape(shape)
+
+
+def dyn_filt(blocks, filters=None, **learn_kwargs):
     # filters = ([], [1])  # only delta and delta-delta; should match dyn_delta
     # filters = ([], [1], [2, -1], [.5, .5], [.5, 0, -.5])
     # filters = ([1], [2, -1])  # only delta and delta-delta; should match dyn_delta
@@ -524,9 +562,13 @@ def dyn_filt(blocks, filters=None):
 
     if filters is None:
         # filters = learning.greedy_brute_filters(blocks, nfilters=2)
-        filters = learning.greedy_brute_filters(
-            # blocks, block_sz=8, nfilters=16, nbits=3, verbose=2)
-            blocks, block_sz=8, nfilters=16, nbits=4, verbose=2, step_sz=.25)
+        learn_kwargs.setdefault('block_sz', 8)
+        learn_kwargs.setdefault('nfilters', 16)
+        learn_kwargs.setdefault('nbits', 3)
+        learn_kwargs.setdefault('verbose', 2)  # TODO change
+        learn_kwargs.setdefault('step_sz', .5)
+        learn_kwargs.setdefault('loss', 'l2')
+        filters = learning.greedy_brute_filters(blocks, **learn_kwargs)
 
         # print "got filters:", filters[:, ::-1]
         # import sys; sys.exit()
@@ -560,7 +602,9 @@ def dyn_filt(blocks, filters=None):
         return ret.reshape(blocks.shape)
 
     blocks_list = [encode_fir(blocks, filt) for filt in filters[:, ::-1]]
-    return take_best_of_each(blocks_list, loss='l2').astype(np.int32)
+    # return take_best_of_each(blocks_list, loss='l2').astype(np.int32)
+    return take_best_of_each(blocks_list, loss='linf').astype(np.int32)
+
     # blocks, counts = take_best_of_each(
     #     blocks_list, loss='l2', return_counts=True)
     # print "  approx fraction each filter chosen:\n     ", counts / float(np.sum(counts))
@@ -573,71 +617,93 @@ def name_transforms(transforms):
     return '|'.join([str(s) for s in transforms])
 
 
-def apply_transforms(X, diffs, blocks, transform_names, diffs_is_cheating=True):
+def apply_transforms(X, diffs, blocks, transform_names, k=-1, **nn_kwargs):
+    # diffs_is_cheating=True, k=-1, **nn_kwargs):
 
-    if diffs_is_cheating:
-        # diffs = encode_fir(X, [1])
-        diffs = compute_deltas(X)
+    # if diffs_is_cheating:
+    #     # diffs = encode_fir(X, [1])
+        # diffs = compute_deltas(X)
 
-    # first round of transforms; defines offsetBlocks var
-    if 'delta' in transform_names:  # delta encode deltas
-        offsetBlocks = convert_to_blocks(diffs)
+    transform_names = transform_names[:]
 
-    elif 'double_delta' in transform_names:  # delta encode deltas
-        # double_diffs = np.copy(diffs)
-        # double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
-        offsetBlocks = convert_to_blocks(compute_deltas(diffs))
+    offsetBlocks = np.copy(blocks)
 
-    elif 'dyn_delta' in transform_names:  # pick delta or delta-delta
-        offsetBlocks = convert_to_blocks(diffs)
-        offsetBlocks = possibly_delta_encode(offsetBlocks)
+    while len(transform_names):
+        name = transform_names[0]
 
-    elif 'split_dyn' in transform_names:
-        offsetBlocks = convert_to_blocks(diffs)
-        offsetBlocks = split_dyn_delta(offsetBlocks)
+        # first round of transforms; defines offsetBlocks var
+        if name == 'delta':  # delta encode deltas
+            # offsetBlocks = convert_to_blocks(diffs)
+            offsetBlocks = compute_deltas(offsetBlocks)
 
-    elif 'dyn_filt' in transform_names:
-        offsetBlocks = dyn_filt(blocks)
+        elif name == 'double_delta':  # delta encode deltas
+            # double_diffs = np.copy(diffs)
+            # double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
+            # offsetBlocks = convert_to_blocks(compute_deltas(diffs))
+            offsetBlocks = compute_deltas(compute_deltas(offsetBlocks))
 
-    else:
-        print "warning: apply_transforms: using no filter-based transform"
-        offsetBlocks = np.copy(blocks)
+        elif name == 'dyn_delta':  # pick delta or delta-delta
+            # offsetBlocks = convert_to_blocks(diffs)
+            offsetBlocks = compute_deltas(offsetBlocks)
+            offsetBlocks = possibly_delta_encode(offsetBlocks)
 
-    if 'center' in transform_names:
-        mins = np.min(offsetBlocks, axis=1)
-        ranges = np.max(offsetBlocks, axis=1) - mins
-        sub_vals = (mins + ranges / 2).astype(np.int32)
-        offsetBlocks -= sub_vals.reshape((-1, 1))
+        elif name == 'maybe_delta':
+            offsetBlocks = possibly_delta_encode(offsetBlocks)
 
-    if 'scaled_signs' in transform_names:
-        offsetBlocks = scaled_signs_encode(offsetBlocks)
+        elif name == 'split_dyn':
+            # offsetBlocks = convert_to_blocks(diffs)
+            offsetBlocks = compute_deltas(offsetBlocks)
+            offsetBlocks = split_dyn_delta(offsetBlocks)
 
-    if 'nn' in transform_names:
-        offsetBlocks = nn_encode(offsetBlocks, **nn_kwargs)
+        elif name == 'dyn_filt':
+            offsetBlocks = dyn_filt(blocks)
 
-    if 'avg' in transform_names:
-        offsetBlocks2 = np.empty(offsetBlocks.shape, dtype=np.int32)
-        for i in range(1, 8):
-            offsetBlocks2[:, i] = offsetBlocks[:, i-1] >> 1 + offsetBlocks[:, i] >> 1
-        offsetBlocks2[:, 0] = offsetBlocks[:, 0] - offsetBlocks2[:, 1]
-        offsetBlocks = np.copy(offsetBlocks2)
+        elif name == 'split_dyn_filt':
+            offsetBlocks = split_dyn_filt(blocks)
 
-    transform_names_copy = [el for el in transform_names]
-    while 'mine' in transform_names_copy:
-        # offsetBlocks = my_transform(offsetBlocks)
-        offsetBlocks = my_old_transform(offsetBlocks)
-        transform_names_copy.remove('mine')
-        if 'mine' in transform_names_copy:
-            perm = [1, 2, 5, 6, 7, 4, 3, 0]
-            offsetBlocks = offsetBlocks[:, perm]
+        # else:
+            # print "warning: apply_transforms: using no filter-based transform"
+            # offsetBlocks = np.copy(blocks)
 
-    # if transform_names[0] == 'inflection' :
-    if 'inflection' in transform_names:
-        offsetBlocks = inflection_encode(offsetBlocks)
+        if name == 'center':
+            mins = np.min(offsetBlocks, axis=1)
+            ranges = np.max(offsetBlocks, axis=1) - mins
+            sub_vals = (mins + ranges / 2).astype(np.int32)
+            offsetBlocks -= sub_vals.reshape((-1, 1))
 
-    # if transform_names[0] == 'can:
-    if 'canal' in transform_names:
-        offsetBlocks = canal_transform(offsetBlocks)
+        if name == 'scaled_signs':
+            offsetBlocks = scaled_signs_encode(offsetBlocks)
+
+        if name == 'nn':
+            print "actually doing nn encoding"
+            offsetBlocks = nn_encode(offsetBlocks, **nn_kwargs)
+
+        if name == 'avg':
+            offsetBlocks2 = np.empty(offsetBlocks.shape, dtype=np.int32)
+            for i in range(1, 8):
+                offsetBlocks2[:, i] = offsetBlocks[:, i-1] >> 1 + offsetBlocks[:, i] >> 1
+            offsetBlocks2[:, 0] = offsetBlocks[:, 0] - offsetBlocks2[:, 1]
+            offsetBlocks = np.copy(offsetBlocks2)
+
+        # transform_names_copy = [el for el in transform_names]
+        while name == 'mine':
+            # offsetBlocks = my_transform(offsetBlocks)
+            offsetBlocks = my_old_transform(offsetBlocks)
+            # transform_names_copy.remove('mine')
+            # if 'mine' in transform_names_copy:
+            if 'mine' in transform_names:
+                perm = [1, 2, 5, 6, 7, 4, 3, 0]
+                offsetBlocks = offsetBlocks[:, perm]
+
+        # if transform_names[0] == 'inflection' :
+        if name == 'inflection':
+            offsetBlocks = inflection_encode(offsetBlocks)
+
+        # if transform_names[0] == 'can:
+        if name == 'canal':
+            offsetBlocks = canal_transform(offsetBlocks)
+
+        transform_names = transform_names[1:]  # pop first transform
 
     # "examples" stitched together from blocks with vals subbed off
     # if diffs_offset is None:
@@ -648,8 +714,8 @@ def apply_transforms(X, diffs, blocks, transform_names, diffs_is_cheating=True):
     return offsetBlocks, diffs_offset
 
 
-def plot_dset(d, numbits=8, left_transforms=None,
-              right_transforms=None, prefix_nbits=None, n=100, **nn_kwargs):
+def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
+              prefix_nbits=None, k=-1, **transform_kwargs):
 
     plot_sort = False  # plot distros of idxs into vals sorted by rel freq
 
@@ -670,9 +736,9 @@ def plot_dset(d, numbits=8, left_transforms=None,
     blocks = convert_to_blocks(X)
 
     offsetBlocksLeft, diffs_left = apply_transforms(
-        X, diffs, blocks, left_transforms)
+        X, diffs, blocks, left_transforms, **transform_kwargs)
     offsetBlocksRight, diffs_right = apply_transforms(
-        X, diffs, blocks, right_transforms)
+        X, diffs, blocks, right_transforms, **transform_kwargs)
 
     # ------------------------ compute where overflows are
 
@@ -747,18 +813,20 @@ def plot_dset(d, numbits=8, left_transforms=None,
     axes[-2].scatter(x_bad4_right, y_bad4_right, s=np.pi * 10*10,
                      facecolors='none', edgecolors='r')
 
+    # ------------------------ residuals distro in top right
+
     # # plot numbers of bits taken by each resid
     # axes[-4].set_title("Number of bits required for each sample in each ts")
     # resids_nbits = compress.nbits_cost(diffs_right)
     # img = imshow_better(resids_nbits, ax=axes[-4], cmap='gnuplot2')
     # plt.colorbar(img, ax=axes[-4])
-    #
-    # alternatively, plot exact distros of residuals
+
     axes[-4].set_title("(Clipped) distribution of residuals")
 
     clip_min, clip_max = -129, 128
     nbins = (clip_max - clip_min) / 2
-    clipped_resids = np.clip(diffs_right, clip_min, clip_max).ravel()
+    clipped_resids = np.clip(diffs_right, clip_min, clip_max).astype(np.int32).ravel()
+    # clipped_resids = np.log(clipped_resids) # TODO rm
     sb.distplot(clipped_resids, ax=axes[-4], kde=False, bins=nbins, hist_kws={
                 'normed': True, 'range': [clip_min, clip_max]})
     if plot_sort:
@@ -773,6 +841,105 @@ def plot_dset(d, numbits=8, left_transforms=None,
         sb.distplot(clipped_positions, ax=axes[-4], kde=False, bins=nbins, hist_kws={
             'normed': True, 'range': [0, clip_max], 'color': 'g'})
 
+    # plot best fit laplace distro
+    rate = 1. / np.mean(np.abs(diffs_right))
+    xvals = np.arange(clip_min, clip_max + 1)
+    yvals = .5 * rate * np.exp(-rate * np.abs(xvals))
+    axes[-4].plot(xvals, yvals, 'k--')
+    # axes[-4].plot(xvals, np.log(yvals), 'k--') # TODO rm
+
+    # plot best fit power law
+    # EDIT: moral of this story is that it's not really a power law either;
+    # if you take log of x, it's more like a gaussian around 0
+    def fit_power_law(xvals, yvals):
+        logx = np.log(xvals)
+        logy = np.log(yvals)
+
+        ignore_idxs = np.isinf(logx)  # shouldn't happen, but why not
+        ignore_idxs += np.isinf(logy)  # happens for 0 counts
+        keep_idxs = ~ignore_idxs
+        logx, logy = logx[keep_idxs], logy[keep_idxs]
+
+        # print "nans in logx: ", np.where(np.isnan(logx))[0]
+        # print "nans in logy: ", np.where(np.isnan(logy))[0]
+        # print "infs in logx: ", np.where(np.isinf(logx))[0]
+        # print "infs in logy: ", np.where(np.isinf(logy))[0]
+
+        # from scipy import optimize
+        # fitfunc = lambda p, x: p[0] + p[1] * x  # noqa
+        # errfunc = lambda p, x, y: y - fitfunc(p, x)  # noqa
+        # p_init = [1.0, -1.0]
+        # p, _ = optimize.leastsq(errfunc, p_init, args=(logx, logy))
+
+        # from scipy import polyfit, polyval
+        from scipy.stats import linregress
+        slope, intercept, corr_r, _, _ = linregress(logx, logy)
+        print "power law slope, intercept, corr = {}, {}, {}".format(
+            slope, intercept, corr_r)
+
+        # yhat = np.exp(-intercept + slope * np.log(xvals))
+        yhat = np.exp(intercept + slope * np.log(xvals))
+        # log_yhat = p[0] + p[1] * logx
+        # yhat = np.exp(log_yhat)
+
+        # plt.figure()
+        # # plt.plot(xvals, yvals)
+        # # plt.plot(xvals, yhat)
+        # plt.plot(logx, logy)
+        # plt.plot(np.log(xvals), np.log(yhat))
+        # plt.show()
+
+        return yhat
+
+    # # print "min clipped resid, clip_min: ", np.min(clipped_resids), clip_min
+    # counts = np.bincount(clipped_resids - clip_min)[1:-1]  # final bins have whole tails
+    # # x_neg = np.arange(clip_min + 1, 1)  # duh; no log of negative stuff
+    # # yhat_neg = fit_power_law(x_neg, counts[:len(x_neg)])
+    # # axes[-4].plot(x_neg, yhat_neg)
+    # x_pos = np.arange(0, clip_max)
+    # yhat_pos = fit_power_law(x_pos, counts[-len(x_pos):])
+    # # axes[-4].plot(x_pos, np.log(yhat_pos))
+    # axes[-4].plot(x_pos, yhat_pos)
+
+    def cauchy_pdf(x, g, x_mean=0):
+        dist = (x - x_mean) / g
+        denom = np.pi * g * (1. + dist*dist)
+        return 1. / denom
+
+    def log_cauchy_pdf(x, g, x_mean=0):
+        dist = (x - x_mean) / g
+        return -np.log(np.pi * g) - np.log(1 + dist*dist)
+
+    def fit_cauchy(xvals, yvals, x_mean=0):
+        # from scipy import optimize
+        # # see https://en.wikipedia.org/wiki/Cauchy_distribution
+        # fitfunc = lambda g, x: cauchy_pdf(x, g, x_mean=x_mean) # noqa
+        # errfunc = lambda g, x, y: y - fitfunc(g, x)  # noqa
+        # gamma = np.std(yvals)
+        # # gamma, _ = optimize.leastsq(errfunc, gamma, args=(xvals, yvals))
+
+        # yhat = cauchy_pdf(xvals, gamma, x_mean=x_mean)
+        # return yhat
+
+        # from scipy import stats
+        # model = cauchy.fit(yvals)
+
+
+
+        # SELF: pick up here using SO example
+
+
+
+        pass
+
+    # counts = np.bincount(clipped_resids - clip_min)[1:-1]  # final bins have whole tails
+    # xvals = np.arange(clip_min + 1, clip_max)
+    # yhat = fit_cauchy(xvals, counts)
+    # axes[-4].plot(xvals, yhat)
+
+    axes[-4].set_yscale('log')
+
+    # ------------------------ histograms of residuals in bottom axes
 
     def plot_uresiduals_bits(resids, ax, plot_sort=plot_sort):
         # have final bar in the histogram contain everything that would
@@ -900,15 +1067,17 @@ def main():
     # numbits = 8
 
     # left_transforms = None
-    # left_transforms = 'delta'
-    left_transforms = 'dyn_delta'
+    left_transforms = 'delta'
+    # left_transforms = 'dyn_delta'
     # right_transforms = None
     # right_transforms = 'nn'
     # right_transforms = 'nn7'
     # right_transforms = 'double_delta'  # delta encode deltas
     # right_transforms = '1.5_delta'  # sub half of prev delta from each delta
-    # right_transforms = 'dyn_delta'  # pick single or double delta for each block
-    right_transforms = 'dyn_filt'
+    right_transforms = 'dyn_delta'  # pick single or double delta for each block
+    # right_transforms = 'dyn_filt'
+    # right_transforms = ['nn', 'dyn_delta']
+    # right_transforms = ['delta', 'nn', 'maybe_delta']
     # right_transforms = ['dyn_delta', 'nn']
     # right_transforms = ['dyn_delta', 'scaled_signs']
     # right_transforms = ['dyn_delta', 'avg']
@@ -920,30 +1089,48 @@ def main():
     # right_transforms = ['inflection']
     # right_transforms = 'split_dyn'
     # right_transforms = 'dyn_filt'
+    # right_transforms = 'split_dyn_filt'
+    # right_transforms = ['delta', 'dyn_filt']
+    # right_transforms = ['delta', 'split_dyn_filt']
 
-    num_neighbors = 256
-    # num_neighbors = 1024
+    # num_neighbors = 256
+    num_neighbors = 1024
 
     neighbor_scales = None
     # neighbor_scales = [(0, 1), (1, 0)]  # amount to left shift, right shift
     # neighbor_scales = [.5, .75, 1.25, 1.5, 1.75, 2]
     # neighbor_scales = [.5, 2]
 
-    # invert_neighbors = False
-    invert_neighbors = True
+    invert_neighbors = False
+    # invert_neighbors = True
+
+    # nn_loss = 'l2'
+    nn_loss = 'linf'
+
+    mean_normalize = True
+    # mean_normalize = False
+
+    # nn_nblocks = 1
+    nn_nblocks = 2
 
     save = True
     # save = False
     small = False
-    small = True
+    # small = True
 
     # prefix_nbits = 8
     # prefix_nbits = 10
     # prefix_nbits = 11
     prefix_nbits = -1
 
-    n = 8
-    # n = 32
+    k = 8
+
+    # n = 8
+    n = 32
+
+    # TODO add in a "transform" that encodes blocks using codes we would use
+    #   -actually, prolly bake this into nbits_cost cuz otherwise leading 0s
+    #   and more than one leading 1 will make it underestimate costs
 
     dsets = ds.smallUCRDatasets() if small else ds.allUCRDatasets()
 
@@ -955,8 +1142,11 @@ def main():
         suffix += "_inv{}".format(1 if invert_neighbors else 0)
         if neighbor_scales:
             legible_scales = ','.join([str(s) for s in neighbor_scales])
-        suffix += "_scale{}".format(legible_scales)
-    if n < 50:
+            suffix += "_scale{}".format(legible_scales)
+        suffix += "_loss={}".format(nn_loss)
+        suffix += "_meannorm" if mean_normalize else "_nonorm"
+        suffix += '' if nn_nblocks < 2 else '_nnblocks={}'.format(nn_nblocks)
+    if n < 32:
         suffix += "_n={}".format(n)
     if prefix_nbits > 0:
         suffix += '_prefix={}b'.format(prefix_nbits)
@@ -968,11 +1158,11 @@ def main():
     # ------------------------ main loop
 
     # for d in list(dsets)[26:27]:  # olive oil
-    # for d in list(dsets)[1:2]:  # adiac
     # for i, d in enumerate(dsets):
     # for d in dsets:
     # for d in list(dsets)[4:8]:
     # for d in list(dsets)[:4]:
+    # for d in list(dsets)[1:2]:  # adiac
     for d in list(dsets)[:16]:
         print "------------------------ {}".format(d.name)
         plot_dset(d, numbits=numbits, n=n,
@@ -981,7 +1171,11 @@ def main():
                   num_neighbors=num_neighbors,
                   scale_factors=neighbor_scales,
                   try_invert=invert_neighbors,
-                  prefix_nbits=prefix_nbits)
+                  nn_loss=nn_loss,
+                  nn_nblocks=nn_nblocks,
+                  mean_normalize=mean_normalize,
+                  prefix_nbits=prefix_nbits,
+                  k=k)
         if save:
             save_current_plot(d.name, subdir=subdir)
 

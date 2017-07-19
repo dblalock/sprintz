@@ -201,11 +201,13 @@ def greedy_brute_filters(x, nfilters=16, ntaps=4, nbits=4, step_sz=.5,
     X = window.sliding_window_1D(x[:-1], ntaps).astype(np.float32)
     y = x[ntaps:].astype(np.float32).reshape((-1, 1))  # col vect
 
+    # filters = np.zeros((2, ntaps))
     filters = np.zeros((2, ntaps))
     # filters = np.zeros((3, ntaps))
-    filters[0, -1] = 1  # delta encoding
-    filters[1, -1], filters[1, -2] = 2, -1  # delta-delta encoding
+    # filters[0, -1] = 1  # delta encoding
+    # filters[1, -1], filters[1, -2] = 2, -1  # delta-delta encoding
     # filters[2, -1], filters[2, -2], filters[2, -3] = 2, -3, 1  # 3delta
+    filters[1, -1] = 1  # delta encoding as second thing (first thing all 0s)
 
     candidates = all_possible_filters(ntaps, nbits, step_sz)
 
