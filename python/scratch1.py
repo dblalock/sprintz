@@ -845,7 +845,7 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     rate = 1. / np.mean(np.abs(diffs_right))
     xvals = np.arange(clip_min, clip_max + 1)
     yvals = .5 * rate * np.exp(-rate * np.abs(xvals))
-    axes[-4].plot(xvals, yvals, 'k--')
+    axes[-4].plot(xvals, yvals, 'k--', lw=1)
     # axes[-4].plot(xvals, np.log(yvals), 'k--') # TODO rm
 
     # plot best fit power law
@@ -921,21 +921,21 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
         # yhat = cauchy_pdf(xvals, gamma, x_mean=x_mean)
         # return yhat
 
-        # from scipy import stats
-        # model = cauchy.fit(yvals)
+        from scipy import stats
+        loc, scale = stats.cauchy.fit(yvals)
+        # loc, scale = stats.cauchy.fit(np.log(yvals))
 
+        # print "model: ", model
+        # import sys; sys.exit()
+        loc = 0  # hardcode mean of 0
+        yhat = stats.cauchy.pdf(xvals, loc=loc, scale=scale)
+        return yhat
 
-
-        # SELF: pick up here using SO example
-
-
-
-        pass
-
-    # counts = np.bincount(clipped_resids - clip_min)[1:-1]  # final bins have whole tails
-    # xvals = np.arange(clip_min + 1, clip_max)
-    # yhat = fit_cauchy(xvals, counts)
-    # axes[-4].plot(xvals, yhat)
+    counts = np.bincount(clipped_resids - clip_min)[1:-1]  # final bins have whole tails
+    xvals = np.arange(clip_min + 1, clip_max)
+    yhat = fit_cauchy(xvals, counts)
+    axes[-4].plot(xvals, yhat, 'c--', lw=1.5)
+    # axes[-4].plot(xvals, np.exp(yhat), 'c--', lw=1.5)
 
     axes[-4].set_yscale('log')
 
@@ -1161,8 +1161,8 @@ def main():
     # for i, d in enumerate(dsets):
     # for d in dsets:
     # for d in list(dsets)[4:8]:
-    # for d in list(dsets)[:4]:
     # for d in list(dsets)[1:2]:  # adiac
+    # for d in list(dsets)[:4]:
     for d in list(dsets)[:16]:
         print "------------------------ {}".format(d.name)
         plot_dset(d, numbits=numbits, n=n,
