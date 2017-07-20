@@ -269,10 +269,10 @@ def block_nbits_costs(blocks, signed=True):
     return compress.nbits_cost(maxes, signed=signed).reshape((N, 1))
 
 
-# def nn_encode(diffs, num_neighbors, nn_step=4, hash_algo=None):
-def nn_encode(blocks, num_neighbors=256, nn_step=1, hash_algo=None,
+# def nn_encode(diffs, num_neighbors, nn_step=4, nn_hash=None):
+def nn_encode(blocks, num_neighbors=256, nn_step=1, nn_hash=None,
               scale_factors=None, try_invert=True, nn_loss='l2',
-              mean_normalize=True, nn_nblocks=1):
+              mean_normalize=True, nn_nblocks=1, predict_next=False):
 
     orig_shape = blocks.shape
     if nn_nblocks > 1:
@@ -285,7 +285,7 @@ def nn_encode(blocks, num_neighbors=256, nn_step=1, hash_algo=None,
         scale_factors = scale_factors[:]
         scale_factors.remove(1)
 
-    if hash_algo is None or hash_algo == 'none':
+    if nn_hash is None or nn_hash == 'none':
         # assert nn_step == 4  # we only handle 4 for now
         # diff_windows = window.sliding_window_1D(diffs.ravel(), 8, step=8)
         # offsetBlocks = np.zeros_like(diff_windows)
@@ -298,7 +298,8 @@ def nn_encode(blocks, num_neighbors=256, nn_step=1, hash_algo=None,
         times_nonzero = 0
         saved_bits = 0
         saved_bits_sq = 0
-        for n in range(1, N):
+        end = N - 1 if predict_next else N
+        for n in range(1, end):
             # start_idx = int(max(0, n - (nn_step / 8.) * num_neighbors))
             # end_idx = n
             # history = diff_windows[start_idx:end_idx].ravel()
@@ -327,10 +328,15 @@ def nn_encode(blocks, num_neighbors=256, nn_step=1, hash_algo=None,
                         add_neighbors.append(scaled_mat)
                 all_neighbors += add_neighbors
 
-            all_neighbors = [zero_samples] + all_neighbors
+            # if not predict_next:
+            #     all_neighbors = [zero_samples] + all_neighbors
             neighbors = np.vstack(all_neighbors)
 
-            query = blocks[n]
+            # if predict_next:
+                # query = blocks[n]
+            # else:
+                # query = blocks[]
+            query = np.copy(blocks[n])
             query_mean = 0
             if mean_normalize:
                 neighbors -= np.mean(neighbors, axis=1, keepdims=True).astype(np.int32)
@@ -343,34 +349,60 @@ def nn_encode(blocks, num_neighbors=256, nn_step=1, hash_algo=None,
             costs = learning.compute_loss(errs, loss=nn_loss)
             nn_idx = np.argmin(costs)
 
-            if nn_loss == 'linf':
-                nn_cost_bits = compress.nbits_cost(costs[nn_idx])
-                zeros_cost_bits = compress.nbits_cost(costs[0])
-                bitsave = zeros_cost_bits - nn_cost_bits
-                saved_bits += bitsave
-                saved_bits_sq += bitsave*bitsave
+            neighbor = neighbors[nn_idx]
+            target = blocks[n + 1] if predict_next else blocks[n]
+            target_mean = np.mean(target) if mean_normalize else 0
+            resids = target - (neighbor + target_mean)
+
+            orig_cost = learning.compute_loss(target, loss=nn_loss)
+            nn_cost = learning.compute_loss(resids, loss=nn_loss)
+
+            if nn_cost < orig_cost:
+                times_nonzero += 1
+                write_block = resids
+            else:
+                write_block = target
+
+            # if nn_loss == 'linf':
+                # if predict_next:
+                #     neighbor = neighbors[nn_idx]
+                #     nn_cost_bits = compress.nbits_cost(blocks[n+1])
+                #     zeros_cost_bits = compress.nbits_cost(blocks[n+1])
+                # else:
+                #     nn_cost_bits = compress.nbits_cost(costs[nn_idx])
+                #     zeros_cost_bits = compress.nbits_cost(costs[0])
+                # bitsave = zeros_cost_bits - nn_cost_bits
+                # bitsave = max(0, orig_cost - nn_cost)
+            orig_nbits = np.max(compress.nbits_cost(target))
+            new_nbits = np.max(compress.nbits_cost(resids))
+            bitsave = max(0, orig_nbits - new_nbits)
+            saved_bits += bitsave
+            saved_bits_sq += bitsave*bitsave
+
             # elif nn_loss == 'l2':
             #     nn_cost = costs[nn_idx]
             #     zeros_cost = np.var(query)
             #     # if zeros_cost < nn_
 
-            offsetBlocks[n] -= neighbors[nn_idx] + query_mean
+            write_idx = n + 1 if predict_next else n
+            # offsetBlocks[write_idx] -= neighbors[nn_idx] + query_mean
+            offsetBlocks[write_idx] = write_block
 
-            times_nonzero += int(nn_idx > 0)
+            # times_nonzero += int(nn_idx > 0)
 
-        if nn_loss == 'linf':
-            N_f = float(N)
-            expected_bitsave = saved_bits / N_f
-            std_bitsave = saved_bits_sq / N_f - expected_bitsave * expected_bitsave
-            print "nn nonzero {}/{} ({:.1f}%) and saved {:.2f} +/-{:.2f} bits" \
-                .format(times_nonzero, N, 100 * times_nonzero / N_f,
-                        expected_bitsave, std_bitsave)
+        # if nn_loss == 'linf':
+        N_f = float(N)
+        expected_bitsave = saved_bits / N_f
+        std_bitsave = saved_bits_sq / N_f - expected_bitsave * expected_bitsave
+        print "nn nonzero {}/{} ({:.1f}%) and saved {:.2f} +/-{:.2f} bits" \
+            .format(times_nonzero, N, 100 * times_nonzero / N_f,
+                    expected_bitsave, std_bitsave)
 
         return offsetBlocks.reshape(orig_shape)
 
         # TODO option to use various hash funcs here
 
-    raise ValueError("Unrecognized hash_algo: '{}'".format(hash_algo))
+    raise ValueError("Unrecognized nn_hash: '{}'".format(nn_hash))
 
 
 def convert_to_blocks(diffs):
@@ -710,6 +742,15 @@ def apply_transforms(X, diffs, blocks, transform_names, k=-1, **nn_kwargs):
     use_shape = diffs.shape[0] - 1, diffs.shape[1]
     use_size = use_shape[0] * use_shape[1]
     diffs_offset = offsetBlocks.ravel()[:use_size].reshape(use_shape)
+
+    all_costs = compress.nbits_cost(offsetBlocks.ravel()).astype(np.float32)
+    all_costs -= np.mean(all_costs)
+    norm = np.mean(all_costs * all_costs)
+    corrs = np.empty(15)
+    for i in range(1, len(corrs) + 1):
+        corrs[i-1] = np.mean(all_costs[i:] * all_costs[:-i]) / norm
+
+    print "autocorrelations: ", corrs
 
     return offsetBlocks, diffs_offset
 
@@ -1074,10 +1115,13 @@ def main():
     # right_transforms = 'nn7'
     # right_transforms = 'double_delta'  # delta encode deltas
     # right_transforms = '1.5_delta'  # sub half of prev delta from each delta
-    right_transforms = 'dyn_delta'  # pick single or double delta for each block
+    # right_transforms = 'dyn_delta'  # pick single or double delta for each block
     # right_transforms = 'dyn_filt'
     # right_transforms = ['nn', 'dyn_delta']
     # right_transforms = ['delta', 'nn', 'maybe_delta']
+    # right_transforms = ['delta', 'nn']
+    # right_transforms = ['nn']
+    # right_transforms = ['nn', 'delta']
     # right_transforms = ['dyn_delta', 'nn']
     # right_transforms = ['dyn_delta', 'scaled_signs']
     # right_transforms = ['dyn_delta', 'avg']
@@ -1088,6 +1132,7 @@ def main():
     # right_transforms = ['dyn_delta', 'canal']
     # right_transforms = ['inflection']
     # right_transforms = 'split_dyn'
+    right_transforms = 'dyn_delta'
     # right_transforms = 'dyn_filt'
     # right_transforms = 'split_dyn_filt'
     # right_transforms = ['delta', 'dyn_filt']
@@ -1104,14 +1149,16 @@ def main():
     invert_neighbors = False
     # invert_neighbors = True
 
-    # nn_loss = 'l2'
-    nn_loss = 'linf'
+    nn_loss = 'l2'
+    # nn_loss = 'linf'
 
     mean_normalize = True
     # mean_normalize = False
 
-    # nn_nblocks = 1
-    nn_nblocks = 2
+    nn_nblocks = 1
+    # nn_nblocks = 2
+
+    predict_next = True
 
     save = True
     # save = False
@@ -1146,6 +1193,7 @@ def main():
         suffix += "_loss={}".format(nn_loss)
         suffix += "_meannorm" if mean_normalize else "_nonorm"
         suffix += '' if nn_nblocks < 2 else '_nnblocks={}'.format(nn_nblocks)
+        suffix += 'forecast' if predict_next else ''
     if n < 32:
         suffix += "_n={}".format(n)
     if prefix_nbits > 0:
@@ -1161,8 +1209,8 @@ def main():
     # for i, d in enumerate(dsets):
     # for d in dsets:
     # for d in list(dsets)[4:8]:
-    # for d in list(dsets)[1:2]:  # adiac
     # for d in list(dsets)[:4]:
+    # for d in list(dsets)[1:2]:  # adiac
     for d in list(dsets)[:16]:
         print "------------------------ {}".format(d.name)
         plot_dset(d, numbits=numbits, n=n,
@@ -1174,6 +1222,7 @@ def main():
                   nn_loss=nn_loss,
                   nn_nblocks=nn_nblocks,
                   mean_normalize=mean_normalize,
+                  predict_next=predict_next,
                   prefix_nbits=prefix_nbits,
                   k=k)
         if save:
