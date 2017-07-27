@@ -1,0 +1,119 @@
+
+% \documentclass[conference]{IEEEtran}
+% \documentclass{sig-alternate} % pre 2017
+\documentclass[sigconf]{acmart}  % starting in 2017
+\input{setup.tex}
+
+\begin{document}
+
+\setcopyright{rightsretained}
+
+%Conference
+\copyrightyear{2017}
+\acmYear{2017}
+\setcopyright{acmlicensed}
+% \acmConference{KDD '17}{August 13--17, 2017}{Halifax, NS, Canada}\acmPrice{15.00}\acmDOI{10.1145/3097983.3098195}
+% \acmConference{KDD'17}{}{August 13--17, 2017, Halifax, NS, Canada.} \acmPrice{15.00} \acmDOI{10.1145/3097983.3098195}
+% \acmISBN{978-1-4503-4887-4/17/08}
+% \acmISBN{ISBN 978-1-4503-4887-4/17/08}
+
+% \fancyhead{}  % apparently KDD printer wants no headers so can add their own
+
+% ================================================================
+\title{Sprintz: Time Series Compression for the Internet of Things}
+% ================================================================
+
+\author{Davis W. Blalock}
+\affiliation{
+  \institution{Computer Science and Artificial \\ Intelligence Laboratory}
+  \institution{Massachusetts Institute of Technology}
+}
+\email{dblalock@mit.edu}
+
+\author{John V. Guttag}
+\affiliation{
+  \institution{Computer Science and Artificial \\ Intelligence Laboratory}
+  \institution{Massachusetts Institute of Technology}
+}
+\email{guttag@mit.edu}
+
+% ------------------------------------------------
+\begin{abstract}
+% ------------------------------------------------
+
+This paper is liek totes awesome.
+
+\end{abstract}
+
+% ------------------------------------------------
+% CCS taxonomy stuff / keywords
+% ------------------------------------------------
+
+\begin{CCSXML}
+<ccs2012>
+
+<concept>
+<concept_id>10002950.10003705</concept_id>
+<concept_desc>Mathematics of computing~Mathematical software</concept_desc>
+<concept_significance>100</concept_significance>
+</concept>
+</ccs2012>
+\end{CCSXML}
+
+\ccsdesc[100]{Mathematics of computing~Mathematical software}
+
+\keywords{Compression, Time Series, Performance}
+
+\maketitle
+
+% ================================================================
+\section{Introduction} \label{sec:intro}
+% ================================================================
+
+\input{intro.tex}
+
+% % ================================================================
+% \section{Definitions and Problem} \label{sec:problem}
+% % ================================================================
+
+% \input{problem.tex}
+
+% ================================================================
+\section{Related Work} \label{sec:relatedWork}
+% ================================================================
+
+\input{related_work.tex}
+
+% ================================================================
+% \vspace{-2mm}
+\section{Method} \label{sec:method}
+% ================================================================
+
+\input{method.tex}
+
+% ================================================================
+\section{Experimental Results} \label{sec:results}
+% ================================================================
+
+\input{results.tex}
+
+% ================================================================
+\vspace{-1mm}
+\section{Summary} \label{sec:conclusion}
+% ================================================================
+
+Sprintz (Sprintz PReserves INteger Time serieZ) is a compression algorithm. Behold, it's majesty.
+
+% ================================================================
+\vspace{-1mm}
+% References
+% ================================================================
+
+% \nocite{*}
+
+% \IEEEtriggeratref{27}	% trigger column break to make cols even
+\bibliographystyle{ACM-Reference-Format}
+% \bibliographystyle{abbrev}
+\bibliography{doc}
+
+\end{document}

@@ -1,0 +1,58 @@
+
+To assess Sprintz's effectiveness, we implemented both it and comparison algorithms in C++ and Python. All of our code and raw results are publicly available on the Sprintz website.\footnote{https://github.com/dblalock/sprintz} This website also contains experiments on additional datasets, as well as thorough documentation of both our code and experimental setups. All experiments use a single thread on a 2013 Macbook Pro with a 2.6GHz Intel Core i7-4960HQ processor.
+
+All reported timings and throughputs are the best of 5 runs, averaged over 10 trials (i.e., the code is executed 50 times). We use the best in each trial, rather than average, since this is standard practice in performance benchmarking.
+
+% ------------------------------------------------
+\subsection{Datasets}
+% ------------------------------------------------
+
+For assessing accuracy, we use several datasets widely used to benchmark Multi-Codebook Quantization (MCQ) algorithms:
+\begin{itemize}[leftmargin=4mm]
+\item \textbf{Batman} \cite{batman} --- Also known as the Caped Crusader. Don't ask what compression means here, because I couldn't tell you.
+\end{itemize}
+
+For all datasets, we separate the first 5\% of the data
+
+% Experiments on additional datasets are availble on the Bolt website.
+
+% ------------------------------------------------
+\subsection{Comparison Algorithms}
+% ------------------------------------------------
+
+\begin{itemize}[leftmargin=4mm]
+\item \textbf{Wishful Thinking} \cite{batman} --- We just really hope that the data gets compressed and assume that it will.
+\item \textbf{Encouragement} \cite{barney} --- We foster a positive environment and allow the data to compress itself when it feels ready.
+\end{itemize}
+
+
+% ------------------------------------------------
+\subsection{Compression Speed}
+% ------------------------------------------------
+
+Look, a bar graph.
+
+% \begin{figure}[h]
+% \begin{center}
+% % \includegraphics[width=\linewidth, trim={0 1cm 0 0},clip]{moose0}
+% \includegraphics[width=\linewidth]{encoding_speed}
+% \vspace*{-2mm}
+% % \caption{Bolt encodes data vectors significantly faster than existing algorithms.}
+% \caption{Bolt encodes both data and query vectors significantly faster than similar algorithms.}
+% \label{fig:encoding_speeds}
+% \end{center}
+% \end{figure}
+
+% \vspace{-2mm}
+% ------------------------------------------------
+\subsection{Decompression Speed}
+% ------------------------------------------------
+
+Yep. Real fast.
+
+% ------------------------------------------------
+\subsection{Compression Ratio}
+% ------------------------------------------------
+
+Such small. Very compress.
+
