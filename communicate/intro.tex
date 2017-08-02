@@ -5,7 +5,7 @@ In order to reduce transmission, power, and storage costs, it is highly desirabl
 
 Moreover, almost all existing methods assume computational resources that may be unavailable on low-power devices collecting and transmitting data. In particular, such devices may have less than 1KB of writable memory.
 
-The contribution of this work is the introduction of \textsc{Sprintz} (Sprintz PReserves INteger Time SerieZ), a lossless compression algorithm for time series that does not assume a particular application domain (e.g., music) and is suitable for execution on low-power hardware. As we show experimentally, \textsc{Sprintz} achieves higher compression ratios than any other method across a wide range of datasets while maintaining decompression speeds over \%d MB/s in a single thread.
+The contribution of this work is the introduction of \mine (Sprintz PReserves INteger Time SerieZ), a lossless compression algorithm for time series that does not assume a particular application domain (e.g., music) and is suitable for execution on low-power hardware. As we show experimentally, \mine achieves higher compression ratios than any other method across a wide range of datasets while maintaining decompression speeds over \%d MB/s in a single thread.
 
 % ------------------------------------------------
 \subsection{Why lossless?}
@@ -35,7 +35,7 @@ Many connected devices are powered by batteries or harvested energy \cite{calhou
 
 We do not assume that the hardware decompressing the data is so limited. Instead, this hardware is likely a modern x86 server with SIMD instructions, gigabytes of RAM, and a multi-GHz clock.
 
-Given these differing capabilities, a natural question is whether the data must be compressed at the device instead of at the server. Unfortunately, delaying the compression would eliminate much of its benefit. The reason is that reducing the amount of data the device must send offers enormous power savings. To a first approximation, sending data over Bluetooth Low Energy costs \%d mW while computing at full power costs \%d mW and sitting idle costs only \%d mW \cite{TODO}. Furthermore, compressing the data before the server reduces network load.
+Given these differing capabilities, a natural question is whether the data must be compressed at the device instead of at the server. Unfortunately, delaying the compression would eliminate much of its benefit. The reason is that reducing the amount of data the device must send offers enormous power savings. To a first approximation, sending data over Bluetooth Low Energy (BLE) costs \%d mW while computing at full power costs \%d mW and sitting idle costs only \%d mW \cite{TODO}. Furthermore, compressing the data before the server reduces network load.
 
 % As a consequence of limited power budgets, there is a strong need to reduce the amount of data transmitted or stored. Indeed, this is the driving motivation for our work. To a first approximation, sending data over Bluetooth Low Energy costs \%d mW and writing to an SD card costs \%d mW; in contrast, computing at full power costs \%d mW and sitting idle costs only \%d mW. This implies that it is worth a great deal of computation to reduce the sizes of writes and transmits.
 

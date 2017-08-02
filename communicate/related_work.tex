@@ -1,4 +1,22 @@
 
-A lot of people have compressed things. Behold, references:
+\subsection{Compression of integers}
+
+% Integer compression is not as well-studied as general-purpose compression, but has seen great progress in recent years.
+
+The fastest methods of compressing integers are generally based on bit-packing---i.e., using at most $b$ bits to represent values in ${0, 2^b-1}$, and storing these bits contiguously \cite{TODO, pfor, fastpfor}. Since $b$ is determined by the largest value that must be encoded, naively applying this method yields limited compression. To improve it, one can encode fixed-size blocks of data at a time, so that $b$ can be set based on the largest values in a block instead of the whole dataset \cite{fourGamma, simdbp128, pfor, fastpfor}. A further improvement is to ignore the largest few values when setting $b$ and store their omitted bits separately \cite{pfor, fastpfor}.
+
+Another common \cite{flac, shorten} alternative to bit-packing is Golomb coding \cite{golomb}, or its special case Rice coding \cite{rice}. The idea is to assume (reasonably \cite{shorten}) that the values follow an exponential distribution, and therefore make the encoding cost linear in the magnitude of the encoded value.
+
+Both bit packing and Golomb coding are bit-based methods in that they do not guarantee that encoded values will be aligned on byte boundaries. When this is undesirable, one can employ byte-based methods such as 4-Wise Null Suppression \cite{TODO}, LEB128 \cite{TODO, thatOneDB}, or PrefixVaring \cite{https://github.com/stoklund/varint}. These methods reduce the number of bytes used to store each sample by encoding in a few bits how many bytes are necessary to represent its value, and then encoding only that many bytes. Some, such as Simple8b \cite{TODO} and SIMD-GroupSimple \cite{TODO}, allow fractional bytes to be stored while preserving byte alignment for groups of samples. % These methods allow for efficient universal codes---that is, codes that can represent any possible integer. Universal
+
+Before applying any of these coding schemes, it is almost universal to apply some transform to the raw data to make the values closer to 0. The most common transforms are delta encoding, \cite{fastpfor, TODO}, delta-delta encoding \cite{influxdb}, and linear predictive coding (LPC) \cite{flac, TODO}. LPC deterministically generates a prediction for each sample based on the previous samples, and stores the error in the prediction instead of the raw value; when the errors are small, the integers stored are closer to 0. Delta coding and delta-delta coding are special cases wherein each sample is predicted to be the previous sample, or a linear extrapolation from the previous two samples, respectively.
+
+\subsection{Compression of time series}
 
 
+
+
+\subsection{General-purpose compression}
+While \mine is not intended to be a general-purpose compression algorithm, a reasonable alternative to using a specialized method would be to apply a general-purpose compression algorithm, possibly after preprocessing such as delta coding.
+
+ % we would be remiss not to mention several state-of-the-art techniques we will subsequently use as baselines.

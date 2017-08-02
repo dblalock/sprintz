@@ -1,5 +1,5 @@
 
-To assess Sprintz's effectiveness, we implemented both it and comparison algorithms in C++ and Python. All of our code and raw results are publicly available on the Sprintz website.\footnote{https://github.com/dblalock/sprintz} This website also contains experiments on additional datasets, as well as thorough documentation of both our code and experimental setups. All experiments use a single thread on a 2013 Macbook Pro with a 2.6GHz Intel Core i7-4960HQ processor.
+To assess \mine's effectiveness, we implemented both it and comparison algorithms in C++ and Python. All of our code and raw results are publicly available on the \mine website.\footnote{https://github.com/dblalock/sprintz} This website also contains experiments on additional datasets, as well as thorough documentation of both our code and experimental setups. All experiments use a single thread on a 2013 Macbook Pro with a 2.6GHz Intel Core i7-4960HQ processor.
 
 All reported timings and throughputs are the best of 5 runs, averaged over 10 trials (i.e., the code is executed 50 times). We use the best in each trial, rather than average, since this is standard practice in performance benchmarking.
 
@@ -10,7 +10,7 @@ All reported timings and throughputs are the best of 5 runs, averaged over 10 tr
 For assessing accuracy, we use several datasets widely used to benchmark Multi-Codebook Quantization (MCQ) algorithms:
 \begin{itemize}[leftmargin=4mm]
 % \item \textbf{Batman} \cite{batman} --- Also known as the Caped Crusader. Don't ask what compression means here, because I couldn't tell you.
-\item \textbf{UCR} \cite{ucrTimeSeries} --- We concatenated the first 100 examples from each of the \%d time series datasets in the UCR Time Series Archive \cite{ucrTimeSeries} to form \%d longer datasets. Before concatenating, we subtracted off the mean from each example and interpolated one sample between the end of each example and the start of the next to avoid sudden jumps. This processing makes the datasets in some sense synthetic, but the result is an easy-to-reproduce benchmark incorporating time series from dozens of domains. We report aggregate statistics across these datasets.
+\item \textbf{UCR} \cite{ucrTimeSeries} --- We concatenated the first 100 examples from each of the \%d time series datasets in the UCR Time Series Archive \cite{ucrTimeSeries} to form \%d longer datasets. Before concatenating, we subtracted off the mean from each example and interpolated one sample between its end and the start of the next example to avoid sudden jumps. This processing makes the datasets in some sense synthetic, but the result is an easy-to-reproduce benchmark incorporating time series from dozens of domains. We report aggregate statistics across these datasets.
 \item \textbf{PAMAP} \cite{PAMAP} --- just PAMAP, not PAMAP2
 \item \textbf{MSRC-12} \cite{msrc} --- Some description of this; maybe use this
 \item \textbf{WARD} \cite{ward} --- Berkeley Ward Dataset; maybe use this
@@ -86,7 +86,7 @@ Same kind of layout as speed plots. Probably have higher be better for consisten
 \subsection{Other Findings}
 % ------------------------------------------------
 
-We encountered a number of counter-intuitive findings regarding what does and does not improve compression ratio. In the interest of facilitating future research in this area, we describe several of them here.
+We encountered a number of counter-intuitive findings regarding what does and does not improve compression ratio. In the interest of facilitating future research in this area, we briefly describe several of them here.
 
 1) Ordering residuals by relative frequency. Absolute value correlates almost perfectly with relative frequency. % Since we'll plot it anyway, point out that residuals usually aren't Laplace distro; more like a power law (in constrast findings in \cite{shorten} for music). Or maybe make that its own bullet.
 
