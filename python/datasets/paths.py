@@ -11,12 +11,23 @@ def pathTo(subdir):
     return j(DATASETS_DIR, subdir)
 
 
+# straightforward datasets
 MSRC_12 = pathTo(j('MSRC-12', 'origData'))
-UCR = pathTo('ucr_data')
+UCR_OLD = pathTo('ucr_data')
+UCR = pathTo('UCR_TS_Archive_2015')
 UWAVE = pathTo(j('uWave', 'extracted'))
 PAMAP = pathTo('PAMAP_Dataset')
 PAMAP2 = pathTo('PAMAP2_Dataset')
 WARD = pathTo('WARD1.0')
+UCI_GAS = pathTo('uci-gas-sensor')
+
+# ampds2
+AMPD2_POWER = pathTo(j('ampds2', 'all_power.csv'))
+AMPD2_GAS = pathTo(j('ampds2', 'natural_gas'))
+AMPD2_WEATHER = pathTo(j('ampds2', 'climate_weather'))
+AMPD2_WATER = pathTo(j('ampds2', 'water'))
+
+# ampds
 DISHWASHER = pathTo(j('AMPds', 'dishwasher_nohead.csv'))
 DISHWASHER_SHORT = pathTo(j('AMPds', 'dishwasher_nohead_short.csv'))
 DISHWASHER_20K = pathTo(j('AMPds', 'dishwasher_nohead_20k.csv'))

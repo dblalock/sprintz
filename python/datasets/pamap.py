@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 
 import os
 import matplotlib.pyplot as plt
@@ -103,7 +104,8 @@ def buildRecording(filePath):
 # ================================================================
 # main
 
-if __name__ == '__main__':
+def main():
+
     ensure_dir_exists(SAVE_DIR_LINE_GRAPH)
     ensure_dir_exists(SAVE_DIR_IMG)
 
@@ -116,12 +118,22 @@ if __name__ == '__main__':
     # plt.savefig(SAVE_DIR_LINE_GRAPH + str(r))
 
     recs = getAllPamapRecordings()
-    for r in recs:
+    # for r in recs:
+    for i, r in enumerate(recs):
         print('plotting recording: ' + str(r))
         plt.figure(figsize=(WIDTH_LINE_GRAPH, HEIGHT_LINE_GRAPH))
         r.plot()
-        plt.savefig(join(SAVE_DIR_LINE_GRAPH, str(r)))
+        # plt.savefig(join(SAVE_DIR_LINE_GRAPH, str(r)))
+
         # plt.figure(figsize=(WIDTH_IMG, HEIGHT_IMG))
         # r.imshow(znorm=True)
         # plt.savefig(join(SAVE_DIR_IMG, str(r)))
-    # plt.show()
+
+        if i > 4:
+            break
+
+    plt.show()
+
+
+if __name__ == '__main__':
+    main()
