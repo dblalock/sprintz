@@ -11,7 +11,7 @@ For assessing accuracy, we use several datasets widely used to benchmark Multi-C
 \begin{itemize}[leftmargin=4mm]
 % \item \textbf{Batman} \cite{batman} --- Also known as the Caped Crusader. Don't ask what compression means here, because I couldn't tell you.
 \item \textbf{UCR} \cite{ucrTimeSeries} --- We concatenated the first 100 examples from each of the \%d time series datasets in the UCR Time Series Archive \cite{ucrTimeSeries} to form \%d longer datasets. Before concatenating, we subtracted off the mean from each example and interpolated one sample between its end and the start of the next example to avoid sudden jumps. This processing makes the datasets in some sense synthetic, but the result is an easy-to-reproduce benchmark incorporating time series from dozens of domains. We report aggregate statistics across these datasets.
-\item \textbf{PAMAP} \cite{PAMAP} --- just PAMAP, not PAMAP2
+\item \textbf{PAMAP} \cite{pamap} --- just PAMAP, not PAMAP2
 \item \textbf{MSRC-12} \cite{msrc} --- Some description of this; maybe use this
 \item \textbf{WARD} \cite{ward} --- Berkeley Ward Dataset; maybe use this
 \item \textbf{ECG} \cite{physiobank} --- Some big ECG dataset from physiobank.
@@ -33,12 +33,12 @@ For multivariate datasets, we concatenated the data from each variable to obtain
 % \item \textbf{Wishful Thinking} \cite{batman} --- We just really hope that the data gets compressed and assume that it will.
 % \item \textbf{Encouragement} \cite{barney} --- We foster a positive environment and allow the data to compress itself when it feels ready.
 \item \textbf{FLAC} \cite{flac} --- A modern lossless audio codec.
-\item \textbf{FastPFOR} \cite{fastPFOR} --- The fastest known method of compressing 32b integers.
-\item \textbf{Zstd} \cite{Zstd} --- A state-of-the-art general purpose compression algorithm featuring LZ77-like compression along with a recent entropy coder \cite{fbe} based on Abstract Numeral Systems \cite{ans}.
+\item \textbf{FastPFOR} \cite{fastpfor} --- The fastest known method of compressing 32b integers.
+\item \textbf{Zstd} \cite{zstd} --- A state-of-the-art general purpose compression algorithm featuring LZ77-like compression along with Huffman coding and a recent entropy coder \cite{fse} based on Abstract Numeral Systems \cite{ans}.
 \item \textbf{LZ4} \cite{lz4} --- A widely-used general-purpose compression algorithm optimized for speed and based on LZ77.
 \item \textbf{LZ4-HC} \cite{lz4} --- A variant of LZ4 optimized for compression ratio at the cost of compression speed.
 \item \textbf{GZIP} \cite{gzip} --- A widely used general-purpose compression algorithm.
-\item \textbf{BitShuf} \cite{blosc} --- Blosc-LZ with the BitShuffle preprocessor, which groups runs of 0 bits when consecutive values are similar and small.
+\item \textbf{BitShuf} \cite{bitshuf} --- LZ4 with the BitShuffle preprocessor, which groups runs of 0 bits when consecutive values are similar and small.
 % \item \textbf{Delta+BitShuf} \cite{gzip} --- Like BitShuf, but applied to the delta-encoded representation of the time series.
 % \item \textbf{Delta} --- Simple delta encoding followed by...erm...some kind of bit packing or something.
 % \item \textbf{DeltaDelta} --- Delta encoding the delta encoding, as done in some popular time series databases \cite{something, influxDB}.

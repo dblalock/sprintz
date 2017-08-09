@@ -1,11 +1,11 @@
 
 Time series data has long been central in machine learning, data mining, and scientific computing in general. Thanks to recent exponential growth in the number of connected, mobile, and wearable devices, it is gaining even more importance, with billions of sensors now streaming data about quantities ranging from acceleration to temperature to power consumption.
 
-In order to reduce transmission, power, and storage costs, it is highly desirable to compress this data. For certain types of time series, such as audio \cite{flac, ...} and timestamps \cite{someLemire}, excellent methods already exist. For other time series, this is not the case. One can apply generic compression algorithms, such as GZIP \cite{gzip}, ZSTD \cite{zstd}, LZ4 \cite{lz4}, etc, but as we show, these methods tend to perform poorly on time series. One can also apply integer compression algorithms, such as FastPFOR \cite{fastpfor}, but these suffer from the same drawback.
+In order to reduce transmission, power, and storage costs, it is highly desirable to compress this data. For certain types of time series, such as audio \cite{flac, shorten} and timestamps \cite{gorillaDB, fastpfor}, excellent methods already exist. For other time series, this is not the case. One can apply generic compression algorithms, such as GZIP \cite{gzip}, ZSTD \cite{zstd}, LZ4 \cite{lz4}, etc, but as we show, these methods tend to perform poorly on time series. One can also apply integer compression algorithms, such as FastPFOR \cite{fastpfor} and 4Gamma \cite{TODO}, but these suffer from the same drawback.
 
-Moreover, almost all existing methods assume computational resources that may be unavailable on low-power devices collecting and transmitting data. In particular, such devices may have less than 1KB of writable memory.
+Moreover, most existing methods assume computational resources that may be unavailable on low-power devices collecting and transmitting data. In particular, such devices may have less than 1KB of writable memory.
 
-The contribution of this work is the introduction of \mine (Sprintz PReserves INteger Time SerieZ), a lossless compression algorithm for time series that does not assume a particular application domain (e.g., music) and is suitable for execution on low-power hardware. As we show experimentally, \mine achieves higher compression ratios than any other method across a wide range of datasets while maintaining decompression speeds over \%d MB/s in a single thread.
+The contribution of this work is the introduction of \mine (Sprintz PReserves INteger Time SerieZ), a lossless compression algorithm for time series that does not assume a particular application domain (e.g., music) and is suitable for execution on low-power hardware. As we show experimentally, \mine achieves higher compression ratios than any other method across a wide range of datasets while maintaining decompression speeds over 1GB/s in a single thread.
 
 % ------------------------------------------------
 \subsection{Why lossless?}
@@ -31,11 +31,11 @@ Moreover, companies cannot necessarily anticipate what sort of degradation might
 \subsection{Limited hardware}
 % ------------------------------------------------
 
-Many connected devices are powered by batteries or harvested energy \cite{calhoun}. This results in strict power budgets and, in order to satisfy them, omission of certain functionality. In particular, many devices lack hardware support for floating point operations, SIMD (vector) instructions, and integer division. Moreover, they often have no more than a few KB of memory, clocks in the tens of MHz at most, and 8-, 16-, or 32-bit processors instead of 64-bit \cite{cc2540, intelWhatever}.
+Many connected devices are powered by batteries or harvested energy \cite{bsnChallenges}. This results in strict power budgets and, in order to satisfy them, omission of certain functionality. In particular, many devices lack hardware support for floating point operations, SIMD (vector) instructions, and integer division. Moreover, they often have no more than a few KB of memory, clocks in the tens of MHz at most, and 8-, 16-, or 32-bit processors instead of 64-bit \cite{cc2540, cc2640, quark}.
 
 We do not assume that the hardware decompressing the data is so limited. Instead, this hardware is likely a modern x86 server with SIMD instructions, gigabytes of RAM, and a multi-GHz clock.
 
-Given these differing capabilities, a natural question is whether the data must be compressed at the device instead of at the server. Unfortunately, delaying the compression would eliminate much of its benefit. The reason is that reducing the amount of data the device must send offers enormous power savings. To a first approximation, sending data over Bluetooth Low Energy (BLE) costs \%d mW while computing at full power costs \%d mW and sitting idle costs only \%d mW \cite{TODO}. Furthermore, compressing the data before the server reduces network load.
+Given these differing capabilities, a natural question is whether the data must be compressed at the device instead of at the server. Unfortunately, delaying the compression would eliminate much of its benefit. The reason is that reducing the amount of data the device must send offers enormous power savings. To a first approximation, sending data over Bluetooth Low Energy (BLE) costs tens of \textit{milliwatts} while computing at full power costs tens of \textit{microwatts} and sitting idle costs only 1 microwatt \cite{cc2540, cc2640}. Furthermore, compressing the data before the server reduces network load.
 
 % As a consequence of limited power budgets, there is a strong need to reduce the amount of data transmitted or stored. Indeed, this is the driving motivation for our work. To a first approximation, sending data over Bluetooth Low Energy costs \%d mW and writing to an SD card costs \%d mW; in contrast, computing at full power costs \%d mW and sitting idle costs only \%d mW. This implies that it is worth a great deal of computation to reduce the sizes of writes and transmits.
 
@@ -43,7 +43,7 @@ Given these differing capabilities, a natural question is whether the data must 
 \subsection{Nature of the data}
 % ------------------------------------------------
 
-Almost any time series reflecting a real-world signal will be digitized using an analog-to-digital converter (ADC). This means that the data will be represented as integers of at most 24 bits \cite{digikeySearch}, and typically 16 or fewer. For example, even lossless audio codecs store only 16 bits \cite{someAudioCodecs, TODO}. Furthermore, there is empirical evidence that most time series can be quantized to 8 or fewer bits with little or no loss of information (as measured by misclassification rate) \cite{ucrWhateverItWas}. Consequently, we focus on compressing 8b and 16b integer time series. % every ADC currently available through DigiKey, for example, supports 24 or fewer bits as of this writing \cite{digikeyADC}; even high-quality audio is only 16 bits \cite{someAudioCodec}.
+Almost any time series reflecting a real-world signal will be digitized using an analog-to-digital converter (ADC). This means that the data will be represented as integers of at most 32 bits \cite{digikeyADCs}, and typically 16 or fewer. For example, even lossless audio codecs store only 16 bits \cite{flac, shorten}. Furthermore, there is empirical evidence that most time series can be quantized to 6 or fewer bits with little or no loss of information (as measured by misclassification rate) \cite{epenthesis}. Consequently, we focus on compressing 8b and 16b integer time series. % every ADC currently available through DigiKey, for example, supports 24 or fewer bits as of this writing \cite{digikeyADC}; even high-quality audio is only 16 bits \cite{someAudioCodec}.
 
 Our method could also be applied to floating point time series insofar as they could be quantized to integers, but we do not evaluate this experimentally since it depends on the quantization method.
 
@@ -55,7 +55,7 @@ Finally, we assume that the time series to be compressed are univariate--i.e., t
 \item It results in read amplification if only one variable is of interest.
 \item It tends not to increase compression very much.
 \item It complicates the algorithm, since inter-variable correlations can switch unpredictably between being positive and negative.
-\item It makes apples-to-apples comparison to existing work more difficult.
+\item It makes direct comparison to existing work more difficult.
 \end{enumerate}
 
 % ------------------------------------------------
