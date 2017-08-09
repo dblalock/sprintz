@@ -13,8 +13,8 @@ def nbits_cost(diffs, signed=True):
     array([], dtype=int32)
     >>> nbits_cost([0, 2, 1, 0])
     array([0, 3, 2, 0], dtype=int32)
-    >>> nbits_cost([0, 2, 1, 0], signed=False)
-    array([0, 2, 1, 0], dtype=int32)
+    >>> nbits_cost([0, 2, 1, 3, 4, 0], signed=False)
+    array([0, 2, 1, 2, 3, 0], dtype=int32)
     """
     if diffs is None:
         return None
@@ -23,6 +23,14 @@ def nbits_cost(diffs, signed=True):
     if diffs.size == 0:
         return np.array([], dtype=np.int32)
 
+    if not signed:
+        assert np.all(diffs >= 0)
+        pos_idxs = diffs > 0
+        nbits = np.zeros(diffs.shape, dtype=np.int32)
+        nbits[pos_idxs] = np.floor(np.log2(diffs[pos_idxs])) + 1
+        nbits[~pos_idxs] = 0
+        return nbits
+
     shape = diffs.shape
     diffs = diffs.ravel()
     equiv_diffs = np.abs(diffs) + (diffs >= 0).astype(np.int32)  # +1 if < 0
@@ -30,8 +38,7 @@ def nbits_cost(diffs, signed=True):
     nbits = np.asarray(nbits, dtype=np.int32)  # next line can't handle scalar
     nbits[diffs == 0] = 0
 
-    ret = nbits.reshape(shape) if nbits.size > 1 else nbits[0]  # unpack if scalar
-    return ret if signed else np.maximum(0, ret - 1)
+    return nbits.reshape(shape) if nbits.size > 1 else nbits[0]  # unpack if scalar
 
 
 if __name__ == '__main__':

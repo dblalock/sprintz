@@ -229,12 +229,262 @@ def sort_transform(blocks, nbits, prefix_nbits=-1,
     return out.reshape(blocks.shape)
 
 
+def zigzag_encode(x):
+    """
+    >>> [zigzag_encode(i) for i in [0,1,-1,2,-2,3,-3]]
+    [0, 1, 2, 3, 4, 5, 6]
+    """
+    x = np.asarray(x)
+    return (np.abs(x) << 1) - (x > 0).astype(np.int32)
+
+
+POWER_LAW_CODES_2 = np.array([
+    '0',
+    '1',
+    ])
+POWER_LAW_CODELENGTHS_2 = np.array([1, 1], dtype=np.int32)
+
+POWER_LAW_CODES_4 = np.array([
+    '0',
+    '10',
+    '110',
+    '111'
+    ])
+POWER_LAW_CODELENGTHS_4 = np.array([len(s) for s in POWER_LAW_CODES_4],
+                                   dtype=np.int32)
+
+POWER_LAW_CODES_8 = np.array([
+    '0',
+    '10',
+    '1100',
+    '1101',
+    '11100',
+    '11101',
+    '11110',
+    '11111'
+    ])
+POWER_LAW_CODELENGTHS_8 = np.array([len(s) for s in POWER_LAW_CODES_8],
+                                   dtype=np.int32)
+
+POWER_LAW_CODES_16 = np.array([
+    '0   ',
+    '100 ',
+    '1010',
+    '1011',
+    '11000',
+    '11001',
+    '11010',
+    '11011',
+    '111000',
+    '111001',
+    '111010',
+    '111011',
+    '111100',
+    '111101',
+    '111110',
+    '111111'
+    ])
+POWER_LAW_CODELENGTHS_16 = np.array([len(s) for s in POWER_LAW_CODES_16],
+                                    dtype=np.int32)
+
+ALL_POWER_LAW_CODES = [POWER_LAW_CODES_2, POWER_LAW_CODES_4,
+                       POWER_LAW_CODES_8, POWER_LAW_CODES_16]
+ALL_POWER_LAW_CODELENGTHS = [POWER_LAW_CODELENGTHS_2, POWER_LAW_CODELENGTHS_4,
+                             POWER_LAW_CODELENGTHS_8, POWER_LAW_CODELENGTHS_16]
+
+ENCODING_RICE = 'rice'
+ENCODING_POWER_LAW = 'pwr'
+ENCODING_UNIF = 'unif'
+
+
+def _mixfix_pick_encoding(block, bits, b_suffix_min, b_suffix_max):
+    # min_val, max_val = np.min(block), np.max(block)
+    # print "block: ", block
+
+    min_nbits, max_nbits = np.min(bits), np.max(bits)
+    block = block.astype(np.int32)
+    block_sz = len(block)
+    block_sz_log2 = int(np.log2(block_sz))
+    assert 1 << block_sz_log2 == block_sz  # assert block size is power of 2
+
+    # print "block: ", block
+    # print "min nbits, max nbits, (gap):\t{}, {}, ({})".format(
+    #     min_nbits, max_nbits, max_nbits - min_nbits)
+
+    if min_nbits == max_nbits:
+        # if max_nbits == 0:
+            # cost = block_sz
+            # b_suffix = 0
+            # return ENCODING_RICE, cost, b_suffix, None, None
+        # else:
+        cost = block_sz * max_nbits
+        b_suffix = max(0, min_nbits - 1)
+        return ENCODING_POWER_LAW, cost, b_suffix, POWER_LAW_CODES_2, POWER_LAW_CODELENGTHS_2
+
+    # number of bits for suffixes, which are fixed-size;
+    rice_min_nbits = max_nbits - 2
+    pwr_min_nbits = max_nbits - 4
+
+    # handle case of min and max being equal
+    # b_suffix_rice = min(b_suffix_rice, min_nbits - 1)
+    # b_suffix_pwr = min(b_suffix_pwr, min_nbits - 1)
+
+    rice_possible = rice_min_nbits <= b_suffix_max
+    power_possible = pwr_min_nbits <= b_suffix_max
+    # power_possible = False # TODO rm
+    # rice_possible = False # TODO rm
+    if not (rice_possible or power_possible):
+        return ENCODING_UNIF, block_sz * max_nbits, max_nbits, None, None
+        # raise ValueError(
+            # "Block requires b_suffix of at least '{}', but max is {}".format(
+                # b_suffix_pwr, b_suffix_max))
+
+    # clip suffix length based on min nbits in block
+    b_suffix_rice = max(min_nbits, rice_min_nbits)
+    b_suffix_pwr = max(min_nbits, pwr_min_nbits)
+
+    # clip suffix length based on constraints; note that making it larger
+    # than optimal is always okay
+    b_suffix_rice = max(b_suffix_min, b_suffix_rice)
+    b_suffix_pwr = max(b_suffix_min, b_suffix_pwr)
+
+    # cost of rice coding
+    prefix_vals = block >> b_suffix_rice  # vals in {0, 1, ..., 7}
+    # print "block: ", block
+    # print "b_suffix_rice: ", b_suffix_rice
+    # print "prefix_vals: ", prefix_vals
+    assert 0 <= np.max(prefix_vals) <= 7
+    cost_rice = int(np.sum(prefix_vals)) + block_sz  # costs of {1,...,8}
+
+    # TODO rm
+    return ENCODING_RICE, cost_rice, b_suffix_rice, None, None
+
+    # cost of encoding with power law codes above
+    gap = max_nbits - b_suffix_pwr
+    idx = gap - 1
+    codebook = ALL_POWER_LAW_CODES[idx]
+    codelengths = ALL_POWER_LAW_CODELENGTHS[idx]
+    cost_power = np.sum(codelengths[bits - b_suffix_pwr])
+    cost_power -= b_suffix_pwr << block_sz_log2  # sub b_suffix_pwr for each val
+
+    if cost_rice < cost_power:
+        return ENCODING_RICE, cost_rice, b_suffix_rice, None, None
+    else:
+        return ENCODING_POWER_LAW, cost_power, b_suffix_pwr, codebook, codelengths
+
+
+def _to_unary(x):
+    """
+    >>> [_to_unary(i) for i in [0, 1, 2, 3, 4]]
+    [0, 2, 6, 14, 30]
+    """
+    return np.maximum(0, (1 << (x + 1)) - 2)
+
+
+def _mixfix_encode(block, encoding_name, b_suffix, codebook, codelengths):
+
+    heads = block >> b_suffix
+    mask = (1 << b_suffix) - 1
+    suffixes = np.bitwise_and(block, mask)
+
+    if encoding_name == ENCODING_RICE:
+        prefixes = _to_unary(heads)
+        prefix_lengths = (1 << heads)
+        codes = (prefixes << b_suffix) + suffixes
+    elif encoding_name == ENCODING_POWER_LAW:
+        prefixes = codebook[heads]
+        prefix_lengths = codelengths[heads]
+        codes = None  # avoid str to int conversion cuz just prototyping
+    elif encoding_name == ENCODING_UNIF:
+        return block, b_suffix
+    else:
+        raise ValueError("Unrecognized encoding '{}'".format(encoding_name))
+
+    bitlengths = prefix_lengths + b_suffix
+    return codes, bitlengths
+
+
+class MixFixEncoder(object):
+    __slots__ = 'nbits b_suffix max_suffix_delta nbits_mins' \
+        ' nbits_maxes gaps'.split(' ')
+
+    def __init__(self, nbits, suffix_delta_nbits=3):
+        self.nbits = nbits
+        self.b_suffix = nbits - 3
+        self.max_suffix_delta = (1 << (suffix_delta_nbits - 1)) - 1
+        self.nbits_mins = []
+        self.nbits_maxes = []
+        self.gaps = []
+
+    def feed_block(self, block):
+        # print "feed_block block: ", block
+        block = zigzag_encode(block)
+        # print "feed_block block: ", block
+        bits = nbits_cost(block, signed=False)
+
+        min_nbits, max_nbits = np.min(bits), np.max(bits)
+        self.nbits_mins.append(min_nbits)
+        self.nbits_maxes.append(max_nbits)
+        self.gaps.append(max_nbits - min_nbits)
+
+        # return block, bits # TODO rm after debug
+
+        min_b_suffix = self.b_suffix - self.max_suffix_delta
+        max_b_suffix = self.b_suffix + self.max_suffix_delta
+
+        encoding_name, encoding_cost, b_suffix, codebook, codelens = \
+            _mixfix_pick_encoding(block, bits, min_b_suffix, max_b_suffix)
+
+        # b_diff = ideal_b_suffix - self.b_suffix
+        # b_diff = np.clip(b_diff, -self.max_suffix_delta, self.max_suffix_delta)
+        # self.b_suffix += b_diff
+
+        # print "encoding, cost (b), b_suffix (b):\t{}, {}, {}".format(
+        #     encoding_name, encoding_cost, b_suffix)
+
+        self.b_suffix = b_suffix
+        return _mixfix_encode(block, encoding_name, b_suffix, codebook, codelens)
+
+
+def mixfix_encode(blocks, nbits):
+    encoder = MixFixEncoder(nbits)
+    out = np.empty(blocks.shape, dtype=blocks.dtype)
+    for i, block in enumerate(blocks):
+        out[i], _ = encoder.feed_block(block)
+    return out
+
+
+def mixfix_cost(blocks, nbits):
+    encoder = MixFixEncoder(nbits)
+    out = np.empty(blocks.shape, dtype=blocks.dtype)
+    for i, block in enumerate(blocks):
+        _, out[i] = encoder.feed_block(block)
+
+    # # TODO rm
+    # import matplotlib.pyplot as plt
+    # fig, axes = plt.subplots(3)
+    # encoder.gaps[0] = 0  # keep x axis from getting messed up
+    # bins = np.arange(np.max(encoder.gaps) + 1)
+    # axes[0].set_title('Min nbits in blocks')
+    # axes[0].hist(encoder.nbits_mins, normed=True, bins=bins)
+    # axes[1].set_title('Max nbits in blocks')
+    # axes[1].hist(encoder.nbits_maxes, normed=True, bins=bins, color='brown')
+    # axes[2].set_title('nbits gaps in blocks')
+    # axes[2].hist(encoder.gaps, normed=True, bins=bins, color='green')
+    # fig.tight_layout()
+
+    return out
+
+
 if __name__ == '__main__':
-    x = [3, -4, 0, 1, -2]
-    sort_transform(x, nbits=4)
+    import doctest
+    doctest.testmod()
 
     x = [3, -4, 0, 1, -2]
     sort_transform(x, nbits=4)
 
-    # import doctest
-    # doctest.testmod()
+    x = [3, -4, 0, 1, -2]
+    sort_transform(x, nbits=4)
+
+    x = np.array([0, -1, 1, -2, 2]).reshape((1, -1))
+    mixfix_encode(x, nbits=4)

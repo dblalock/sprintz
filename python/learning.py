@@ -2,8 +2,44 @@
 
 import itertools
 import numpy as np
+import kmc2  # state-of-the-art kmeans initialization (as of NIPS 2016)
+from sklearn import cluster
 from .utils import sliding_window as window
 
+
+# ================================================================ kmeans
+
+def kmeans(X, k, max_iter=16, init='kmc2'):
+    X = X.astype(np.float32)
+    np.random.seed(123)
+
+    # if k is huge, initialize centers with cartesian product of centroids
+    # in two subspaces
+    if init == 'subspaces':
+        sqrt_k = int(np.sqrt(k) + .5)
+        if sqrt_k ** 2 != k:
+            raise ValueError("K must be a square number if init='subspaces'")
+
+        _, D = X.shape
+        centroids0, _ = kmeans(X[:, :D/2], sqrt_k, max_iter=2)
+        centroids1, _ = kmeans(X[:, D/2:], sqrt_k, max_iter=2)
+        seeds = np.empty((k, D), dtype=np.float32)
+        for i in range(sqrt_k):
+            for j in range(sqrt_k):
+                row = i * sqrt_k + j
+                seeds[row, :D/2] = centroids0[i]
+                seeds[row, D/2:] = centroids1[j]
+
+    elif init == 'kmc2':
+        seeds = kmc2.kmc2(X, k).astype(np.float32)
+    else:
+        raise ValueError("init parameter must be one of {'kmc2', 'subspaces'}")
+
+    estimator = cluster.MiniBatchKMeans(k, init=seeds, max_iter=max_iter).fit(X)
+    return estimator.cluster_centers_, estimator.labels_
+
+
+# ================================================================ misc
 
 def least_squares(A, y):
     """Returns x, err such that err = ||Ax - y||^2 is minimized"""
@@ -11,6 +47,8 @@ def least_squares(A, y):
     x_ideal, residual, _, _ = np.linalg.lstsq(A, y.ravel())
     return x_ideal
 
+
+# ================================================================
 
 def learn_filters(x, ntaps=4, nfilters=16, niters=8, quantize=False,
                   init='brute', verbose=1):
@@ -171,6 +209,17 @@ def compute_loss(errs, loss='l2', axis=-1):
         raise ValueError("Unrecognized loss function '{}'".format(loss))
 
 
+
+
+# def learn_kmeans(x, k=16, ntaps=4, loss='l2', verbose=1):
+#     pass
+#
+#     SELF: pick up here
+#
+
+
+
+
 def greedy_brute_filters(x, nfilters=16, ntaps=4, nbits=4, step_sz=.5,
                          block_sz=-1, loss='l2', verbose=1):
     """
@@ -182,7 +231,7 @@ def greedy_brute_filters(x, nfilters=16, ntaps=4, nbits=4, step_sz=.5,
         nbits (int, optional): bit depth of the filters
         step_sz (float, optional): difference between two values for a given
             tap (ie, how the integer bit representation translates to floats)
-        blocks_sz (int, optional): number of successive values to train
+        block_sz (int, optional): number of successive values to train
             each filter to predict. Block size of 1 (the default) corresponds
             to learning filters that predict the next value
         loss (string): see `compute_loss()`

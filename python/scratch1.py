@@ -15,7 +15,7 @@ from .utils import sliding_window as window
 from . import compress
 from . import learning
 
-from .scratch2 import sort_transform
+from .scratch2 import sort_transform, mixfix_encode, mixfix_cost, zigzag_encode
 
 
 SAVE_DIR = 'figs/ucr/'
@@ -257,6 +257,105 @@ def learn_dict_seq(tsList, max_len=2048):
     # plt.plot(seq_smooth)
     plt.show()
 
+    # plot best fit power law
+    # EDIT: moral of this story is that it's not really a power law either;
+    # if you take log of x, it's more like a gaussian around 0
+    def fit_power_law(xvals, yvals):
+        logx = np.log(xvals)
+        logy = np.log(yvals)
+
+        ignore_idxs = np.isinf(logx)  # shouldn't happen, but why not
+        ignore_idxs += np.isinf(logy)  # happens for 0 counts
+        keep_idxs = ~ignore_idxs
+        logx, logy = logx[keep_idxs], logy[keep_idxs]
+
+        # print "nans in logx: ", np.where(np.isnan(logx))[0]
+        # print "nans in logy: ", np.where(np.isnan(logy))[0]
+        # print "infs in logx: ", np.where(np.isinf(logx))[0]
+        # print "infs in logy: ", np.where(np.isinf(logy))[0]
+
+        # from scipy import optimize
+        # fitfunc = lambda p, x: p[0] + p[1] * x  # noqa
+        # errfunc = lambda p, x, y: y - fitfunc(p, x)  # noqa
+        # p_init = [1.0, -1.0]
+        # p, _ = optimize.leastsq(errfunc, p_init, args=(logx, logy))
+
+        # from scipy import polyfit, polyval
+        from scipy.stats import linregress
+        slope, intercept, corr_r, _, _ = linregress(logx, logy)
+        print "power law slope, intercept, corr = {}, {}, {}".format(
+            slope, intercept, corr_r)
+
+        # yhat = np.exp(-intercept + slope * np.log(xvals))
+        yhat = np.exp(intercept + slope * np.log(xvals))
+        # log_yhat = p[0] + p[1] * logx
+        # yhat = np.exp(log_yhat)
+
+        # plt.figure()
+        # # plt.plot(xvals, yvals)
+        # # plt.plot(xvals, yhat)
+        # plt.plot(logx, logy)
+        # plt.plot(np.log(xvals), np.log(yhat))
+        # plt.show()
+
+        return yhat
+
+    # # print "min clipped resid, clip_min: ", np.min(clipped_resids), clip_min
+    # counts = np.bincount(clipped_resids - clip_min)[1:-1]  # final bins have whole tails
+    # # x_neg = np.arange(clip_min + 1, 1)  # duh; no log of negative stuff
+    # # yhat_neg = fit_power_law(x_neg, counts[:len(x_neg)])
+    # # axes[-4].plot(x_neg, yhat_neg)
+    # x_pos = np.arange(0, clip_max)
+    # yhat_pos = fit_power_law(x_pos, counts[-len(x_pos):])
+    # # axes[-4].plot(x_pos, np.log(yhat_pos))
+    # axes[-4].plot(x_pos, yhat_pos)
+
+    def cauchy_pdf(x, g, x_mean=0):
+        dist = (x - x_mean) / g
+        denom = np.pi * g * (1. + dist*dist)
+        return 1. / denom
+
+    def log_cauchy_pdf(x, g, x_mean=0):
+        dist = (x - x_mean) / g
+        return -np.log(np.pi * g) - np.log(1 + dist*dist)
+
+    def fit_cauchy(xvals, yvals, x_mean=0):
+        # from scipy import optimize
+        # # see https://en.wikipedia.org/wiki/Cauchy_distribution
+        # fitfunc = lambda g, x: cauchy_pdf(x, g, x_mean=x_mean) # noqa
+        # errfunc = lambda g, x, y: y - fitfunc(g, x)  # noqa
+        # gamma = np.std(yvals)
+        # # gamma, _ = optimize.leastsq(errfunc, gamma, args=(xvals, yvals))
+
+        # yhat = cauchy_pdf(xvals, gamma, x_mean=x_mean)
+        # return yhat
+
+        from scipy import stats
+        loc, scale = stats.cauchy.fit(yvals)
+        # loc, scale = stats.cauchy.fit(np.log(yvals))
+
+        # print "model: ", model
+        # import sys; sys.exit()
+        loc = 0  # hardcode mean of 0
+        yhat = stats.cauchy.pdf(xvals, loc=loc, scale=scale)
+        return yhat
+
+    def fit_lomax(xvals, yvals):
+        # double_abs_vals = 2 * np.abs(yvals)  # since would be zigzag encoded
+        double_abs_vals = np.abs(yvals)  # since would be zigzag encoded
+        lamda0 = np.mean(double_abs_vals)
+        # alpha0 = 1
+        alpha0 = lamda0 * lamda0  # set mean of gamma to true lamda
+        alpha = alpha0 + len(yvals)
+        lamda = lamda0 + np.sum(double_abs_vals)
+
+        def lomax_pdf(x, alpha, lamda):
+            return alpha / lamda * np.power(1. + (x / lamda), -(alpha + 1))
+
+        # mul by 2 cuz
+        yhat = lomax_pdf(2 * np.abs(xvals), alpha, lamda)
+        return yhat
+
 
 DEFAULT_MAX_NN_IDX = (1 << 11) - 1
 
@@ -272,7 +371,7 @@ def block_nbits_costs(blocks, signed=True):
 # def nn_encode(diffs, num_neighbors, nn_step=4, nn_hash=None):
 def nn_encode(blocks, num_neighbors=256, nn_step=1, nn_hash=None,
               scale_factors=None, try_invert=True, nn_loss='l2',
-              mean_normalize=True, nn_nblocks=1, predict_next=False):
+              mean_normalize=False, nn_nblocks=1, predict_next=False):
 
     orig_shape = blocks.shape
     if nn_nblocks > 1:
@@ -293,12 +392,13 @@ def nn_encode(blocks, num_neighbors=256, nn_step=1, nn_hash=None,
 
         # N = len(diff_windows)
         N, M = blocks.shape
-        zero_samples = np.zeros(M, dtype=np.int32)
+        # zero_samples = np.zeros(M, dtype=np.int32)
 
+        end = N - 1 if predict_next else N
+        nn_idxs = np.zeros(end - 1, dtype=np.int)
         times_nonzero = 0
         saved_bits = 0
         saved_bits_sq = 0
-        end = N - 1 if predict_next else N
         for n in range(1, end):
             # start_idx = int(max(0, n - (nn_step / 8.) * num_neighbors))
             # end_idx = n
@@ -332,10 +432,6 @@ def nn_encode(blocks, num_neighbors=256, nn_step=1, nn_hash=None,
             #     all_neighbors = [zero_samples] + all_neighbors
             neighbors = np.vstack(all_neighbors)
 
-            # if predict_next:
-                # query = blocks[n]
-            # else:
-                # query = blocks[]
             query = np.copy(blocks[n])
             query_mean = 0
             if mean_normalize:
@@ -349,10 +445,15 @@ def nn_encode(blocks, num_neighbors=256, nn_step=1, nn_hash=None,
             costs = learning.compute_loss(errs, loss=nn_loss)
             nn_idx = np.argmin(costs)
 
-            neighbor = neighbors[nn_idx]
+            scale_neighbor_by = 1
+            # scale_neighbor_by = .5  # TODO make param
+
+            if nn_idx == len(neighbors) - 1:
+                continue  # hack to avoid edge case in next line
+            neighbor = neighbors[nn_idx + 1] if predict_next else neighbors[nn_idx]
             target = blocks[n + 1] if predict_next else blocks[n]
             target_mean = np.mean(target) if mean_normalize else 0
-            resids = target - (neighbor + target_mean)
+            resids = target - (neighbor * scale_neighbor_by + target_mean)
 
             orig_cost = learning.compute_loss(target, loss=nn_loss)
             nn_cost = learning.compute_loss(resids, loss=nn_loss)
@@ -360,8 +461,10 @@ def nn_encode(blocks, num_neighbors=256, nn_step=1, nn_hash=None,
             if nn_cost < orig_cost:
                 times_nonzero += 1
                 write_block = resids
+                nn_idxs[n-1] = nn_idx
             else:
                 write_block = target
+                nn_idxs[n-1] = 0
 
             # if nn_loss == 'linf':
                 # if predict_next:
@@ -379,13 +482,7 @@ def nn_encode(blocks, num_neighbors=256, nn_step=1, nn_hash=None,
             saved_bits += bitsave
             saved_bits_sq += bitsave*bitsave
 
-            # elif nn_loss == 'l2':
-            #     nn_cost = costs[nn_idx]
-            #     zeros_cost = np.var(query)
-            #     # if zeros_cost < nn_
-
             write_idx = n + 1 if predict_next else n
-            # offsetBlocks[write_idx] -= neighbors[nn_idx] + query_mean
             offsetBlocks[write_idx] = write_block
 
             # times_nonzero += int(nn_idx > 0)
@@ -397,6 +494,8 @@ def nn_encode(blocks, num_neighbors=256, nn_step=1, nn_hash=None,
         print "nn nonzero {}/{} ({:.1f}%) and saved {:.2f} +/-{:.2f} bits" \
             .format(times_nonzero, N, 100 * times_nonzero / N_f,
                     expected_bitsave, std_bitsave)
+
+        print "mean, std of nn idxs: ", np.mean(nn_idxs), np.std(nn_idxs)
 
         return offsetBlocks.reshape(orig_shape)
 
@@ -634,8 +733,8 @@ def dyn_filt(blocks, filters=None, **learn_kwargs):
         return ret.reshape(blocks.shape)
 
     blocks_list = [encode_fir(blocks, filt) for filt in filters[:, ::-1]]
-    # return take_best_of_each(blocks_list, loss='l2').astype(np.int32)
-    return take_best_of_each(blocks_list, loss='linf').astype(np.int32)
+    return take_best_of_each(blocks_list, loss='l2').astype(np.int32)
+    # return take_best_of_each(blocks_list, loss='linf').astype(np.int32)
 
     # blocks, counts = take_best_of_each(
     #     blocks_list, loss='l2', return_counts=True)
@@ -739,26 +838,28 @@ def apply_transforms(X, diffs, blocks, transform_names, k=-1, **nn_kwargs):
 
     # "examples" stitched together from blocks with vals subbed off
     # if diffs_offset is None:
-    use_shape = diffs.shape[0] - 1, diffs.shape[1]
+    use_shape = diffs.shape[0] - 1, diffs.shape[1] - 1
     use_size = use_shape[0] * use_shape[1]
     diffs_offset = offsetBlocks.ravel()[:use_size].reshape(use_shape)
 
-    all_costs = compress.nbits_cost(offsetBlocks.ravel()).astype(np.float32)
-    all_costs -= np.mean(all_costs)
-    norm = np.mean(all_costs * all_costs)
-    corrs = np.empty(15)
-    for i in range(1, len(corrs) + 1):
-        corrs[i-1] = np.mean(all_costs[i:] * all_costs[:-i]) / norm
+    # # show autocorrelatations in bit costs
+    # all_costs = compress.nbits_cost(offsetBlocks.ravel()).astype(np.float32)
+    # all_costs -= np.mean(all_costs)
+    # norm = np.mean(all_costs * all_costs)
+    # corrs = np.empty(15)
+    # for i in range(1, len(corrs) + 1):
+    #     corrs[i-1] = np.mean(all_costs[i:] * all_costs[:-i]) / norm
+    # print "nbits autocorrelations: ", corrs
 
-    print "autocorrelations: ", corrs
-
-    return offsetBlocks, diffs_offset
+    return offsetBlocks.astype(np.int32), diffs_offset.astype(np.int32)
 
 
 def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
               prefix_nbits=None, k=-1, **transform_kwargs):
 
     plot_sort = False  # plot distros of idxs into vals sorted by rel freq
+    plot_mixfix = True  # plot distros of codes after mixfix encoding
+    plot_sub_minbits = True  # plot distros of vals above min nbits value
 
     # force transforms to be collections
     if right_transforms is None or isinstance(right_transforms, str):
@@ -766,7 +867,7 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     if left_transforms is None or isinstance(left_transforms, str):
         left_transforms = (left_transforms,)
 
-    _, axes = plt.subplots(4, 2, figsize=(10, 8))
+    fig, axes = plt.subplots(4, 2, figsize=(10, 8))
     axes = np.concatenate([axes[:, 0], axes[:, 1]])
 
     # ------------------------ data munging
@@ -882,6 +983,24 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
         sb.distplot(clipped_positions, ax=axes[-4], kde=False, bins=nbins, hist_kws={
             'normed': True, 'range': [0, clip_max], 'color': 'g'})
 
+    # TODO uncomment
+    # if plot_mixfix:
+    #     codes = mixfix_encode(diffs_right, nbits=numbits)
+    #     clipped_codes = np.minimum(codes, clip_max).ravel()
+    #     sb.distplot(clipped_codes, ax=axes[-4], kde=False, bins=nbins, hist_kws={
+    #         'normed': True, 'range': [0, clip_max], 'color': 'g'})
+
+    if plot_sub_minbits:
+        use_blocks = zigzag_encode(offsetBlocksRight)
+        sub_minbits_block_costs = compress.nbits_cost(use_blocks)
+        sub_minbits_min_costs = np.min(sub_minbits_block_costs, axis=1, keepdims=True)
+        offset_vals = use_blocks - (1 << sub_minbits_min_costs)
+        offset_vals /= 2  # wrong, but allows apples-to-apples viz comparison
+        clipped_vals = np.clip(offset_vals, 0, clip_max).astype(np.int32).ravel()
+        sb.distplot(clipped_vals, ax=axes[-4], kde=False, bins=nbins,
+                    hist_kws={'normed': True, 'range': [0, clip_max],
+                              'color': 'grey'})
+
     # plot best fit laplace distro
     rate = 1. / np.mean(np.abs(diffs_right))
     xvals = np.arange(clip_min, clip_max + 1)
@@ -889,96 +1008,28 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     axes[-4].plot(xvals, yvals, 'k--', lw=1)
     # axes[-4].plot(xvals, np.log(yvals), 'k--') # TODO rm
 
-    # plot best fit power law
-    # EDIT: moral of this story is that it's not really a power law either;
-    # if you take log of x, it's more like a gaussian around 0
-    def fit_power_law(xvals, yvals):
-        logx = np.log(xvals)
-        logy = np.log(yvals)
-
-        ignore_idxs = np.isinf(logx)  # shouldn't happen, but why not
-        ignore_idxs += np.isinf(logy)  # happens for 0 counts
-        keep_idxs = ~ignore_idxs
-        logx, logy = logx[keep_idxs], logy[keep_idxs]
-
-        # print "nans in logx: ", np.where(np.isnan(logx))[0]
-        # print "nans in logy: ", np.where(np.isnan(logy))[0]
-        # print "infs in logx: ", np.where(np.isinf(logx))[0]
-        # print "infs in logy: ", np.where(np.isinf(logy))[0]
-
-        # from scipy import optimize
-        # fitfunc = lambda p, x: p[0] + p[1] * x  # noqa
-        # errfunc = lambda p, x, y: y - fitfunc(p, x)  # noqa
-        # p_init = [1.0, -1.0]
-        # p, _ = optimize.leastsq(errfunc, p_init, args=(logx, logy))
-
-        # from scipy import polyfit, polyval
-        from scipy.stats import linregress
-        slope, intercept, corr_r, _, _ = linregress(logx, logy)
-        print "power law slope, intercept, corr = {}, {}, {}".format(
-            slope, intercept, corr_r)
-
-        # yhat = np.exp(-intercept + slope * np.log(xvals))
-        yhat = np.exp(intercept + slope * np.log(xvals))
-        # log_yhat = p[0] + p[1] * logx
-        # yhat = np.exp(log_yhat)
-
-        # plt.figure()
-        # # plt.plot(xvals, yvals)
-        # # plt.plot(xvals, yhat)
-        # plt.plot(logx, logy)
-        # plt.plot(np.log(xvals), np.log(yhat))
-        # plt.show()
-
-        return yhat
-
-    # # print "min clipped resid, clip_min: ", np.min(clipped_resids), clip_min
+    # xvals = np.arange(clip_min + 1, clip_max)
     # counts = np.bincount(clipped_resids - clip_min)[1:-1]  # final bins have whole tails
-    # # x_neg = np.arange(clip_min + 1, 1)  # duh; no log of negative stuff
-    # # yhat_neg = fit_power_law(x_neg, counts[:len(x_neg)])
-    # # axes[-4].plot(x_neg, yhat_neg)
-    # x_pos = np.arange(0, clip_max)
-    # yhat_pos = fit_power_law(x_pos, counts[-len(x_pos):])
-    # # axes[-4].plot(x_pos, np.log(yhat_pos))
-    # axes[-4].plot(x_pos, yhat_pos)
-
-    def cauchy_pdf(x, g, x_mean=0):
-        dist = (x - x_mean) / g
-        denom = np.pi * g * (1. + dist*dist)
-        return 1. / denom
-
-    def log_cauchy_pdf(x, g, x_mean=0):
-        dist = (x - x_mean) / g
-        return -np.log(np.pi * g) - np.log(1 + dist*dist)
-
-    def fit_cauchy(xvals, yvals, x_mean=0):
-        # from scipy import optimize
-        # # see https://en.wikipedia.org/wiki/Cauchy_distribution
-        # fitfunc = lambda g, x: cauchy_pdf(x, g, x_mean=x_mean) # noqa
-        # errfunc = lambda g, x, y: y - fitfunc(g, x)  # noqa
-        # gamma = np.std(yvals)
-        # # gamma, _ = optimize.leastsq(errfunc, gamma, args=(xvals, yvals))
-
-        # yhat = cauchy_pdf(xvals, gamma, x_mean=x_mean)
-        # return yhat
-
-        from scipy import stats
-        loc, scale = stats.cauchy.fit(yvals)
-        # loc, scale = stats.cauchy.fit(np.log(yvals))
-
-        # print "model: ", model
-        # import sys; sys.exit()
-        loc = 0  # hardcode mean of 0
-        yhat = stats.cauchy.pdf(xvals, loc=loc, scale=scale)
-        return yhat
-
-    counts = np.bincount(clipped_resids - clip_min)[1:-1]  # final bins have whole tails
-    xvals = np.arange(clip_min + 1, clip_max)
-    yhat = fit_cauchy(xvals, counts)
-    axes[-4].plot(xvals, yhat, 'c--', lw=1.5)
+    # yvals_exp = yvals
+    # # fit cauchy
+    # yhat_cauchy = fit_cauchy(xvals, counts)
+    # axes[-4].plot(xvals, yhat_cauchy, 'c--', lw=1.5)
     # axes[-4].plot(xvals, np.exp(yhat), 'c--', lw=1.5)
 
+    # # fit lomax
+    # yhat_lomax = fit_lomax(xvals, counts)
+    # axes[-4].plot(xvals, yhat_lomax, 'r--', lw=1.5)
+
     axes[-4].set_yscale('log')
+
+    # # now compute xent in bits between true distro and approx distros
+    # probs = counts / np.sum(counts).astype(np.float32)
+    # entropy = -np.nansum(probs * np.log2(probs))
+    # xent_exp = -np.sum(probs * np.log2(yvals_exp[1:-1]))
+    # # xent_lomax = -np.sum(probs * np.log2(yhat_lomax))
+    # xent_cauchy = -np.sum(probs * np.log2(yhat_cauchy))
+    # print "entropy, exp xent, lomax xent, cauchy xent: {:.3f}, {:.3f}, {:.3f}, {:.3f}".format(
+    #     entropy, xent_exp, xent_lomax, xent_cauchy)
 
     # ------------------------ histograms of residuals in bottom axes
 
@@ -1012,6 +1063,19 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
             position_costs = compress.nbits_cost(positions, signed=False)
             sb.distplot(position_costs, ax=ax, kde=False, bins=bins, hist_kws={
                 'normed': True, 'range': [0, max_nbits], 'color': 'g'})
+        if plot_mixfix:
+            raw_resid_blocks = convert_to_blocks(raw_resids)
+            # print "raw resids[2, :20]: ", raw_resid_blocks[:2]
+            costs_mixfix = mixfix_cost(raw_resid_blocks, nbits=numbits).ravel()
+            sb.distplot(costs_mixfix, ax=ax, kde=False, bins=bins, hist_kws={
+                'normed': True, 'range': [0, max_nbits], 'color': 'g'})
+        if plot_sub_minbits:
+            costs_sub_minbits = (sub_minbits_block_costs - sub_minbits_min_costs).ravel()
+            sb.distplot(costs_sub_minbits, ax=ax, kde=False, bins=bins, hist_kws={
+                'normed': True, 'range': [0, max_nbits], 'color': 'gray'})
+
+            # positions = sort_transform(raw_resids, nbits=numbits, prefix_nbits=8).ravel()
+            # position_costs = compress.nbits_cost(positions, signed=False)
 
         # ax.set_xlim((0, min(np.max(resids), 256)))
         xlim = (0, max_nbits + 1)
@@ -1032,13 +1096,22 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
         if plot_sort:
             costs.append(np.mean(position_costs))
             styles.append('g--')
-        for i, (cost, style) in enumerate(zip(costs, styles)):
+        if plot_mixfix:
+            costs.append(np.mean(costs_mixfix))
+            styles.append('g--')
+        if plot_sub_minbits:
+            costs.append(np.mean(costs_sub_minbits))
+            styles.append('gray')
+        iterable = enumerate(zip(costs, styles))
+        for i, (cost, style) in iterable:
             # cost = costs[i]
             # style = styles[i]
             ax.plot([cost, cost], [0, 1], style, lw=1)
             x = cost / float(xlim[1])
-            # y = .05 + (.8 * (i % 2)) + (.025 * (i % 4))  # stagger heights
-            y = .66 + (.12 * (i % 3))  # stagger heights
+            if len(iterable) > 3:
+                y = .05 + (.8 * (i % 2)) + (.025 * (i % 4))  # stagger heights
+            else:
+                y = .66 + (.12 * (i % 3))  # stagger heights
             lbl = "{:.1f}".format(cost)
             ax.annotate(lbl, xy=(x, y), xycoords='axes fraction')
 
@@ -1075,7 +1148,7 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     ymax = max(ymax_left, ymax_right)
     [ax.set_ylim([0, ymax]) for ax in (axes[3], axes[-1])]
 
-    plt.tight_layout()
+    fig.tight_layout()
 
 
 def main():
@@ -1104,24 +1177,27 @@ def main():
     # ------------------------ experimental params
 
     # numbits = 16
-    numbits = 12
-    # numbits = 8
+    # numbits = 12
+    numbits = 8
 
     # left_transforms = None
     left_transforms = 'delta'
     # left_transforms = 'dyn_delta'
+    # left_transforms = 'double_delta'  # delta encode deltas
     # right_transforms = None
     # right_transforms = 'nn'
     # right_transforms = 'nn7'
     # right_transforms = 'double_delta'  # delta encode deltas
     # right_transforms = '1.5_delta'  # sub half of prev delta from each delta
-    # right_transforms = 'dyn_delta'  # pick single or double delta for each block
+    right_transforms = 'dyn_delta'  # pick single or double delta for each block
     # right_transforms = 'dyn_filt'
     # right_transforms = ['nn', 'dyn_delta']
     # right_transforms = ['delta', 'nn', 'maybe_delta']
     # right_transforms = ['delta', 'nn']
     # right_transforms = ['nn']
+    # right_transforms = ['delta', 'nn']
     # right_transforms = ['nn', 'delta']
+    # right_transforms = ['nn', 'dyn_delta']
     # right_transforms = ['dyn_delta', 'nn']
     # right_transforms = ['dyn_delta', 'scaled_signs']
     # right_transforms = ['dyn_delta', 'avg']
@@ -1132,14 +1208,14 @@ def main():
     # right_transforms = ['dyn_delta', 'canal']
     # right_transforms = ['inflection']
     # right_transforms = 'split_dyn'
-    right_transforms = 'dyn_delta'
+    # right_transforms = 'dyn_delta'
     # right_transforms = 'dyn_filt'
     # right_transforms = 'split_dyn_filt'
     # right_transforms = ['delta', 'dyn_filt']
     # right_transforms = ['delta', 'split_dyn_filt']
 
-    # num_neighbors = 256
-    num_neighbors = 1024
+    num_neighbors = 256
+    # num_neighbors = 1024
 
     neighbor_scales = None
     # neighbor_scales = [(0, 1), (1, 0)]  # amount to left shift, right shift
@@ -1152,13 +1228,14 @@ def main():
     nn_loss = 'l2'
     # nn_loss = 'linf'
 
-    mean_normalize = True
-    # mean_normalize = False
+    # mean_normalize = True
+    mean_normalize = False
 
     nn_nblocks = 1
     # nn_nblocks = 2
 
-    predict_next = True
+    predict_next = False
+    # predict_next = True
 
     save = True
     # save = False
@@ -1179,7 +1256,7 @@ def main():
     #   -actually, prolly bake this into nbits_cost cuz otherwise leading 0s
     #   and more than one leading 1 will make it underestimate costs
 
-    dsets = ds.smallUCRDatasets() if small else ds.allUCRDatasets()
+    dsets = ds.smallUCRDatasets() if small else ds.origUCRDatasets()
 
     # ------------------------ name output dir based on params
     suffix = ""
@@ -1193,7 +1270,7 @@ def main():
         suffix += "_loss={}".format(nn_loss)
         suffix += "_meannorm" if mean_normalize else "_nonorm"
         suffix += '' if nn_nblocks < 2 else '_nnblocks={}'.format(nn_nblocks)
-        suffix += 'forecast' if predict_next else ''
+        suffix += '_forecast' if predict_next else ''
     if n < 32:
         suffix += "_n={}".format(n)
     if prefix_nbits > 0:
@@ -1205,12 +1282,12 @@ def main():
 
     # ------------------------ main loop
 
-    # for d in list(dsets)[26:27]:  # olive oil
     # for i, d in enumerate(dsets):
     # for d in dsets:
     # for d in list(dsets)[4:8]:
     # for d in list(dsets)[:4]:
     # for d in list(dsets)[1:2]:  # adiac
+    # for d in list(dsets)[26:27]:  # olive oil
     for d in list(dsets)[:16]:
         print "------------------------ {}".format(d.name)
         plot_dset(d, numbits=numbits, n=n,
