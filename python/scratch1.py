@@ -694,11 +694,12 @@ def dyn_filt(blocks, filters=None, **learn_kwargs):
     if filters is None:
         # filters = learning.greedy_brute_filters(blocks, nfilters=2)
         learn_kwargs.setdefault('block_sz', 8)
-        learn_kwargs.setdefault('nfilters', 16)
+        # learn_kwargs.setdefault('nfilters', 16)
+        learn_kwargs.setdefault('nfilters', 4)
         learn_kwargs.setdefault('nbits', 3)
         learn_kwargs.setdefault('verbose', 2)  # TODO change
         learn_kwargs.setdefault('step_sz', .5)
-        learn_kwargs.setdefault('loss', 'l2')
+        learn_kwargs.setdefault('loss', 'l1')
         filters = learning.greedy_brute_filters(blocks, **learn_kwargs)
 
         # print "got filters:", filters[:, ::-1]
@@ -1102,13 +1103,13 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
         if plot_sub_minbits:
             costs.append(np.mean(costs_sub_minbits))
             styles.append('gray')
-        iterable = enumerate(zip(costs, styles))
-        for i, (cost, style) in iterable:
+        zipped = zip(costs, styles)
+        for i, (cost, style) in enumerate(zipped):
             # cost = costs[i]
             # style = styles[i]
             ax.plot([cost, cost], [0, 1], style, lw=1)
             x = cost / float(xlim[1])
-            if len(iterable) > 3:
+            if len(zipped) > 3:
                 y = .05 + (.8 * (i % 2)) + (.025 * (i % 4))  # stagger heights
             else:
                 y = .66 + (.12 * (i % 3))  # stagger heights
@@ -1176,21 +1177,21 @@ def main():
 
     # ------------------------ experimental params
 
-    # numbits = 16
+    numbits = 16
     # numbits = 12
-    numbits = 8
+    # numbits = 8
 
     # left_transforms = None
-    left_transforms = 'delta'
-    # left_transforms = 'dyn_delta'
+    # left_transforms = 'delta'
+    left_transforms = 'dyn_delta'
     # left_transforms = 'double_delta'  # delta encode deltas
     # right_transforms = None
     # right_transforms = 'nn'
     # right_transforms = 'nn7'
     # right_transforms = 'double_delta'  # delta encode deltas
     # right_transforms = '1.5_delta'  # sub half of prev delta from each delta
-    right_transforms = 'dyn_delta'  # pick single or double delta for each block
-    # right_transforms = 'dyn_filt'
+    # right_transforms = 'dyn_delta'  # pick single or double delta for each block
+    right_transforms = 'dyn_filt'
     # right_transforms = ['nn', 'dyn_delta']
     # right_transforms = ['delta', 'nn', 'maybe_delta']
     # right_transforms = ['delta', 'nn']
@@ -1286,8 +1287,8 @@ def main():
     # for d in dsets:
     # for d in list(dsets)[4:8]:
     # for d in list(dsets)[:4]:
-    # for d in list(dsets)[1:2]:  # adiac
     # for d in list(dsets)[26:27]:  # olive oil
+    # for d in list(dsets)[1:2]:  # adiac
     for d in list(dsets)[:16]:
         print "------------------------ {}".format(d.name)
         plot_dset(d, numbits=numbits, n=n,

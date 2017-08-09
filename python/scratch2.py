@@ -253,36 +253,82 @@ POWER_LAW_CODES_4 = np.array([
 POWER_LAW_CODELENGTHS_4 = np.array([len(s) for s in POWER_LAW_CODES_4],
                                    dtype=np.int32)
 
+# POWER_LAW_CODES_8 = np.array([
+#     '0',
+#     '10',
+#     '1100',
+#     '1101',
+#     '11100',
+#     '11101',
+#     '11110',
+#     '11111'
+#     ])
 POWER_LAW_CODES_8 = np.array([
-    '0',
-    '10',
+    '00',
+    '01',
+    '100',
+    '101',
     '1100',
     '1101',
-    '11100',
-    '11101',
-    '11110',
-    '11111'
+    '1110',
+    '1111'
     ])
 POWER_LAW_CODELENGTHS_8 = np.array([len(s) for s in POWER_LAW_CODES_8],
                                    dtype=np.int32)
 
+# POWER_LAW_CODES_16 = np.array([
+#     '0',
+#     '100',
+#     '1010',
+#     '1011',
+#     '11000',
+#     '11001',
+#     '11010',
+#     '11011',
+#     '111000',
+#     '111001',
+#     '111010',
+#     '111011',
+#     '111100',
+#     '111101',
+#     '111110',
+#     '111111'
+#     ])
+# POWER_LAW_CODES_16 = np.array([
+#     '000',
+#     '001',
+#     '0100',
+#     '0101',
+#     '0110',
+#     '0111',
+#     '1000',
+#     '1001',
+#     '1010',
+#     '1011',
+#     '1100',
+#     '1101',
+#     '11100',
+#     '11101',
+#     '11110',
+#     '11111'
+#     ])
 POWER_LAW_CODES_16 = np.array([
-    '0   ',
-    '100 ',
+    '000',
+    '001',
+    '010',
+    '011',
+    '1000',
+    '1001',
     '1010',
     '1011',
     '11000',
     '11001',
     '11010',
     '11011',
-    '111000',
-    '111001',
-    '111010',
-    '111011',
-    '111100',
-    '111101',
-    '111110',
-    '111111'
+    '11100',
+    '11101',
+    '11110',
+    '11111'
     ])
 POWER_LAW_CODELENGTHS_16 = np.array([len(s) for s in POWER_LAW_CODES_16],
                                     dtype=np.int32)
@@ -310,43 +356,67 @@ def _mixfix_pick_encoding(block, bits, b_suffix_min, b_suffix_max):
     # print "block: ", block
     # print "min nbits, max nbits, (gap):\t{}, {}, ({})".format(
     #     min_nbits, max_nbits, max_nbits - min_nbits)
+    # print "min nbits, max nbits, suffix_min, suffix_max:\t{}, {}, {}, {}".format(
+    #     min_nbits, max_nbits, b_suffix_min, b_suffix_max)
 
-    if min_nbits == max_nbits:
+    cost_unif = block_sz * max_nbits
+    uniform_retval = ENCODING_UNIF, block_sz * max_nbits, max_nbits, None, None
+
+    powerlaw_codebook_nbits = 4
+
+    # invariants we enforce (by just using a uniform distro if they're false):
+    #   max_nbits >= min_nbits + 2      # varlen prefixes can help
+    #   max_nbits >= b_suffix_min + 2   # varlen prefixes can help
+    #   max_nbits <= b_suffix_max + 4   # prefixes won't overflow codebook
+    #
+    use_unif = max_nbits < (min_nbits + 2)
+    use_unif = use_unif or (max_nbits < (b_suffix_min + 2))
+    use_unif = use_unif or (max_nbits > (b_suffix_max + powerlaw_codebook_nbits))
+    if use_unif:
+        return uniform_retval
+
+    # print "not returning uniform distro!"
+
+    # if :
+    #     return uniform_retval
+    # if :
+    #     return uniform_retval  # min from delta (almost) exceeds max
+    # if :
+    #     return uniform_retval  # max from delta not large enough
         # if max_nbits == 0:
             # cost = block_sz
             # b_suffix = 0
             # return ENCODING_RICE, cost, b_suffix, None, None
         # else:
-        cost = block_sz * max_nbits
-        b_suffix = max(0, min_nbits - 1)
-        return ENCODING_POWER_LAW, cost, b_suffix, POWER_LAW_CODES_2, POWER_LAW_CODELENGTHS_2
+        # cost = block_sz * max_nbits
+        # b_suffix = max(0, max_nbits - 1)
+        # return ENCODING_POWER_LAW, cost, b_suffix, POWER_LAW_CODES_2, POWER_LAW_CODELENGTHS_2
 
     # number of bits for suffixes, which are fixed-size;
-    rice_min_nbits = max_nbits - 2
-    pwr_min_nbits = max_nbits - 4
+    # rice_min_nbits = max_nbits - 2
+    # pwr_min_nbits = max_nbits - 4
 
     # handle case of min and max being equal
     # b_suffix_rice = min(b_suffix_rice, min_nbits - 1)
     # b_suffix_pwr = min(b_suffix_pwr, min_nbits - 1)
 
-    rice_possible = rice_min_nbits <= b_suffix_max
-    power_possible = pwr_min_nbits <= b_suffix_max
-    # power_possible = False # TODO rm
-    # rice_possible = False # TODO rm
-    if not (rice_possible or power_possible):
-        return ENCODING_UNIF, block_sz * max_nbits, max_nbits, None, None
-        # raise ValueError(
-            # "Block requires b_suffix of at least '{}', but max is {}".format(
-                # b_suffix_pwr, b_suffix_max))
-
-    # clip suffix length based on min nbits in block
-    b_suffix_rice = max(min_nbits, rice_min_nbits)
-    b_suffix_pwr = max(min_nbits, pwr_min_nbits)
+    # rice_possible = rice_min_nbits >= b_suffix_max
+    # power_possible = pwr_min_nbits >= b_suffix_max
+    # # power_possible = power_possible and (b_suffix_min <= max_nbits)
+    # # power_possible = False # TODO rm
+    # # rice_possible = False # TODO rm
+    # if not (rice_possible or power_possible) or b_suffix_min >= (max_nbits + 1):
+    #     return uniform_retval
+    #     # return ENCODING_UNIF, block_sz * max_nbits, max_nbits, None, None
+    #     # raise ValueError(
+    #         # "Block requires b_suffix of at least '{}', but max is {}".format(
+    #             # b_suffix_pwr, b_suffix_max))
 
     # clip suffix length based on constraints; note that making it larger
     # than optimal is always okay
-    b_suffix_rice = max(b_suffix_min, b_suffix_rice)
-    b_suffix_pwr = max(b_suffix_min, b_suffix_pwr)
+    lb_nbits = max(min_nbits, b_suffix_min)
+    b_suffix_rice = max(lb_nbits, max_nbits - 2)
+    b_suffix_pwr = max(lb_nbits, max_nbits - 4)
 
     # cost of rice coding
     prefix_vals = block >> b_suffix_rice  # vals in {0, 1, ..., 7}
@@ -357,20 +427,40 @@ def _mixfix_pick_encoding(block, bits, b_suffix_min, b_suffix_max):
     cost_rice = int(np.sum(prefix_vals)) + block_sz  # costs of {1,...,8}
 
     # TODO rm
-    return ENCODING_RICE, cost_rice, b_suffix_rice, None, None
+    # return ENCODING_RICE, cost_rice, b_suffix_rice, None, None
 
     # cost of encoding with power law codes above
     gap = max_nbits - b_suffix_pwr
+    # idx = max(0, gap - 1)  # b_suffix_min can be >= max_nbits
     idx = gap - 1
     codebook = ALL_POWER_LAW_CODES[idx]
     codelengths = ALL_POWER_LAW_CODELENGTHS[idx]
-    cost_power = np.sum(codelengths[bits - b_suffix_pwr])
-    cost_power -= b_suffix_pwr << block_sz_log2  # sub b_suffix_pwr for each val
+    prefixes = block >> b_suffix_pwr
+    prefix_costs = codelengths[prefixes]
+    cost_power = np.sum(prefix_costs) + (b_suffix_pwr << block_sz_log2)
 
-    if cost_rice < cost_power:
+    # print "min nbits, max nbits, suffix_min, suffix_max, (pwr law gap) <b_suffix>:" \
+    #     "\t{}, {}, {}, {}, ({}) <{}>".format(
+    #         min_nbits, max_nbits, b_suffix_min, b_suffix_max, gap, b_suffix_pwr)
+    # print "block: ", block
+    # print "prefixes: ", prefixes
+    # print "prefix costs: ", prefix_costs
+    # print "costs: ", prefix_costs + b_suffix_pwr
+
+    # if cost_rice < cost_power:
+
+    if False:  # TODO rm
         return ENCODING_RICE, cost_rice, b_suffix_rice, None, None
     else:
-        return ENCODING_POWER_LAW, cost_power, b_suffix_pwr, codebook, codelengths
+        print "min nbits, max nbits, (pwr law gap) <b_suffix>:\t" \
+            "{}, {}, ({}) <{}>".format(min_nbits, max_nbits, gap, b_suffix_pwr)
+
+        bitsave = cost_unif - cost_power
+        print "pwr saved {}b".format(bitsave)
+        if cost_power < cost_unif:
+            return ENCODING_POWER_LAW, cost_power, b_suffix_pwr, codebook, codelengths
+
+        return uniform_retval
 
 
 def _to_unary(x):
@@ -408,7 +498,7 @@ class MixFixEncoder(object):
     __slots__ = 'nbits b_suffix max_suffix_delta nbits_mins' \
         ' nbits_maxes gaps'.split(' ')
 
-    def __init__(self, nbits, suffix_delta_nbits=3):
+    def __init__(self, nbits, suffix_delta_nbits=4):
         self.nbits = nbits
         self.b_suffix = nbits - 3
         self.max_suffix_delta = (1 << (suffix_delta_nbits - 1)) - 1
@@ -435,9 +525,9 @@ class MixFixEncoder(object):
         encoding_name, encoding_cost, b_suffix, codebook, codelens = \
             _mixfix_pick_encoding(block, bits, min_b_suffix, max_b_suffix)
 
-        # b_diff = ideal_b_suffix - self.b_suffix
-        # b_diff = np.clip(b_diff, -self.max_suffix_delta, self.max_suffix_delta)
-        # self.b_suffix += b_diff
+        # if encoding_name != ENCODING_UNIF:
+        #     print "encoding {} saved {}b".format(
+        #         encoding_name, (max_nbits * block.size) - encoding_cost)
 
         # print "encoding, cost (b), b_suffix (b):\t{}, {}, {}".format(
         #     encoding_name, encoding_cost, b_suffix)
@@ -459,6 +549,10 @@ def mixfix_cost(blocks, nbits):
     out = np.empty(blocks.shape, dtype=blocks.dtype)
     for i, block in enumerate(blocks):
         _, out[i] = encoder.feed_block(block)
+
+        # print "======"
+        # if i == 10:
+        #     import sys; sys.exit()
 
     # # TODO rm
     # import matplotlib.pyplot as plt
