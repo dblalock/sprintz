@@ -11,6 +11,7 @@ from utils import concatedTsList
 _memory = Memory('./')
 
 UCR_DATASETS_DIR = paths.UCR
+ORIG_UCR_DATASETS_DIR = paths.UCR_ORIG
 
 SHORT_UCR_DATASETS = [  # as determined by instance length, not number thereof
     "ItalyPowerDemand",
@@ -42,6 +43,11 @@ SHORT_UCR_DATASETS = [  # as determined by instance length, not number thereof
 
 def allUCRDatasets():
     for dataDir in allUCRDatasetDirs():
+        yield UCRDataset(dataDir)
+
+
+def origUCRDatasets():
+    for dataDir in origUCRDatasetDirs():
         yield UCRDataset(dataDir)
 
 
@@ -97,12 +103,11 @@ def labeledTsListFromDataset(datasetDir, useTrain=True, useTest=True,
 
 
 def allUCRDatasetDirs():
-    datasetsPath = os.path.expanduser(UCR_DATASETS_DIR)
-    files = os.listdir(datasetsPath)
-    for i in range(len(files)):
-        files[i] = os.path.join(datasetsPath, files[i])
-    dirs = filter(os.path.isdir, files)
-    return dirs
+    return _ucr_datasets_in_dir(UCR_DATASETS_DIR)
+
+
+def origUCRDatasetDirs():
+    return _ucr_datasets_in_dir(ORIG_UCR_DATASETS_DIR)
 
 
 def smallUCRDatasetDirs():
@@ -112,6 +117,15 @@ def smallUCRDatasetDirs():
 # ================================================================
 # Private
 # ================================================================
+
+def _ucr_datasets_in_dir(dirpath):
+    datasetsPath = os.path.expanduser(dirpath)
+    files = os.listdir(datasetsPath)
+    for i in range(len(files)):
+        files[i] = os.path.join(datasetsPath, files[i])
+    dirs = filter(os.path.isdir, files)
+    return dirs
+
 
 @_memory.cache
 def _readtxt(path):

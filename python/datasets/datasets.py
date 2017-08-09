@@ -34,7 +34,11 @@ RANDWALK = 'randwalk'
 # ================================ UCR Time Series
 
 def allUCRDatasets():
-    return ucr.getAllUCRDatasets()
+    return ucr.allUCRDatasets()
+
+
+def origUCRDatasets():
+    return ucr.origUCRDatasets()
 
 
 @_memory.cache
