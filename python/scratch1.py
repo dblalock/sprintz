@@ -995,6 +995,7 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
         use_blocks = zigzag_encode(offsetBlocksRight)
         sub_minbits_block_costs = compress.nbits_cost(use_blocks)
         sub_minbits_min_costs = np.min(sub_minbits_block_costs, axis=1, keepdims=True)
+        sub_minbits_max_costs = np.max(sub_minbits_block_costs, axis=1, keepdims=True)
         offset_vals = use_blocks - (1 << sub_minbits_min_costs)
         offset_vals /= 2  # wrong, but allows apples-to-apples viz comparison
         clipped_vals = np.clip(offset_vals, 0, clip_max).astype(np.int32).ravel()
@@ -1071,7 +1072,10 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
             sb.distplot(costs_mixfix, ax=ax, kde=False, bins=bins, hist_kws={
                 'normed': True, 'range': [0, max_nbits], 'color': 'g'})
         if plot_sub_minbits:
-            costs_sub_minbits = (sub_minbits_block_costs - sub_minbits_min_costs).ravel()
+            # costs_sub_minbits = (sub_minbits_block_costs - sub_minbits_min_costs).ravel()
+            cost_diffs = sub_minbits_block_costs - sub_minbits_max_costs
+            # largest value -> 0; smaller values -> -4; then add 4
+            costs_sub_minbits = 4 + np.maximum(-4, cost_diffs).ravel()
             sb.distplot(costs_sub_minbits, ax=ax, kde=False, bins=bins, hist_kws={
                 'normed': True, 'range': [0, max_nbits], 'color': 'gray'})
 
@@ -1177,21 +1181,21 @@ def main():
 
     # ------------------------ experimental params
 
-    numbits = 16
+    # numbits = 16
     # numbits = 12
-    # numbits = 8
+    numbits = 8
 
     # left_transforms = None
-    # left_transforms = 'delta'
-    left_transforms = 'dyn_delta'
+    left_transforms = 'delta'
+    # left_transforms = 'dyn_delta'
     # left_transforms = 'double_delta'  # delta encode deltas
     # right_transforms = None
     # right_transforms = 'nn'
     # right_transforms = 'nn7'
     # right_transforms = 'double_delta'  # delta encode deltas
     # right_transforms = '1.5_delta'  # sub half of prev delta from each delta
-    # right_transforms = 'dyn_delta'  # pick single or double delta for each block
-    right_transforms = 'dyn_filt'
+    right_transforms = 'dyn_delta'  # pick single or double delta for each block
+    # right_transforms = 'dyn_filt'
     # right_transforms = ['nn', 'dyn_delta']
     # right_transforms = ['delta', 'nn', 'maybe_delta']
     # right_transforms = ['delta', 'nn']

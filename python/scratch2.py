@@ -312,23 +312,41 @@ POWER_LAW_CODELENGTHS_8 = np.array([len(s) for s in POWER_LAW_CODES_8],
 #     '11110',
 #     '11111'
 #     ])
-POWER_LAW_CODES_16 = np.array([
-    '000',
-    '001',
-    '010',
-    '011',
-    '1000',
+# POWER_LAW_CODES_16 = np.array([
+#     '000',
+#     '001',
+#     '010',
+#     '011',
+#     '1000',
+#     '1001',
+#     '1010',
+#     '1011',
+#     '11000',
+#     '11001',
+#     '11010',
+#     '11011',
+#     '11100',
+#     '11101',
+#     '11110',
+#     '11111'
+#     ])
+POWER_LAW_CODES_16 = np.array([  # cheap 0s, but otherwise almost unif
+    '00',
+    '0100',
+    '0101',
+    '0110',
+    '0110',
     '1001',
-    '1010',
+    '1000',
     '1011',
+    '1010',
     '11000',
     '11001',
     '11010',
     '11011',
     '11100',
     '11101',
-    '11110',
-    '11111'
+    '11110'
     ])
 POWER_LAW_CODELENGTHS_16 = np.array([len(s) for s in POWER_LAW_CODES_16],
                                     dtype=np.int32)

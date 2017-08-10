@@ -211,11 +211,12 @@ def compute_loss(errs, loss='l2', axis=-1):
 
 
 
-# def learn_kmeans(x, k=16, ntaps=4, loss='l2', verbose=1):
-#     pass
-#
-#     SELF: pick up here
-#
+def learn_kmeans(x, k=16, ntaps=4, loss='l2', verbose=1):
+    pass
+
+
+    # SELF: pick up here
+
 
 
 
