@@ -749,12 +749,19 @@ def name_transforms(transforms):
     return '|'.join([str(s) for s in transforms])
 
 
-def apply_transforms(X, diffs, blocks, transform_names, k=-1, **nn_kwargs):
+def apply_transforms(X, diffs, blocks, transform_names, k=-1, side=None, **nn_kwargs):
     # diffs_is_cheating=True, k=-1, **nn_kwargs):
 
     # if diffs_is_cheating:
     #     # diffs = encode_fir(X, [1])
         # diffs = compute_deltas(X)
+
+    k_left = nn_kwargs.get('k_left', 0)
+    k_right = nn_kwargs.get('k_right', 0)
+    if side == 'left' and k_left > 0:
+        k = k_left
+    elif side == 'right' and k_right > 0:
+        k = k_right
 
     transform_names = transform_names[:]
 
@@ -817,7 +824,6 @@ def apply_transforms(X, diffs, blocks, transform_names, k=-1, **nn_kwargs):
             offsetBlocks2[:, 0] = offsetBlocks[:, 0] - offsetBlocks2[:, 1]
             offsetBlocks = np.copy(offsetBlocks2)
 
-        # transform_names_copy = [el for el in transform_names]
         while name == 'mine':
             # offsetBlocks = my_transform(offsetBlocks)
             offsetBlocks = my_old_transform(offsetBlocks)
@@ -827,13 +833,17 @@ def apply_transforms(X, diffs, blocks, transform_names, k=-1, **nn_kwargs):
                 perm = [1, 2, 5, 6, 7, 4, 3, 0]
                 offsetBlocks = offsetBlocks[:, perm]
 
-        # if transform_names[0] == 'inflection' :
         if name == 'inflection':
             offsetBlocks = inflection_encode(offsetBlocks)
 
-        # if transform_names[0] == 'can:
         if name == 'canal':
             offsetBlocks = canal_transform(offsetBlocks)
+
+        if name == 'kmeans':
+            offsetBlocks = learning.sub_kmeans(offsetBlocks, k=k)
+
+        if name == 'online_kmeans':
+            offsetBlocks = learning.sub_online_kmeans(offsetBlocks, k=k)
 
         transform_names = transform_names[1:]  # pop first transform
 
@@ -856,10 +866,11 @@ def apply_transforms(X, diffs, blocks, transform_names, k=-1, **nn_kwargs):
 
 
 def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
-              prefix_nbits=None, k=-1, **transform_kwargs):
+              prefix_nbits=None, **transform_kwargs):
+              # prefix_nbits=None, k=-1, **transform_kwargs):
 
     plot_sort = False  # plot distros of idxs into vals sorted by rel freq
-    plot_mixfix = True  # plot distros of codes after mixfix encoding
+    plot_mixfix = False  # plot distros of codes after mixfix encoding
     plot_sub_minbits = True  # plot distros of vals above min nbits value
 
     # force transforms to be collections
@@ -879,9 +890,9 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     blocks = convert_to_blocks(X)
 
     offsetBlocksLeft, diffs_left = apply_transforms(
-        X, diffs, blocks, left_transforms, **transform_kwargs)
+        X, diffs, blocks, left_transforms, side='left', **transform_kwargs)
     offsetBlocksRight, diffs_right = apply_transforms(
-        X, diffs, blocks, right_transforms, **transform_kwargs)
+        X, diffs, blocks, right_transforms, side='right', **transform_kwargs)
 
     # ------------------------ compute where overflows are
 
@@ -991,17 +1002,17 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     #     sb.distplot(clipped_codes, ax=axes[-4], kde=False, bins=nbins, hist_kws={
     #         'normed': True, 'range': [0, clip_max], 'color': 'g'})
 
-    if plot_sub_minbits:
-        use_blocks = zigzag_encode(offsetBlocksRight)
-        sub_minbits_block_costs = compress.nbits_cost(use_blocks)
-        sub_minbits_min_costs = np.min(sub_minbits_block_costs, axis=1, keepdims=True)
-        sub_minbits_max_costs = np.max(sub_minbits_block_costs, axis=1, keepdims=True)
-        offset_vals = use_blocks - (1 << sub_minbits_min_costs)
-        offset_vals /= 2  # wrong, but allows apples-to-apples viz comparison
-        clipped_vals = np.clip(offset_vals, 0, clip_max).astype(np.int32).ravel()
-        sb.distplot(clipped_vals, ax=axes[-4], kde=False, bins=nbins,
-                    hist_kws={'normed': True, 'range': [0, clip_max],
-                              'color': 'grey'})
+    # if plot_sub_minbits:
+    #     use_blocks = zigzag_encode(offsetBlocksRight)
+    #     sub_minbits_block_costs = compress.nbits_cost(use_blocks)
+    #     sub_minbits_min_costs = np.min(sub_minbits_block_costs, axis=1, keepdims=True)
+    #     sub_minbits_max_costs = np.max(sub_minbits_block_costs, axis=1, keepdims=True)
+    #     offset_vals = use_blocks - (1 << sub_minbits_min_costs)
+    #     offset_vals /= 2  # wrong, but allows apples-to-apples viz comparison
+    #     clipped_vals = np.clip(offset_vals, 0, clip_max).astype(np.int32).ravel()
+    #     sb.distplot(clipped_vals, ax=axes[-4], kde=False, bins=nbins,
+    #                 hist_kws={'normed': True, 'range': [0, clip_max],
+    #                           'color': 'grey'})
 
     # plot best fit laplace distro
     rate = 1. / np.mean(np.abs(diffs_right))
@@ -1043,7 +1054,7 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
         # bins = [1, 2, 4, 8, 16, 32, 127, max_resid + 1]
 
         max_nbits = 16
-        raw_resids = resids
+        raw_resids = np.copy(resids)
         resids = compress.nbits_cost(resids).ravel()
         resids = np.minimum(resids, max_nbits)
         bins = np.arange(max_nbits + 1)
@@ -1072,6 +1083,10 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
             sb.distplot(costs_mixfix, ax=ax, kde=False, bins=bins, hist_kws={
                 'normed': True, 'range': [0, max_nbits], 'color': 'g'})
         if plot_sub_minbits:
+            use_blocks = zigzag_encode(convert_to_blocks(raw_resids))
+            sub_minbits_block_costs = compress.nbits_cost(use_blocks)
+            # sub_minbits_min_costs = np.min(sub_minbits_block_costs, axis=1, keepdims=True)
+            sub_minbits_max_costs = np.max(sub_minbits_block_costs, axis=1, keepdims=True)
             # costs_sub_minbits = (sub_minbits_block_costs - sub_minbits_min_costs).ravel()
             cost_diffs = sub_minbits_block_costs - sub_minbits_max_costs
             # largest value -> 0; smaller values -> -4; then add 4
@@ -1186,18 +1201,24 @@ def main():
     numbits = 8
 
     # left_transforms = None
-    left_transforms = 'delta'
-    # left_transforms = 'dyn_delta'
+    # left_transforms = 'delta'
+    left_transforms = 'dyn_delta'
     # left_transforms = 'double_delta'  # delta encode deltas
+    # left_transforms = ['dyn_delta', 'kmeans']
+
     # right_transforms = None
     # right_transforms = 'nn'
     # right_transforms = 'nn7'
     # right_transforms = 'double_delta'  # delta encode deltas
     # right_transforms = '1.5_delta'  # sub half of prev delta from each delta
-    right_transforms = 'dyn_delta'  # pick single or double delta for each block
+    # right_transforms = 'dyn_delta'  # pick single or double delta for each block
     # right_transforms = 'dyn_filt'
     # right_transforms = ['nn', 'dyn_delta']
     # right_transforms = ['delta', 'nn', 'maybe_delta']
+    # right_transforms = ['delta', 'kmeans']
+    # right_transforms = ['dyn_delta', 'kmeans']
+    # right_transforms = ['delta', 'online_kmeans']
+    right_transforms = ['dyn_delta', 'online_kmeans']
     # right_transforms = ['delta', 'nn']
     # right_transforms = ['nn']
     # right_transforms = ['delta', 'nn']
@@ -1252,10 +1273,21 @@ def main():
     # prefix_nbits = 11
     prefix_nbits = -1
 
-    k = 8
+    k_left = -1
+    k_right = -1
+    # k = 4
+    # k = 16
+    # k = 32
+    # k = 64
+    k = 128
+    # k = 256
+    # k = 1024
+    # k_left = 256
+    # k_right = 32
 
     # n = 8
-    n = 32
+    # n = 32
+    n = 100
 
     # TODO add in a "transform" that encodes blocks using codes we would use
     #   -actually, prolly bake this into nbits_cost cuz otherwise leading 0s
@@ -1276,6 +1308,8 @@ def main():
         suffix += "_meannorm" if mean_normalize else "_nonorm"
         suffix += '' if nn_nblocks < 2 else '_nnblocks={}'.format(nn_nblocks)
         suffix += '_forecast' if predict_next else ''
+    if "kmeans" in right_transforms or "online_kmeans" in right_transforms:
+        suffix += '_k={}'.format(k)
     if n < 32:
         suffix += "_n={}".format(n)
     if prefix_nbits > 0:
@@ -1306,7 +1340,7 @@ def main():
                   mean_normalize=mean_normalize,
                   predict_next=predict_next,
                   prefix_nbits=prefix_nbits,
-                  k=k)
+                  k=k, k_left=k_left, k_right=k_right)
         if save:
             save_current_plot(d.name, subdir=subdir)
 

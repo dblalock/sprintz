@@ -1,42 +1,13 @@
 #!/usr/bin/env python
 
+from __future__ import division
+
 import itertools
 import numpy as np
-import kmc2  # state-of-the-art kmeans initialization (as of NIPS 2016)
-from sklearn import cluster
 from .utils import sliding_window as window
-
-
-# ================================================================ kmeans
-
-def kmeans(X, k, max_iter=16, init='kmc2'):
-    X = X.astype(np.float32)
-    np.random.seed(123)
-
-    # if k is huge, initialize centers with cartesian product of centroids
-    # in two subspaces
-    if init == 'subspaces':
-        sqrt_k = int(np.sqrt(k) + .5)
-        if sqrt_k ** 2 != k:
-            raise ValueError("K must be a square number if init='subspaces'")
-
-        _, D = X.shape
-        centroids0, _ = kmeans(X[:, :D/2], sqrt_k, max_iter=2)
-        centroids1, _ = kmeans(X[:, D/2:], sqrt_k, max_iter=2)
-        seeds = np.empty((k, D), dtype=np.float32)
-        for i in range(sqrt_k):
-            for j in range(sqrt_k):
-                row = i * sqrt_k + j
-                seeds[row, :D/2] = centroids0[i]
-                seeds[row, D/2:] = centroids1[j]
-
-    elif init == 'kmc2':
-        seeds = kmc2.kmc2(X, k).astype(np.float32)
-    else:
-        raise ValueError("init parameter must be one of {'kmc2', 'subspaces'}")
-
-    estimator = cluster.MiniBatchKMeans(k, init=seeds, max_iter=max_iter).fit(X)
-    return estimator.cluster_centers_, estimator.labels_
+# from .utils.distance import kmeans, dists_sq
+from .utils import distance as dist
+from . import compress
 
 
 # ================================================================ misc
@@ -209,18 +180,6 @@ def compute_loss(errs, loss='l2', axis=-1):
         raise ValueError("Unrecognized loss function '{}'".format(loss))
 
 
-
-
-def learn_kmeans(x, k=16, ntaps=4, loss='l2', verbose=1):
-    pass
-
-
-    # SELF: pick up here
-
-
-
-
-
 def greedy_brute_filters(x, nfilters=16, ntaps=4, nbits=4, step_sz=.5,
                          block_sz=-1, loss='l2', verbose=1):
     """
@@ -351,6 +310,179 @@ def greedy_brute_filters(x, nfilters=16, ntaps=4, nbits=4, step_sz=.5,
     return filters
 
 
+# ================================================================ kmeans
+
+# ------------------------------------------------ offline kmeans
+
+# ideal case; offline kmeans on the data we're compressing
+def sub_kmeans(blocks, k=16, verbose=1):
+    centroids, assigs = dist.kmeans(blocks, k=k)
+    centroids = centroids.astype(np.int32)
+    assert len(blocks) == len(assigs)
+    print "kmeans avg bin size: {:.3f}".format(len(block) / float(k))
+    print "kmeans bincounts: ", np.bincount(assigs)
+    # all_rows = np.arange(len(assigs))
+    # centroids[:] = 0 # TODO rm
+    # centroids = np.random.randn(*centroids.shape) * np.var(blocks) # TODO rm
+    return (blocks - centroids[assigs, :]).astype(np.int32)
+
+
+# ------------------------------------------------ online kmeans
+
+def _all_rotations_of(X):
+    """returns a matrix X' whose rows include all rotations of X's rows"""
+    # return np.array([np.roll(row, i) for row in X for i in range(X.shape[1])],
+    #                 dtype=X.dtype)
+    return np.vstack([np.roll(X, i, axis=1) for i in range(X.shape[1])])
+
+
+def _nn_idx(X, q, dist_func=dist.dists_sq):
+    idx, _ = dist.knn(X, q, k=1, dist_func=dist_func)
+    return idx
+
+
+def _sum_of_squares(x):
+    return np.sum(x * x, axis=-1)
+
+
+class KmeansCompressor(object):
+    __slots__ = 'it k centroids shift_amt maxpool_phase counts optional'.split()
+
+    # def __init__(self, block_len=8, k=16, shift_amt=3, maxpool_phase=False):
+    def __init__(self, block_len=8, k=16, shift_amt=3, maxpool_phase=True, optional=True):
+        self.k = k
+        self.centroids = np.empty((k, block_len), dtype=np.int32)
+        self.centroids[0, :] = 0
+        self.it = 0
+        self.shift_amt = shift_amt
+        self.maxpool_phase = maxpool_phase  # whether to compare to all rotations of centroid
+        self.counts = np.zeros(k, dtype=np.int32)
+        self.optional = optional
+
+        print "KmeansCompressor: k={}, maxpool={}".format(k, maxpool_phase)
+
+    def feed_block(self, block):
+        assert len(block) == self.centroids.shape[1]
+        assert len(block.shape) == 1  # TODO rm 1d constraint
+        block = block.astype(np.int64)
+
+        self.it += 1  # increment at top because centroid 0 is reserved
+
+        block_len = len(block)
+        ncentriods = min(self.it, self.k)
+
+        if self.it % 100 == 1:
+            print "----- block num = {}".format(self.it - 1)
+
+        if self.maxpool_phase:
+            centroids = _all_rotations_of(self.centroids[:ncentriods, :])
+            raw_idx = _nn_idx(centroids, block)
+            # these steps are because _all_rotations_of() rolls the entire
+            # matrix at once (as a likely premature optimization...), so
+            # the rotated versions of a given centroid happen every ncentroids
+            # rows in the expanded matrix
+            idx = raw_idx % ncentriods
+            rotation = raw_idx // ncentriods
+            sub_block = centroids[raw_idx].ravel()
+            # out_block = block.astype(np.int32) - centroids[raw_idx].ravel()
+        else:
+            centroids = self.centroids[:ncentriods, :]
+            # print "self.centroids: ", self.centroids
+            # print "ncentroids: ", ncentriods
+            # print "centroids: ", centroids
+            idx = _nn_idx(centroids, block)
+            rotation = 0
+            # out_block = block - centroids[idx].ravel()
+            sub_block = centroids[idx].ravel()
+
+        out_block = block - sub_block
+        used_centroid = True
+        # if self.optional:  # don't always sub nn centroid
+        if self.optional and self.it > 8*self.k:  # not optional initially
+            bits_orig = np.max(compress.nbits_cost(block))
+            bits_sub = np.max(compress.nbits_cost(out_block))
+            bitsave = bits_orig - bits_sub
+            if bitsave < int(np.log2(self.k)):  # centroid doesn't help
+                out_block = block
+                used_centroid = False
+
+        broken = not ((_sum_of_squares(block) > _sum_of_squares(out_block)) or idx == 0)
+        broken = broken and used_centroid
+        if broken:
+            print "centroids:\n", centroids
+            print "nn idx: ", idx
+            print "block", block
+            print "out_block", out_block
+            print "block shape, out_block shape", block.shape, out_block.shape
+            print "block var, out_block var, ", np.var(block), np.var(out_block)
+            assert False
+
+        # print "idx: ", idx
+        # print "block shape, rotation", block.shape, rotation
+        update_block = np.roll(block, -rotation, axis=0) if self.maxpool_phase else block
+
+        # ------------------------ try different update strategies
+
+        update_algo = 'seed_start'
+        # update_algo = 'replace_rare_exact'
+
+        if update_algo == 'seed_start':
+            if ncentriods >= self.k:  # after first k-1 blocks
+                if used_centroid:
+                    self.counts[idx] += 1  # for debugging
+
+                    if idx > 0:  # centroid 0 is always just 0s
+                        # # moving avg of all blocks assigned to this centroid; this sets:
+                        # #   alpha = 1 / (2^shift_amt)
+                        # #   z = (1-alpha) * z + alpha * block
+                        # delta = (update_block - centroids[idx]) >> self.shift_amt
+
+                        # TODO rm after debug
+                        # delta = (update_block - centroids[idx]) / float(self.counts[idx] + 1)
+                        delta = (update_block - centroids[idx]) / self.counts[idx]
+
+                        self.centroids[idx] += delta.astype(np.int64)
+            else:
+                self.centroids[ncentriods, :] = update_block
+                self.counts[ncentriods] += 1
+
+        if update_algo == 'replace_rare_exact':
+            pass
+
+            # SELF: pick up here
+
+
+        return out_block, idx * block_len + rotation if self.maxpool_phase else idx
+
+
+def sub_online_kmeans(blocks, k=16, verbose=1, **kwargs):
+    blocks = blocks.astype(np.int64)
+    encoder = KmeansCompressor(k=k)
+    out = np.empty(blocks.shape, dtype=np.int32)
+    for i, block in enumerate(blocks):
+        out[i], _ = encoder.feed_block(block)
+
+    print "online kmeans centroid counts:\n", encoder.counts
+    # import matplotlib.pyplot as plt
+    # # plt.close()
+    # plt.figure()
+    # # plt.hist(encoder.counts)
+    # plt.hist(encoder.counts, bins=np.arange(np.max(encoder.counts) + 1))
+    # # plt.show()
+
+    return out
+
+    # centroids, assigs = dist.kmeans(blocks, k=k)
+    # centroids = centroids.astype(np.int32)
+    # assert len(blocks) == len(assigs)
+    # # all_rows = np.arange(len(assigs))
+    # # centroids[:] = 0 # TODO rm
+    # # centroids = np.random.randn(*centroids.shape) * np.var(blocks) # TODO rm
+    # return (blocks - centroids[assigs, :]).astype(np.int32)
+
+
+# ================================================================ main
+
 def main():
     np.set_printoptions(formatter={'float': lambda x: '{:.3f}'.format(x)})
 
@@ -377,7 +509,7 @@ def main():
     block_sz = 4
 
     greedy_brute_filters(x, nfilters=8, ntaps=4, nbits=nbits,
-                     block_sz=block_sz, step_sz=step_sz, verbose=2)
+                         block_sz=block_sz, step_sz=step_sz, verbose=2)
 
     # print "done"
 

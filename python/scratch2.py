@@ -470,11 +470,10 @@ def _mixfix_pick_encoding(block, bits, b_suffix_min, b_suffix_max):
     if False:  # TODO rm
         return ENCODING_RICE, cost_rice, b_suffix_rice, None, None
     else:
-        print "min nbits, max nbits, (pwr law gap) <b_suffix>:\t" \
-            "{}, {}, ({}) <{}>".format(min_nbits, max_nbits, gap, b_suffix_pwr)
-
-        bitsave = cost_unif - cost_power
-        print "pwr saved {}b".format(bitsave)
+        # print "min nbits, max nbits, (pwr law gap) <b_suffix>:\t" \
+        #     "{}, {}, ({}) <{}>".format(min_nbits, max_nbits, gap, b_suffix_pwr)
+        # bitsave = cost_unif - cost_power
+        # print "pwr saved {}b".format(bitsave)
         if cost_power < cost_unif:
             return ENCODING_POWER_LAW, cost_power, b_suffix_pwr, codebook, codelengths
 
