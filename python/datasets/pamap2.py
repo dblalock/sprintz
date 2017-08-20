@@ -81,6 +81,7 @@ class Pamap2Recording(Recording):
         super(Pamap2Recording, self).__init__(
             filePath, MISSING_DATA_VALUE, ALL_COL_NAMES, ACTIVITY_IDS_2_NAMES)
         self.isOpt = OPTIONAL_DIR in filePath
+        self.name = str(self)
 
     def __str__(self):
         s = "opt" if self.isOpt else "prot"
@@ -110,10 +111,13 @@ if __name__ == '__main__':
     recs = getAllPamap2Recordings()
     for r in recs:
         print('plotting recording: ' + str(r))
+
         # plt.figure(figsize=(WIDTH_LINE_GRAPH, HEIGHT_LINE_GRAPH))
         # r.plot()
         # plt.savefig(join(SAVE_DIR_LINE_GRAPH, str(r)))
+
         plt.figure(figsize=(WIDTH_IMG, HEIGHT_IMG))
         r.imshow(znorm=True)
         plt.savefig(join(SAVE_DIR_IMG, str(r)))
+
     # plt.show()

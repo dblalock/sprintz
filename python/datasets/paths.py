@@ -24,8 +24,8 @@ UCI_GAS = pathTo('uci-gas-sensor')
 # ampds2
 AMPD2_POWER = pathTo(j('ampds2', 'electric'))
 # AMPD2_POWER = pathTo(j('ampds2', 'electric', 'debug_all_power.csv')) # TODO
-AMPD2_GAS = pathTo(j('ampds2', 'natural_gas'))
-AMPD2_WEATHER = pathTo(j('ampds2', 'climate_weather'))
+AMPD2_GAS = pathTo(j('ampds2', 'gas'))
+AMPD2_WEATHER = pathTo(j('ampds2', 'weather'))
 AMPD2_WATER = pathTo(j('ampds2', 'water'))
 
 # ampds

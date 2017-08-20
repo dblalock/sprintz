@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
 import os
-import matplotlib.pyplot as plt
 from joblib import Memory
 
 import paths
 from ..utils.files import listFilesInDir, ensure_dir_exists
+from . import viz
 from pamap_common import *  # noqa
 
 memory = Memory('./')
@@ -23,6 +23,7 @@ OUTDOOR_DIR = join(paths.PAMAP, 'outdoor')
 FIG_SAVE_DIR = join('figs', 'pamap')
 SAVE_DIR_LINE_GRAPH = join(FIG_SAVE_DIR, 'line')
 SAVE_DIR_IMG = join(FIG_SAVE_DIR, 'img')
+SAVE_DIR_DELTA = join(FIG_SAVE_DIR, 'delta')
 
 # activity names
 ACTIVITY_IDS_2_NAMES = {
@@ -90,6 +91,7 @@ class PamapRecording(Recording):
         super(PamapRecording, self).__init__(
             filePath, MISSING_DATA_VALUE, ALL_COL_NAMES, ACTIVITY_IDS_2_NAMES)
         self.isIndoor = INDOOR_DIR in filePath
+        self.name = str(self)
 
     def __str__(self):
         s = "in" if self.isIndoor else "out"
@@ -108,6 +110,7 @@ def main():
 
     ensure_dir_exists(SAVE_DIR_LINE_GRAPH)
     ensure_dir_exists(SAVE_DIR_IMG)
+    ensure_dir_exists(SAVE_DIR_DELTA)
 
     # r = buildRecording(INDOOR_DIR + '/subject1.dat')
     # plt.figure(figsize=(WIDTH_LINE_GRAPH, HEIGHT_LINE_GRAPH))
@@ -118,21 +121,24 @@ def main():
     # plt.savefig(SAVE_DIR_LINE_GRAPH + str(r))
 
     recs = getAllPamapRecordings()
-    # for r in recs:
-    for i, r in enumerate(recs):
-        print('plotting recording: ' + str(r))
-        plt.figure(figsize=(WIDTH_LINE_GRAPH, HEIGHT_LINE_GRAPH))
-        r.plot()
-        # plt.savefig(join(SAVE_DIR_LINE_GRAPH, str(r)))
 
-        # plt.figure(figsize=(WIDTH_IMG, HEIGHT_IMG))
-        # r.imshow(znorm=True)
-        # plt.savefig(join(SAVE_DIR_IMG, str(r)))
+    # for i, r in enumerate(recs):
+    #     print('plotting recording: ' + str(r))
 
-        if i > 4:
-            break
+    #     # plt.figure(figsize=(WIDTH_LINE_GRAPH, HEIGHT_LINE_GRAPH))
+    #     # r.plot()
+    #     # # plt.savefig(join(SAVE_DIR_LINE_GRAPH, str(r)))
 
-    plt.show()
+    #     plt.figure(figsize=(WIDTH_IMG, HEIGHT_IMG))
+    #     r.imshow(znorm=True)
+    #     plt.savefig(join(SAVE_DIR_IMG, str(r)))
+
+    #     if i > 4:
+    #         break
+
+    # plt.show()
+
+    viz.plot_recordings(recs, interval_len=10000, savedir=SAVE_DIR_DELTA)
 
 
 if __name__ == '__main__':
