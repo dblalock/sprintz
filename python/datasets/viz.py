@@ -11,7 +11,31 @@ from ..utils.files import ensure_dir_exists
 # about how we store the data to be in the utils directory
 
 
-def _plot_corr(data, fig, ax):
+def save_fig_png(path):
+    plt.savefig(path, dpi=300, bbox_inches='tight')
+
+
+def _prev_corrs_stats(corr):
+    assert corr.shape[0] == corr.shape[1]  # needs to be a correlation mat
+    abs_corr = np.abs(corr)
+
+    prev_corrs = np.zeros(len(corr) - 1)
+    best_corrs = np.zeros(len(corr) - 1)
+    for i, row in enumerate(abs_corr[1:]):  # each row after the first
+        prev_corrs[i] = row[i]  # note that i is row index - 1
+        try:
+            best_corr_idx = np.nanargmax(row[:i+1])
+            best_corrs[i] = row[best_corr_idx]
+        except ValueError:  # if row all nans
+            best_corrs[i] = prev_corrs[i]
+
+        assert not (best_corrs[i] < prev_corrs[i])  # double neg for nans
+
+    # avg corr with prev variable, avg highest corr with any preceding variable
+    return np.nanmean(prev_corrs), np.nanmean(best_corrs)
+
+
+def _plot_corr(data, fig, ax, add_title=True):
     """assumes data is row-major; ie, each col is one variable over time"""
     # cov = np.cov(data.T)
     corr = np.corrcoef(data.T)
@@ -21,6 +45,11 @@ def _plot_corr(data, fig, ax):
     # fig.colorbar(im, ax=ax)
     # sb.heatmap(corr, center=0, ax=ax, square=True)
     sb.heatmap(corr, vmin=-1, vmax=1, center=0, ax=ax, square=True)
+
+    if add_title:
+        mean_prev_corr, mean_best_corr = _prev_corrs_stats(corr)
+        ax.set_title("|rho| prev, best prev =\n{:.2f}, {:.2f}".format(
+            mean_prev_corr, mean_best_corr))
 
 
 def plot_recordings(recordings, interval_len=1000, norm_means=False,
@@ -75,4 +104,5 @@ def plot_recordings(recordings, interval_len=1000, norm_means=False,
 
         if savedir is not None:
             ensure_dir_exists(savedir)
-            plt.savefig(os.path.join(savedir, r.name))
+            # plt.savefig(os.path.join(savedir, r.name))
+            save_fig_png(os.path.join(savedir, r.name))

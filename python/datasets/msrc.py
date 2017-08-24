@@ -1,4 +1,4 @@
-#!/bin/python
+#!/usr/bin/env python
 
 import os
 import glob
@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 
 import paths
 from ..utils.files import ensure_dir_exists
+from . import viz
 
 NUM_RECORDINGS = 594
 DATA_DIR = paths.MSRC_12
@@ -15,9 +16,10 @@ DATA_DIR = paths.MSRC_12
 join = os.path.join
 
 
-FIG_SAVE_DIR = join('figs','msrc')
+FIG_SAVE_DIR = join('figs', 'msrc')
 SAVE_DIR_LINE_GRAPH = join(FIG_SAVE_DIR, 'line')
 SAVE_DIR_IMG = join(FIG_SAVE_DIR, 'img')
+SAVE_DIR_DELTA = join(FIG_SAVE_DIR, 'delta')
 
 # Notes:
 #     -Tagstream times are sort of in the middle of the gesture, but
@@ -50,7 +52,7 @@ CLASS_IDS_2_NAMES = {
 }
 
 
-def getFileNames():
+def all_file_names():
     # get paths of all data files
     dataFiles = glob.glob('%s/*.csv' % DATA_DIR)
     tagstreamFiles = glob.glob('%s/*.tagstream' % DATA_DIR)
@@ -66,13 +68,13 @@ def getFileNames():
     return (dataFiles, tagstreamFiles)
 
 
-def parseTime(time):
+def parse_time(time):
     # I have no idea what their time stamps mean, but this magic
     # line from their matlab code converts things to...microseconds?
     return (int(time)*1000 + 49875/2)/49875
 
 
-def parseFileName(fName):
+def parse_file_name(fName):
     # file names are of form P#_#_#[A]_P#.csv
     # print("reading file: %s" % fName)
     fName = fName.split("/")[-1]
@@ -93,17 +95,17 @@ def parseFileName(fName):
     return (instruction, gestureId, subjId, twoModalities)
 
 
-def readAnswerTimes(tagFile):
+def read_answer_times(tagFile):
     times = []
     with open(tagFile, 'r') as f:
         f.readline()      # first line is garbage, not data
         for line in f:
             time, gesture = line.split(';')
-            times.append(parseTime(time))
+            times.append(parse_time(time))
     return times
 
 
-def readDataFile(dataFile):
+def read_data_file(dataFile):
     contents = np.genfromtxt(dataFile, delimiter=' ')
     timeStamps = contents[:, 0]
     data = contents[:, 1:]
@@ -117,8 +119,8 @@ def readDataFile(dataFile):
     return data, timeStamps
 
 
-def getRecordings(idxs=None):
-    dataFiles, tagFiles = getFileNames()
+def all_recordings(idxs=None):
+    dataFiles, tagFiles = all_file_names()
     if idxs is None:
         idxs = range(len(dataFiles))
     for i in idxs:
@@ -151,20 +153,23 @@ def _compute_label_idxs(labelTimes, sampleTimes):
 
 
 class Recording:
+
     def __init__(self, dataFile, tagFile, recID=-1):
         print("creating recording #{}".format(recID))
         self.id = recID
         self.fileName = dataFile.split('.')[0]
         self.instruction, self.gestureId, self.subjId, self.twoModalities = \
-            parseFileName(dataFile)
+            parse_file_name(dataFile)
         self.gestureLabel = CLASS_IDS_2_NAMES[self.gestureId]
-        self.gestureTimes = readAnswerTimes(tagFile)
+        self.gestureTimes = read_answer_times(tagFile)
 
-        self.data, self.sampleTimes = readDataFile(dataFile)
-        # self.rawData, self.sampleTimes = readDataFile(dataFile)
+        self.data, self.sampleTimes = read_data_file(dataFile)
+        # self.rawData, self.sampleTimes = read_data_file(dataFile)
         # self.data = _uniformlyResample(self.sampleTimes, self.rawData)
 
         self.gestureIdxs = _compute_label_idxs(self.gestureTimes, self.sampleTimes)
+        self.name = "{}_subj{}".format(
+            self.gestureLabel.replace(' ', '-'), self.subjId)
 
     def __str__(self):
         s1 = "instruction: %s\ngestureId: %s\nsubjId: %s\n" \
@@ -174,8 +179,6 @@ class Recording:
         return s1 + s2 + s3
 
     def plot(self, saveDir=None):
-        # for i in range(3):
-            # plt.plot(self.sampleTimes, self.data[:,i])
         plt.figure()
         plt.autoscale(tight=True)
         plt.plot(self.sampleTimes, self.data)
@@ -190,27 +193,25 @@ class Recording:
             fileName = "%s_%d" % (self.gestureLabel, self.id)
             fileName = join(saveDir, fileName)
             plt.savefig(fileName)
-        # else:
-        #     plt.show() # TODO uncomment
 
 
 def main():
-    dataFiles, tagFiles = getFileNames()
-    # for i in range(len(dataFiles)):
-    # for i in range(11,550,40):  # just an arbitrary, evenly-spaced, subset
-    # for i in range(11,550,500):  # just an arbitrary, evenly-spaced, subset
-    # for i in range(0, 550, 3):  # just an arbitrary, evenly-spaced, subset
-    for i in range(5, 15, 2):
-        r = Recording(dataFiles[i], tagFiles[i], i)
-        # print(r)
-        # r.plot(saveDir=SAVE_DIR_LINE_GRAPH)
-        r.plot()
-    plt.show()
+    # dataFiles, tagFiles = all_file_names()
+    # # for i in range(len(dataFiles)):
+    # # for i in range(11,550,40):  # just an arbitrary, evenly-spaced, subset
+    # # for i in range(11,550,500):  # just an arbitrary, evenly-spaced, subset
+    # # for i in range(0, 550, 3):  # just an arbitrary, evenly-spaced, subset
+    # for i in range(5, 15, 2):
+    #     r = Recording(dataFiles[i], tagFiles[i], i)
+    #     # print(r)
+    #     # r.plot(saveDir=SAVE_DIR_LINE_GRAPH)
+    #     r.plot()
+    # plt.show()
 
-    # TODO save imgs
-    # TODO move imshow() from pamap stuff to shared file and img this data
-
-    print("Done")
+    # recs = all_recordings(idxs=np.arange(5, 15, 2))
+    recs = all_recordings(idxs=np.arange(11, 550, 40))
+    # recs = all_recordings(idxs=np.arange(2))
+    viz.plot_recordings(recs, interval_len=600, savedir=SAVE_DIR_DELTA)
 
 
 if __name__ == "__main__":
