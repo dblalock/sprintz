@@ -371,7 +371,7 @@ def block_nbits_costs(blocks, signed=True):
 # def nn_encode(diffs, num_neighbors, nn_step=4, nn_hash=None):
 def nn_encode(blocks, num_neighbors=256, nn_step=1, nn_hash=None,
               scale_factors=None, try_invert=True, nn_loss='l2',
-              mean_normalize=False, nn_nblocks=1, predict_next=False):
+              mean_normalize=False, nn_nblocks=1, predict_next=False, **sink):
 
     orig_shape = blocks.shape
     if nn_nblocks > 1:
@@ -510,16 +510,17 @@ def convert_to_blocks(diffs):
     return blocks.reshape((-1, 8))
 
 
-def quantize_diff_block(X, numbits, keep_nrows=100):
+def quantize(X, numbits, keep_nrows=100):
     maxval = (1 << numbits) - 1
     X = X[:keep_nrows]
     X = X - np.min(X)
     X = (maxval / float(np.max(X)) * X).astype(np.int32)
-    diffs = X[:, 1:] - X[:, :-1]
 
-    blocks = convert_to_blocks(diffs)
+    # diffs = X[:, 1:] - X[:, :-1]
+    # blocks = convert_to_blocks(diffs)
+    # return X, diffs, blocks
 
-    return X, diffs, blocks
+    return X
 
 
 def scaled_signs_encode(blocks):
@@ -630,7 +631,7 @@ def take_best_of_each(blocks_list, loss='linf', axis=-1, return_counts=False):
     return best_blocks
 
 
-def compute_deltas(blocks):
+def delta_encode(blocks):
     blocks_diff = np.zeros(blocks.size)
     blocks_diff[0] = blocks.ravel()[0]
     blocks_diff[1:] = np.diff(blocks.ravel())
@@ -659,11 +660,11 @@ def encode_fir(blocks, filt):
 
 
 def possibly_delta_encode(blocks):
-    return take_best_of_each([blocks, compute_deltas(blocks)])
+    return take_best_of_each([blocks, delta_encode(blocks)])
 
 
 def split_dyn_delta(blocks):
-    blocks_diff = compute_deltas(blocks)
+    blocks_diff = delta_encode(blocks)
     blocks_out = np.empty(blocks.shape)
     blocks_out[:, :4] = take_best_of_each([blocks[:, :4], blocks_diff[:, :4]])
     blocks_out[:, 4:] = take_best_of_each([blocks[:, 4:], blocks_diff[:, 4:]])
@@ -749,12 +750,13 @@ def name_transforms(transforms):
     return '|'.join([str(s) for s in transforms])
 
 
-def apply_transforms(X, diffs, blocks, transform_names, k=-1, side=None, **nn_kwargs):
+def apply_transforms(X, blocks, transform_names, k=-1, side=None,
+                     chunk_sz=-1, **nn_kwargs):
     # diffs_is_cheating=True, k=-1, **nn_kwargs):
 
     # if diffs_is_cheating:
     #     # diffs = encode_fir(X, [1])
-        # diffs = compute_deltas(X)
+        # diffs = delta_encode(X)
 
     k_left = nn_kwargs.get('k_left', 0)
     k_right = nn_kwargs.get('k_right', 0)
@@ -772,26 +774,20 @@ def apply_transforms(X, diffs, blocks, transform_names, k=-1, side=None, **nn_kw
 
         # first round of transforms; defines offsetBlocks var
         if name == 'delta':  # delta encode deltas
-            # offsetBlocks = convert_to_blocks(diffs)
-            offsetBlocks = compute_deltas(offsetBlocks)
+            offsetBlocks = delta_encode(offsetBlocks)
 
         elif name == 'double_delta':  # delta encode deltas
-            # double_diffs = np.copy(diffs)
-            # double_diffs[:, 1:] = diffs[:, 1:] - diffs[:, :-1]
-            # offsetBlocks = convert_to_blocks(compute_deltas(diffs))
-            offsetBlocks = compute_deltas(compute_deltas(offsetBlocks))
+            offsetBlocks = delta_encode(delta_encode(offsetBlocks))
 
         elif name == 'dyn_delta':  # pick delta or delta-delta
-            # offsetBlocks = convert_to_blocks(diffs)
-            offsetBlocks = compute_deltas(offsetBlocks)
+            offsetBlocks = delta_encode(offsetBlocks)
             offsetBlocks = possibly_delta_encode(offsetBlocks)
 
         elif name == 'maybe_delta':
             offsetBlocks = possibly_delta_encode(offsetBlocks)
 
         elif name == 'split_dyn':
-            # offsetBlocks = convert_to_blocks(diffs)
-            offsetBlocks = compute_deltas(offsetBlocks)
+            offsetBlocks = delta_encode(offsetBlocks)
             offsetBlocks = split_dyn_delta(offsetBlocks)
 
         elif name == 'dyn_filt':
@@ -799,10 +795,6 @@ def apply_transforms(X, diffs, blocks, transform_names, k=-1, side=None, **nn_kw
 
         elif name == 'split_dyn_filt':
             offsetBlocks = split_dyn_filt(blocks)
-
-        # else:
-            # print "warning: apply_transforms: using no filter-based transform"
-            # offsetBlocks = np.copy(blocks)
 
         if name == 'center':
             mins = np.min(offsetBlocks, axis=1)
@@ -845,11 +837,31 @@ def apply_transforms(X, diffs, blocks, transform_names, k=-1, side=None, **nn_kw
         if name == 'online_kmeans':
             offsetBlocks = learning.sub_online_kmeans(offsetBlocks, k=k)
 
+        if name == 'VAR':
+            offsetBlocks = learning.var_transform(offsetBlocks, chunk_sz=chunk_sz)
+
+        if name.startswith('blocklen'):
+            blocklen = int(name.split('=')[1])
+            nblocks = int(offsetBlocks.size / blocklen)
+            newsize = nblocks * blocklen
+            # print "blocklen, newsize = ", blocklen, newsize
+            offsetBlocks = offsetBlocks.ravel()[:newsize].reshape(-1, blocklen)
+
+        if name == 'autocoracle':  # autocorr using length of X
+            x = offsetBlocks.ravel()
+            lag = X.shape[1]
+            # print "offsetBlocks shape, size: ", offsetBlocks.shape, offsetBlocks.size
+            # print "<autocoracle> X shape, size: ", X.shape, X.size
+            corr_mat = np.corrcoef(x[lag:], x[:-lag])
+            print "autocorr at true lag: ", corr_mat[0, 1]  # off diag
+            x[lag:] = x[lag:] - x[:-lag]
+            offsetBlocks = x.reshape(offsetBlocks.shape)
+
         transform_names = transform_names[1:]  # pop first transform
 
     # "examples" stitched together from blocks with vals subbed off
     # if diffs_offset is None:
-    use_shape = diffs.shape[0] - 1, diffs.shape[1] - 1
+    use_shape = X.shape[0] - 1, X.shape[1]
     use_size = use_shape[0] * use_shape[1]
     diffs_offset = offsetBlocks.ravel()[:use_size].reshape(use_shape)
 
@@ -866,8 +878,7 @@ def apply_transforms(X, diffs, blocks, transform_names, k=-1, side=None, **nn_kw
 
 
 def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
-              prefix_nbits=None, **transform_kwargs):
-              # prefix_nbits=None, k=-1, **transform_kwargs):
+    prefix_nbits=None, **transform_kwargs):
 
     plot_sort = False  # plot distros of idxs into vals sorted by rel freq
     plot_mixfix = False  # plot distros of codes after mixfix encoding
@@ -885,14 +896,14 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     # ------------------------ data munging
 
     # NOTE: blocks used to be blocks of diffs
-    # X, diffs, blocks = quantize_diff_block(d.X, numbits, keep_nrows=n)
-    X, diffs, _ = quantize_diff_block(d.X, numbits, keep_nrows=n)
+    # X, diffs, blocks = quantize(d.X, numbits, keep_nrows=n)
+    X = quantize(d.X, numbits, keep_nrows=n)
     blocks = convert_to_blocks(X)
 
-    offsetBlocksLeft, diffs_left = apply_transforms(
-        X, diffs, blocks, left_transforms, side='left', **transform_kwargs)
-    offsetBlocksRight, diffs_right = apply_transforms(
-        X, diffs, blocks, right_transforms, side='right', **transform_kwargs)
+    offsetBlocksLeft, errs_left = apply_transforms(
+        X, blocks, left_transforms, side='left', **transform_kwargs)
+    offsetBlocksRight, errs_right = apply_transforms(
+        X, blocks, right_transforms, side='right', **transform_kwargs)
 
     # ------------------------ compute where overflows are
 
@@ -911,14 +922,14 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     #     compute_signed_overflow(diffs, numbits - 4)
 
     x_bad_left, y_bad_left, _, overflow_frac_left = \
-        compute_signed_overflow(diffs_left, numbits)
+        compute_signed_overflow(errs_left, numbits)
     x_bad4_left, y_bad4_left, _, overflow_frac4_left = \
-        compute_signed_overflow(diffs_left, numbits - 4)
+        compute_signed_overflow(errs_left, numbits - 4)
 
     x_bad_right, y_bad_right, _, overflow_frac_right = \
-        compute_signed_overflow(diffs_right, numbits)
+        compute_signed_overflow(errs_right, numbits)
     x_bad4_right, y_bad4_right, _, overflow_frac4_right = \
-        compute_signed_overflow(diffs_right, numbits - 4)
+        compute_signed_overflow(errs_right, numbits - 4)
 
     # ------------------------ actual plotting
 
@@ -951,19 +962,19 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     plot_examples(X, ax=axes[0])
 
     # plot transformed deltas
-    plot_examples(diffs_left, ax=axes[1])
+    plot_examples(errs_left, ax=axes[1])
     axes[1].scatter(x_bad_left, y_bad_left, s=np.pi * 10*10,
                     facecolors='none', edgecolors='r')
-    plot_examples(diffs_right, ax=axes[-3])
+    plot_examples(errs_right, ax=axes[-3])
     axes[-3].scatter(x_bad_right, y_bad_right, s=np.pi * 10*10,
                      facecolors='none', edgecolors='r')
     axes[-3].set_ylim(axes[1].get_ylim())
 
     # plot how well data fits in a smaller window
-    plot_examples(diffs_left, ax=axes[2])
+    plot_examples(errs_left, ax=axes[2])
     axes[2].scatter(x_bad4_left, y_bad4_left, s=np.pi * 10*10,
                     facecolors='none', edgecolors='r')
-    plot_examples(diffs_right, ax=axes[-2])
+    plot_examples(errs_right, ax=axes[-2])
     axes[-2].scatter(x_bad4_right, y_bad4_right, s=np.pi * 10*10,
                      facecolors='none', edgecolors='r')
 
@@ -971,7 +982,7 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
 
     # # plot numbers of bits taken by each resid
     # axes[-4].set_title("Number of bits required for each sample in each ts")
-    # resids_nbits = compress.nbits_cost(diffs_right)
+    # resids_nbits = compress.nbits_cost(errs_right)
     # img = imshow_better(resids_nbits, ax=axes[-4], cmap='gnuplot2')
     # plt.colorbar(img, ax=axes[-4])
 
@@ -979,7 +990,7 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
 
     clip_min, clip_max = -129, 128
     nbins = (clip_max - clip_min) / 2
-    clipped_resids = np.clip(diffs_right, clip_min, clip_max).astype(np.int32).ravel()
+    clipped_resids = np.clip(errs_right, clip_min, clip_max).astype(np.int32).ravel()
     # clipped_resids = np.log(clipped_resids) # TODO rm
     sb.distplot(clipped_resids, ax=axes[-4], kde=False, bins=nbins, hist_kws={
                 'normed': True, 'range': [clip_min, clip_max]})
@@ -989,15 +1000,15 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
         #   -could prolly fix this by pre-sorting assuming decay in prob as
         #   we move away from 0; gets tricky though cuz we offset everything
         #
-        # positions = sort_transform(diffs_right, nbits=numbits, prefix_nbits=8)
-        positions = sort_transform(diffs_right, nbits=numbits, prefix_nbits=prefix_nbits)
+        # positions = sort_transform(errs_right, nbits=numbits, prefix_nbits=8)
+        positions = sort_transform(errs_right, nbits=numbits, prefix_nbits=prefix_nbits)
         clipped_positions = np.minimum(positions, clip_max).ravel()
         sb.distplot(clipped_positions, ax=axes[-4], kde=False, bins=nbins, hist_kws={
             'normed': True, 'range': [0, clip_max], 'color': 'g'})
 
     # TODO uncomment
     # if plot_mixfix:
-    #     codes = mixfix_encode(diffs_right, nbits=numbits)
+    #     codes = mixfix_encode(errs_right, nbits=numbits)
     #     clipped_codes = np.minimum(codes, clip_max).ravel()
     #     sb.distplot(clipped_codes, ax=axes[-4], kde=False, bins=nbins, hist_kws={
     #         'normed': True, 'range': [0, clip_max], 'color': 'g'})
@@ -1015,7 +1026,7 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     #                           'color': 'grey'})
 
     # plot best fit laplace distro
-    rate = 1. / np.mean(np.abs(diffs_right))
+    rate = 1. / np.mean(np.abs(errs_right))
     xvals = np.arange(clip_min, clip_max + 1)
     yvals = .5 * rate * np.exp(-rate * np.abs(xvals))
     axes[-4].plot(xvals, yvals, 'k--', lw=1)
@@ -1046,7 +1057,7 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
 
     # ------------------------ histograms of residuals in bottom axes
 
-    def plot_uresiduals_bits(resids, ax, plot_sort=plot_sort):
+    def plot_uresiduals_bits(resid_blocks, ax, plot_sort=plot_sort):
         # have final bar in the histogram contain everything that would
         # overflow 8b
         # max_resid = 128
@@ -1054,21 +1065,21 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
         # bins = [1, 2, 4, 8, 16, 32, 127, max_resid + 1]
 
         max_nbits = 16
-        raw_resids = np.copy(resids)
-        resids = compress.nbits_cost(resids).ravel()
-        resids = np.minimum(resids, max_nbits)
         bins = np.arange(max_nbits + 1)
 
-        sb.distplot(resids, ax=ax, kde=False, bins=bins, hist_kws={
-            # 'normed': True, 'range': [0, max_resid]})
-            # 'normed': True})
-            'normed': True, 'range': [0, max_nbits]})
-        resid_blocks = convert_to_blocks(resids)
+        raw_resid_blocks = np.copy(resid_blocks)
+        resid_blocks = compress.nbits_cost(resid_blocks)
+        resid_blocks = np.minimum(resid_blocks, max_nbits)
+
+        resids = resid_blocks.ravel()
+        raw_resids = np.copy(resids)
+
         block_maxes = np.max(resid_blocks, axis=1)
-        # sb.distplot(block_maxes, ax=ax, kde=False, bins=nbins, hist_kws={
+
+        sb.distplot(resids, ax=ax, kde=False, bins=bins, hist_kws={
+            'normed': True, 'range': [0, max_nbits]})
+
         sb.distplot(block_maxes, ax=ax, kde=False, bins=bins, hist_kws={
-            # 'normed': True, 'range': [0, max_resid], 'color': (.8, 0, 0, .05)})
-            # 'normed': True, 'color': (.8, 0, 0, .05)})
             'normed': True, 'range': [0, max_nbits], 'color': (.8, 0, 0, .05)})
 
         if plot_sort:
@@ -1076,14 +1087,15 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
             position_costs = compress.nbits_cost(positions, signed=False)
             sb.distplot(position_costs, ax=ax, kde=False, bins=bins, hist_kws={
                 'normed': True, 'range': [0, max_nbits], 'color': 'g'})
+
         if plot_mixfix:
-            raw_resid_blocks = convert_to_blocks(raw_resids)
             # print "raw resids[2, :20]: ", raw_resid_blocks[:2]
             costs_mixfix = mixfix_cost(raw_resid_blocks, nbits=numbits).ravel()
             sb.distplot(costs_mixfix, ax=ax, kde=False, bins=bins, hist_kws={
                 'normed': True, 'range': [0, max_nbits], 'color': 'g'})
+
         if plot_sub_minbits:
-            use_blocks = zigzag_encode(convert_to_blocks(raw_resids))
+            use_blocks = zigzag_encode(raw_resid_blocks)
             sub_minbits_block_costs = compress.nbits_cost(use_blocks)
             # sub_minbits_min_costs = np.min(sub_minbits_block_costs, axis=1, keepdims=True)
             sub_minbits_max_costs = np.max(sub_minbits_block_costs, axis=1, keepdims=True)
@@ -1160,8 +1172,10 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
 
     # plot_uresiduals_bits(absDiffs, ax=axes[3])
     # plot_uresiduals_bits(absOffsetDiffs, ax=axes[-1])
-    plot_uresiduals_bits(diffs_left, ax=axes[3])
-    plot_uresiduals_bits(diffs_right, ax=axes[-1])
+    # plot_uresiduals_bits(errs_left, ax=axes[3])
+    # plot_uresiduals_bits(errs_right, ax=axes[-1])
+    plot_uresiduals_bits(offsetBlocksLeft, ax=axes[3])
+    plot_uresiduals_bits(offsetBlocksRight, ax=axes[-1])
 
     _, ymax_left = axes[3].get_ylim()
     _, ymax_right = axes[-1].get_ylim()
@@ -1196,13 +1210,10 @@ def main():
 
     # ------------------------ experimental params
 
-    # numbits = 16
-    # numbits = 12
-    numbits = 8
-
     # left_transforms = None
-    # left_transforms = 'delta'
-    left_transforms = 'dyn_delta'
+    left_transforms = 'delta'
+    # left_transforms = ['delta', 'blocklen=4']
+    # left_transforms = 'dyn_delta'
     # left_transforms = 'double_delta'  # delta encode deltas
     # left_transforms = ['dyn_delta', 'kmeans']
 
@@ -1213,12 +1224,20 @@ def main():
     # right_transforms = '1.5_delta'  # sub half of prev delta from each delta
     # right_transforms = 'dyn_delta'  # pick single or double delta for each block
     # right_transforms = 'dyn_filt'
+    # right_transforms = 'VAR'
+    # right_transforms = ['delta', 'blocklen=32']
+    # right_transforms = ['delta', 'blocklen=16']
+    # right_transforms = ['delta', 'blocklen=4']
+    # right_transforms = ['delta', 'blocklen=2']
+    right_transforms = ['delta', 'autocoracle']
+    # right_transforms = ['autocoracle', 'delta']
     # right_transforms = ['nn', 'dyn_delta']
+    # right_transforms = ['delta', 'nn']
     # right_transforms = ['delta', 'nn', 'maybe_delta']
     # right_transforms = ['delta', 'kmeans']
     # right_transforms = ['dyn_delta', 'kmeans']
     # right_transforms = ['delta', 'online_kmeans']
-    right_transforms = ['dyn_delta', 'online_kmeans']
+    # right_transforms = ['dyn_delta', 'online_kmeans']
     # right_transforms = ['delta', 'nn']
     # right_transforms = ['nn']
     # right_transforms = ['delta', 'nn']
@@ -1240,8 +1259,12 @@ def main():
     # right_transforms = ['delta', 'dyn_filt']
     # right_transforms = ['delta', 'split_dyn_filt']
 
-    num_neighbors = 256
-    # num_neighbors = 1024
+    numbits = 16
+    # numbits = 12
+    # numbits = 8
+
+    # num_neighbors = 256
+    num_neighbors = 1024
 
     neighbor_scales = None
     # neighbor_scales = [(0, 1), (1, 0)]  # amount to left shift, right shift
@@ -1289,6 +1312,10 @@ def main():
     # n = 32
     n = 100
 
+    chunk_sz = -1
+    # chunk_sz = 64
+    # chunk_sz = 256
+
     # TODO add in a "transform" that encodes blocks using codes we would use
     #   -actually, prolly bake this into nbits_cost cuz otherwise leading 0s
     #   and more than one leading 1 will make it underestimate costs
@@ -1314,6 +1341,8 @@ def main():
         suffix += "_n={}".format(n)
     if prefix_nbits > 0:
         suffix += '_prefix={}b'.format(prefix_nbits)
+    if chunk_sz > 0:
+        suffix += '_chunk={}'.format(chunk_sz)
     transforms_str = "{}-vs-{}".format(name_transforms(left_transforms),
                                        name_transforms(right_transforms))
     subdir = '{}{}b_{}{}'.format(prefix, numbits, transforms_str, suffix)
@@ -1325,9 +1354,9 @@ def main():
     # for d in dsets:
     # for d in list(dsets)[4:8]:
     # for d in list(dsets)[:4]:
-    # for d in list(dsets)[26:27]:  # olive oil
     # for d in list(dsets)[1:2]:  # adiac
-    for d in list(dsets)[:16]:
+    # for d in list(dsets)[:25]:
+    for d in list(dsets)[26:27]:  # olive oil
         print "------------------------ {}".format(d.name)
         plot_dset(d, numbits=numbits, n=n,
                   left_transforms=left_transforms,
@@ -1340,7 +1369,8 @@ def main():
                   mean_normalize=mean_normalize,
                   predict_next=predict_next,
                   prefix_nbits=prefix_nbits,
-                  k=k, k_left=k_left, k_right=k_right)
+                  k=k, k_left=k_left, k_right=k_right,
+                  chunk_sz=chunk_sz)
         if save:
             save_current_plot(d.name, subdir=subdir)
 

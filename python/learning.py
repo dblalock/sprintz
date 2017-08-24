@@ -4,6 +4,8 @@ from __future__ import division
 
 import itertools
 import numpy as np
+from sklearn import linear_model as linear  # for VAR
+
 from .utils import sliding_window as window
 # from .utils.distance import kmeans, dists_sq
 from .utils import distance as dist
@@ -479,6 +481,52 @@ def sub_online_kmeans(blocks, k=16, verbose=1, **kwargs):
     # # centroids[:] = 0 # TODO rm
     # # centroids = np.random.randn(*centroids.shape) * np.var(blocks) # TODO rm
     # return (blocks - centroids[assigs, :]).astype(np.int32)
+
+
+# ================================================================ Vector AR
+
+def var_transform(blocks, ntaps=4, chunk_sz=-1):
+    x = blocks.ravel()
+    windows = window.sliding_window_1D(x, ntaps)
+    y = windows[1:, -1]  # last col (which is next val), except from first row
+    X = windows[:-1]  # all windows except last
+    N = len(X)
+
+    out = np.zeros_like(blocks).ravel()
+    out[:ntaps] = x[:ntaps]
+
+    if chunk_sz < 1:
+        chunk_sz = N
+
+    nchunks = int(np.ceil(N / float(chunk_sz)))
+    for i in range(nchunks):
+        start_idx = i * chunk_sz
+        end_idx = min(N, start_idx + chunk_sz)
+
+        est = linear.LinearRegression(fit_intercept=True, normalize=False)
+        X_chunk = X[start_idx:end_idx]
+        y_chunk = y[start_idx:end_idx]
+        yhat = est.fit(X_chunk, y_chunk).predict(X_chunk)
+        errs = y_chunk - yhat.astype(out.dtype)
+
+        # print "start idx, end idx", start_idx, end_idx
+        # print "errs.shape", errs.shape
+
+        out[(start_idx + ntaps):(end_idx + ntaps)] = errs
+
+        # print "linreg coeffs, intercept: {}, {:.3f}".format(est.coef_, est.intercept_)
+
+    # print "blocks shape: ", blocks.shape
+    # print "windows shape: ", windows.shape
+    # print "X[:10], y[:10]\n", X[:10], y[:10]
+
+    # print "X[:10], y[:10]", X[:10], y[:10]
+
+    # out = np.zeros_like(blocks).ravel()
+    # out[:ntaps] = x[:ntaps]
+
+    # out[ntaps:] = errs
+    return out.reshape(blocks.shape)
 
 
 # ================================================================ main
