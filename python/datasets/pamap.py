@@ -76,7 +76,7 @@ def getOutdoorFilePaths():
 #     return df.filter(COL_NAMES)
 
 
-def getAllPamapRecordings():
+def all_recordings():
     for p in getIndoorFilePaths() + getOutdoorFilePaths():
         print "attempting to read pamap file at path: ", p
         yield PamapRecording(p)
@@ -120,7 +120,7 @@ def main():
     # plt.show()
     # plt.savefig(SAVE_DIR_LINE_GRAPH + str(r))
 
-    recs = getAllPamapRecordings()
+    recs = all_recordings()
 
     # for i, r in enumerate(recs):
     #     print('plotting recording: ' + str(r))

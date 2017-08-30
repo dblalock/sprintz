@@ -176,8 +176,13 @@ def readAllUCRData(ucrDatasetDir):
 
 # ================================================================ Main
 
-if __name__ == '__main__':
+def main():
     from matplotlib import pyplot as plt
+
+    dsets = allUCRDatasets()
+    for dset in dsets:
+        print "dset name:", dset.name
+    return
 
     printTable = False
     if printTable:
@@ -236,3 +241,7 @@ if __name__ == '__main__':
         # for ts in tsList:
         #     print ts.name, ts.data.shape
         #     ts.plotSubseqs(saveDir)
+
+
+if __name__ == '__main__':
+    main()

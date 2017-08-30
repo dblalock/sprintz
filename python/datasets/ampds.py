@@ -70,7 +70,7 @@ class WeatherRecording(object):
 
 # ------------------------ top-level data loading functions
 
-def all_electric_recordings():
+def all_power_recordings():
     # print "electric file paths: ", ELECTRIC_PATHS
     # import sys; sys.exit()
     return [HouseRecording(path, cols=ELECTRIC_DATA_COLS) for path in ELECTRIC_PATHS]
@@ -93,7 +93,7 @@ def all_weather_recordings():
 # def _read_file(path, cols=None):
 @_memory.cache
 def _read_file(path):
-    df = pd.read_csv(path).fillna(value=-1)  # fill missing with -1
+    df = pd.read_csv(path).fillna(method='backfill')  # hold prev val
     # if cols is not None and len(cols) > 0:
     #     timestamps = df[df.columns[0]]
     # return df.values.astype(np.int32)
@@ -103,7 +103,7 @@ def _read_file(path):
 @_memory.cache
 def _load_weather_data():
     path = WEATHER_PATHS[0]
-    df = pd.read_csv(path, sep=',').fillna(value=-1)  # fill missing with -1
+    df = pd.read_csv(path, sep=',').fillna(method='backfill')  # hold prev val
     return df[WEATHER_ALL_COLS]
 
 
@@ -123,7 +123,7 @@ def main():
     recordings = []
     recordings += all_gas_recordings()
     recordings += all_water_recordings()
-    recordings += all_electric_recordings()
+    recordings += all_power_recordings()
     recordings += all_weather_recordings()
 
     norm_means = False
