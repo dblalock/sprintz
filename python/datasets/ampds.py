@@ -30,7 +30,7 @@ ELECTRIC_DATA_COLS = ELECTRIC_COLS[1:]
 # ELECTRIC_DATA_COLS.remove('MHE')  # linear combo of other cols
 # ELECTRIC_DATA_COLS.remove('UNE')  # linear combo of other cols
 GAS_DATA_COLS = ['counter', 'avg_rate', 'inst_rate']
-WATER_DATA_COLS = ['counter', 'avg_rate', 'inst_rate']
+WATER_DATA_COLS = ['counter', 'avg_rate']
 
 
 WEATHER_TIME_COL = 'Date/Time'
@@ -55,7 +55,8 @@ class HouseRecording(object):
         self.data = data[:, 1:]  # XXX have to use all cols after the first
 
         # hack to deal with DWW water not having inst_rate
-        self.col_names = self.col_names[:self.data.shape[1]]
+        # self.col_names = self.col_names[:self.data.shape[1]]
+        self.data = self.data[:, :len(self.col_names)]
 
 
 class WeatherRecording(object):
@@ -71,8 +72,6 @@ class WeatherRecording(object):
 # ------------------------ top-level data loading functions
 
 def all_power_recordings():
-    # print "electric file paths: ", ELECTRIC_PATHS
-    # import sys; sys.exit()
     return [HouseRecording(path, cols=ELECTRIC_DATA_COLS) for path in ELECTRIC_PATHS]
 
 

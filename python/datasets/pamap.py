@@ -76,10 +76,14 @@ def getOutdoorFilePaths():
 #     return df.filter(COL_NAMES)
 
 
+@memory.cache
 def all_recordings():
+    recs = []
     for p in getIndoorFilePaths() + getOutdoorFilePaths():
-        print "attempting to read pamap file at path: ", p
-        yield PamapRecording(p)
+        print "reading pamap file: ", p
+        # yield PamapRecording(p)
+        recs.append(PamapRecording(p))
+    return recs
 
 
 # ================================================================

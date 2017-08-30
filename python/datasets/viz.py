@@ -87,7 +87,7 @@ def plot_recordings(recordings, interval_len=1000, norm_means=False,
             axes[1, col].set_title('first derivs')
 
         # plot correlation matrices for orig data and first derivs
-        cor_sample_length = len(r.data) / 5
+        cor_sample_length = max(10000, len(r.data) / 5)
         data = r.data[:cor_sample_length]
         _plot_corr(data, fig, axes[0, 0])
         _plot_corr(np.diff(data, axis=0), fig, axes[1, 0])

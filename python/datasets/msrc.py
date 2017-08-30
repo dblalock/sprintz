@@ -4,10 +4,13 @@ import os
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
+from joblib import Memory
 
 import paths
 from ..utils.files import ensure_dir_exists
 from . import viz
+
+_memory = Memory('./', verbose=1)
 
 NUM_RECORDINGS = 594
 DATA_DIR = paths.MSRC_12
@@ -119,17 +122,21 @@ def read_data_file(dataFile):
     return data, timeStamps
 
 
+@_memory.cache
 def all_recordings(idxs=None):
     dataFiles, tagFiles = all_file_names()
+    recs = []
     if idxs is None:
         idxs = range(len(dataFiles))
     for i in idxs:
         try:
             r = Recording(dataFiles[i], tagFiles[i], recID=i)
-            yield r
+            recs.append(r)
+            # yield r
         except IndexError:  # empty or all 0s file -> IndexError
             print("skipping broken recording #{}".format(i))
             continue
+    return recs
 
 
 def _compute_label_idxs(labelTimes, sampleTimes):

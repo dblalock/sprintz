@@ -39,10 +39,11 @@ _memory = Memory('.', verbose=1)
 # Note that the UCR datasets are only in "colmajor" since they're univariate,
 # so row-major and column-major are the same.
 
-def _quantize(mat, dtype):
-    mat -= np.min(mat, axis=0)
+def _quantize(mat, dtype, axis=0):
+    # print "quantize: got mat with shape: ", mat.shape
+    mat -= np.min(mat, axis=axis, keepdims=True)
     mat = mat.astype(np.float32)
-    mat /= np.max(mat, axis=0)
+    mat /= np.max(mat, axis=axis, keepdims=True)
     if dtype == np.uint8:
         max_val = 255
     elif dtype == np.uint16:
@@ -59,30 +60,64 @@ def _ensure_list_or_tuple(x):
     return x
 
 
-def write_datasets(mats_list, dset_names, dtype=np.uint16, order='c', subdir=''):
-    mats_list = _ensure_list_or_tuple(mats_list)
-    dset_names = _ensure_list_or_tuple(dset_names)
+def write_dataset(mat, name, dtypes=(np.uint8, np.uint16),
+                   order='c', subdir='', verbose=2):
+    dtypes = _ensure_list_or_tuple(dtypes)
 
     dtype_names = {np.uint8: 'uint8', np.uint16: 'uint16'}
+    order_to_dir = {'c': paths.COMPRESSION_ROWMAJOR_DIR,
+                    'f': paths.COMPRESSION_COLMAJOR_DIR}
 
-    for name, mat in zip(dset_names, mats_list):
-        mat = _quantize(mat, dtype=dtype)
+    if verbose > 1:
+        print "mat[:20]: ", mat[:20]
 
-        if order == 'c':
-            savedir = paths.COMPRESSION_ROWMAJOR_DIR
-        elif order == 'f':
-            savedir = paths.COMPRESSION_COLMAJOR_DIR
-            mat = np.asfortranarray(mat)
-        else:
-            raise ValueError("Unrecognized order '{}'".format(order))
+    out_paths = []
+    quantize_axis = 0
+    if order == 'f':
+        mat = np.ascontiguousarray(mat.T)  # tofile always writes in C order
+        quantize_axis = 1
+        if verbose > 1:
+            print "colmajor mat[:20]: ", mat[:20]
 
-        savedir = os.path.join(savedir, dtype_names[dtype])
+    for dtype in dtypes:
+        store_mat = _quantize(mat, dtype=dtype, axis=quantize_axis)
+
+        base_savedir = order_to_dir[order]
+        savedir = os.path.join(base_savedir, dtype_names[dtype])
         if subdir:
             savedir = os.path.join(savedir, subdir)
         ensure_dir_exists(savedir)
         path = os.path.join(savedir, name + '.dat')
-        mat.tofile(path)
+        store_mat.tofile(path)
+        out_paths.append(path)
 
+        if verbose > 0:
+            print "saved mat {} ({}) as {}".format(name, store_mat.shape, path)
+
+        load_mat = np.fromfile(path, dtype=dtype)
+
+        if verbose > 1:
+            print "stored mat shape: ", load_mat.shape
+            print "stored mat[:20]: ", store_mat[:20]
+            print "loaded mat[:20]: ", load_mat[:20]
+
+        assert np.array_equal(store_mat.ravel(), load_mat.ravel())
+
+        import matplotlib.pyplot as plt
+        _, axes = plt.subplots(2, 2, figsize=(10, 7))
+        if order == 'f':
+            length = 5000
+            axes[0, 0].plot(store_mat[0, :length], lw=.5)
+            axes[0, 1].plot(store_mat[-1, -length:], lw=.5)
+        else:
+            length = 2000
+            axes[0, 0].plot(store_mat.ravel()[:length], lw=.5)
+            axes[0, 1].plot(store_mat.ravel()[-length:], lw=.5)
+        axes[1, 0].plot(load_mat[:length], lw=.5)
+        axes[1, 1].plot(load_mat[-length:], lw=.5)
+        plt.show()  # upper and lower plots should be identical
+
+    return dict(zip(dtypes, out_paths))
 
 # def ucr_dataset_to_dataset(X, interp_npoints=5):
 #     # difference between end of each example and start of next one
@@ -108,6 +143,9 @@ def write_datasets(mats_list, dset_names, dtype=np.uint16, order='c', subdir='')
 @_memory.cache
 def concat_and_interpolate(mats, interp_npoints=5):
     # assumes each row of each mat is one time step and mats is a list
+
+    print "mats: ", mats
+
     dtype = mats[0].dtype
 
     first_vals = np.vstack([mat[0] for mat in mats])
@@ -162,48 +200,85 @@ def _test_concat_and_interpolate():  # TODO less janky unit tests
     assert np.array_equal(ret, ans)
 
 def mat_from_recordings(recs):
-    return concat_and_interpolate([r.data for r in recs])
+    try:
+        mats = [r.data for r in recs]  # recs is recording objects
+    except AttributeError:
+        mats = recs  # recs is just a data matrix (happens for UCR dataset)
+        assert len(mats.shape) == 2  # fail fast if it isn't a data matrix
+
+    return concat_and_interpolate(mats)
 
 
 def main():
-    _test_concat_and_interpolate()
 
-    # gas_recs = ampds.all_gas_recordings()
-    # recs = ampds.all_weather_recordings()
-    # print "recs:", [r.data.shape for r in gas_recs]
-    # mat = concat_and_interpolate([r.data[:, 1:] for r in recs])
-
-    # mat = mat_from_recordings(ampds.all_gas_recordings())[:, 1:]
-    # mat = mat_from_recordings(ampds.all_gas_recordings())[:, 1:]
-
-    funcs_and_names = [
-        # (ampds.all_gas_recordings, 'ampd_gas'),
-        # (ampds.all_water_recordings, 'ampd_water'), # TODO get it working
-        # (ampds.all_power_recordings, 'ampd_power'),
-        # (ampds.all_weather_recordings, 'ampd_weather'),
-        # (uci_gas.all_recordings, 'uci_gas'),
-        # (pamap.all_recordings, 'pamap'),
-        (msrc.all_recordings, 'msrc'),
-    ]
+    # write_normal_datasets = True
+    write_normal_datasets = False
+    write_ucr_datasets = True
+    # write_ucr_datasets = False
 
     STORAGE_ORDER = 'f'
+    STORAGE_ORDER = 'c'
 
-    for func, name in funcs_and_names:
-        recordings = func()
-        mat = mat_from_recordings(recordings)
-        for dtype in (np.uint8, np.uint16):
-            write_datasets(mat, name, dtype=dtype, order=STORAGE_ORDER)
+    # recordings = pamap.all_recordings()
+    # # print "pamap all recording shapes: ", ['foo' for r in recordings]
+    # print "pamap all recordings: ", list(recordings)
+    # print "pamap all recording shapes: ", [r.data.shape for r in recordings]
+    # return
 
-    # for dset in ucr.allUCRDatasets(): # TODO uncomment
-    for dset in ucr.origUCRDatasets():
-        mat = concat_and_interpolate(dset.X)
-        for dtype in (np.uint8, np.uint16):
-            write_datasets(mat, dset.name, dtype=dtype, order=STORAGE_ORDER, subdir='ucr')
+    if write_normal_datasets:
+        funcs_and_names = [
+            # (ampds.all_gas_recordings, 'ampd_gas'),
+            # (ampds.all_water_recordings, 'ampd_water'), # TODO get it working
+            # (ampds.all_power_recordings, 'ampd_power'),
+            (ampds.all_weather_recordings, 'ampd_weather'),
+            # (uci_gas.all_recordings, 'uci_gas'),
+            # (pamap.all_recordings, 'pamap'),
+            # (msrc.all_recordings, 'msrc'),
+        ]
+
+        for func, name in funcs_and_names:
+            recordings = func()
+            print "data shapes: ", [r.data.shape for r in recordings]
+            mat = mat_from_recordings(recordings)
+            write_dataset(mat, name, order=STORAGE_ORDER, subdir=name, verbose=2)
+
+    if write_ucr_datasets:
+        # i = 0 # TODO rm
+        # for dset in ucr.origUCRDatasets():
+        for dset in ucr.allUCRDatasets():
+            mat = concat_and_interpolate(dset.X)
+            dtype2path = write_dataset(mat, dset.name, order=STORAGE_ORDER,
+                                       subdir='ucr', verbose=2)
+
+            # # break
+            # if i == 2:
+            #     print "mat shape: ", mat.shape
+            #     mat_u8 = _quantize(mat, np.uint8).ravel()
+            #     mat_u16 = _quantize(mat, np.uint16).ravel()
+
+            #     # break
+
+            #     out_mat_u8 = np.fromfile(dtype2path[np.uint8], dtype=np.uint8)
+            #     out_mat_u16 = np.fromfile(dtype2path[np.uint16], dtype=np.uint16)
 
 
-    # import matplotlib.pyplot as plt
-    # plt.plot(mat, lw=.5)
-    # plt.show()
+            #     print "mat size: ", mat_u8.size
+            #     print "out_mat size: ", out_mat_u8.size
+            #     print "mat[:20]: ", mat_u8[100:120]
+            #     print "out_mat[:20]: ", out_mat_u8[100:120]
+
+            #     import matplotlib.pyplot as plt; i = 0 # TODO rm
+            #     _, axes = plt.subplots(2, 2, figsize=(8, 8))
+            #     length = 1500
+            #     axes[0, 0].plot(mat_u8[-length:])
+            #     axes[0, 1].plot(mat_u16[-length:])
+            #     axes[1, 0].plot(out_mat_u8[-length:])
+            #     axes[1, 1].plot(out_mat_u16[-length:])
+            #     plt.show()
+            #     break
+            # i += 1;
+
 
 if __name__ == '__main__':
+    _test_concat_and_interpolate()
     main()

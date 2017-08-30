@@ -8,7 +8,7 @@ from ..utils.files import basename
 from ..utils.arrays import downsampleMat, zNormalizeCols, zeroOneScaleMat
 from ..utils import sequence as seq
 
-memory = Memory('./')
+memory = Memory('./', verbose=1)
 
 # ================================================================
 # numeric consts
@@ -85,6 +85,7 @@ def _readtxt(path):
     return np.genfromtxt(path)
 
 
+@memory.cache
 def dfFromFileAtPath(path, missingDataVal, allColNames, keepColNames):
     # read in the data file and pull out the
     # columns with valid data (and also replace
@@ -143,6 +144,10 @@ def plotRecording(sampleTimes, data, boundaries, labelStrings,
 
 # ================================================================
 # recording class
+
+# @memory.cache
+# def _array_from_df(df, columns):
+    # return df.as_matrix(columns=columns)
 
 class Recording(object):
 

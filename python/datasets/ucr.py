@@ -43,7 +43,7 @@ SHORT_UCR_DATASETS = [  # as determined by instance length, not number thereof
 
 def allUCRDatasets():
     for dataDir in allUCRDatasetDirs():
-        yield UCRDataset(dataDir)
+        yield UCRDataset(dataDir, sep=',')
 
 
 def origUCRDatasets():
@@ -58,9 +58,9 @@ def smallUCRDatasets():
 
 class UCRDataset(object):
 
-    def __init__(self, datasetDir):
-        self.Xtrain, self.Ytrain = readUCRTrainData(datasetDir)
-        self.Xtest, self.Ytest = readUCRTestData(datasetDir)
+    def __init__(self, datasetDir, sep=None):
+        self.Xtrain, self.Ytrain = readUCRTrainData(datasetDir, sep=sep)
+        self.Xtest, self.Ytest = readUCRTestData(datasetDir, sep=sep)
         self.name = nameFromDir(datasetDir)
 
         self.X = np.r_[self.Xtrain, self.Xtest]
@@ -128,12 +128,12 @@ def _ucr_datasets_in_dir(dirpath):
 
 
 @_memory.cache
-def _readtxt(path):
-    return np.genfromtxt(path)
+def _readtxt(path, sep=None):
+    return np.genfromtxt(path, delimiter=sep)
 
 
-def readDataFile(path):
-    D = _readtxt(path)
+def readDataFile(path, sep=None):
+    D = _readtxt(path, sep=sep)
     labels = D[:, 0].astype(np.int)
     X = D[:, 1:]
     return (X, labels)
@@ -147,22 +147,22 @@ def dirFromName(datasetName):
     return os.path.join(paths.UCR, datasetName)
 
 
-def readUCRDataInDir(datasetDir, train):
+def readUCRDataInDir(datasetDir, train, sep=None):
     datasetName = nameFromDir(datasetDir)
     if train:
         fileName = datasetName + "_TRAIN"
     else:
         fileName = datasetName + "_TEST"
     filePath = os.path.join(datasetDir, fileName)
-    return readDataFile(filePath)
+    return readDataFile(filePath, sep=sep)
 
 
-def readUCRTrainData(datasetDir):
-    return readUCRDataInDir(datasetDir, train=True)
+def readUCRTrainData(datasetDir, sep=None):
+    return readUCRDataInDir(datasetDir, train=True, sep=sep)
 
 
-def readUCRTestData(datasetDir):
-    return readUCRDataInDir(datasetDir, train=False)
+def readUCRTestData(datasetDir, sep=None):
+    return readUCRDataInDir(datasetDir, train=False, sep=sep)
 
 
 # combines train and test data
