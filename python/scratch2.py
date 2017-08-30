@@ -10,7 +10,8 @@ import numpy as np
 
 # from .scratch1 import nbits_cost
 
-from .compress import nbits_cost
+from .compress import nbits_cost, zigzag_encode   # TODO rm this line
+from . import compress
 
 # from .datasets import ucr
 # from . import datasets as ds
@@ -43,6 +44,8 @@ from .compress import nbits_cost
 
 
 # Symbol = collections.namedtuple('Symbol', 'val count'.split())
+
+# ================================================================ SortTransform
 
 class Symbol(object):
     __slots__ = 'val count'.split()
@@ -170,7 +173,7 @@ class SortTransformer(object):
         return np.array([s.val for s in self.symbols])
 
 
-def sort_transform(blocks, nbits, prefix_nbits=-1,
+def sort_transform(blocks, nbits=16, prefix_nbits=-1,
                    # zigzag=True, sort_remainders=True):
                    zigzag=False,
                    # zigzag=True,
@@ -194,7 +197,7 @@ def sort_transform(blocks, nbits, prefix_nbits=-1,
     suffix_nbits = nbits - prefix_nbits
     max_trailing_val = max((1 << suffix_nbits) - 1, 0)
 
-    blocks = np.asarray(blocks)
+    blocks = np.asarray(blocks).astype(np.int32)
     out = np.empty(blocks.size, dtype=blocks.dtype)
 
     if zigzag:
@@ -226,17 +229,96 @@ def sort_transform(blocks, nbits, prefix_nbits=-1,
         except IndexError:  # happens when deltas overflow
             out[i] = (1 << (nbits - 1)) - 1
 
-    return out.reshape(blocks.shape)
+    out = out.reshape(blocks.shape)
+    # if zigzag:
+    return compress.zigzag_decode(out)  # always undo nonneg idx
+    # return out
 
 
-def zigzag_encode(x):
-    """
-    >>> [zigzag_encode(i) for i in [0,1,-1,2,-2,3,-3]]
-    [0, 1, 2, 3, 4, 5, 6]
-    """
-    x = np.asarray(x)
-    return (np.abs(x) << 1) - (x > 0).astype(np.int32)
+def sign_extend(value, nbits):
+    value = np.asarray(value)
+    sign_bit = 1 << (nbits - 1)
+    return np.bitwise_xor(value, sign_bit) - sign_bit
 
+
+def prefix_lut_transform(blocks, prefix_nbits=4):
+    assert prefix_nbits > 0
+
+    # let bmax = max nbits used by any block
+    # let counts = counts of each length prefix_nbits prefix, starting at bmax
+    # sort prefixes in descending order of frequency
+    # for each block
+    #   replace its prefix (again starting at bmax) with its sorted idx
+    #
+    # to reconstruct, we would always shift stuff so that bmax was msb, before
+    # right shifting to sign extend
+
+    costs = nbits_cost(blocks)
+    block_costs = np.max(costs, axis=1)
+    bmax = np.max(block_costs)
+    # ^ could just take max cost total; in practice, OR together the zigzag
+    # encoding of all the samples we ever see, then count leading 0s
+
+    bmin = max(0, bmax - prefix_nbits)
+    if bmin == bmax:
+        return blocks
+
+    blocks_flat = blocks.astype(np.int32).ravel()
+    prefixes = blocks_flat >> bmin
+
+    mask = (1 << prefix_nbits) - 1
+    prefixes = np.bitwise_and(prefixes, mask)
+    counts = np.bincount(prefixes)
+    print "prefix counts: ", counts
+
+    # this unpacks into prefixes and low bits, then reconstructs input
+    # ret = sign_extend(prefixes << bmin, bmax) # TODO rm
+    # low_bits = np.bitwise_and(blocks_flat, (1 << bmin) - 1)
+    # ret |= low_bits
+    # return ret.reshape(blocks.shape)
+
+    idxs = np.argsort(counts)
+    decode_lut = idxs[::-1]  # most common prefixes in decreasing order
+    encode_lut = np.zeros_like(decode_lut)
+    encode_lut[decode_lut] = np.arange(len(encode_lut))
+    # for i, idx in enumerate(decode_lut):
+    #     encode_lut[idx] = i
+
+    prefixes_enc = encode_lut[prefixes.ravel()]
+    print "encoded prefix counts: ", np.bincount(prefixes_enc)
+
+    assert prefix_nbits == 4  # XXX
+    convert_to_signed = [0, 15, 1, 14, 2, 13, 3, 12, 4, 11, 5, 10, 6, 9, 7, 8]
+    convert_to_signed = np.array(convert_to_signed)
+    prefixes_enc = convert_to_signed[prefixes_enc]
+
+    # print "signed encoded prefix counts: ", np.bincount(prefixes_enc)
+
+    low_bits = np.bitwise_and(blocks_flat, (1 << bmin) - 1)
+    # hack to deal with prefix swapping signs
+    actual_prefix_nbits = bmax - bmin
+    assert actual_prefix_nbits == 4
+    msbs_orig = prefixes >> (actual_prefix_nbits - 1)
+    msbs_new = prefixes_enc >> (actual_prefix_nbits - 1)
+    xor_indicators = (msbs_new != msbs_orig).astype(np.int32)
+    xor_masks = (xor_indicators << bmin) - xor_indicators
+    low_bits = np.bitwise_xor(low_bits, xor_masks)
+    # low_bits = 0 # TODO rm
+    # low_bits = np.bitwise_and(blocks.astype(np.int32).ravel(), (1 << bmin) - 1) # TODO rm
+
+    # print "xor indicators[50:55]", xor_indicators[50:70]
+    # print "xor masks[50:55]", xor_masks[50:70]
+    # print "number of sign changes: ", np.sum(xor_indicators)
+
+    ret = np.bitwise_or(low_bits, prefixes_enc << bmin)
+    return sign_extend(ret, bmax).reshape(blocks.shape)
+
+    # sneaky sign extension
+    # sign_bit = 1 << bmax
+    # return ret - np.bitwise_and(ret, sign_bit)
+
+
+# ================================================================ MixFix
 
 POWER_LAW_CODES_2 = np.array([
     '0',
@@ -587,15 +669,33 @@ def mixfix_cost(blocks, nbits):
     return out
 
 
+# ================================================================ fastpfor
+
+def fastpfor_encode(blocks, pfor_block_sz=128):
+    pass # TODO
+
+
+# ================================================================ main
+
+def main():
+    x = [3, -4, 0, 1, -2]
+    sort_transform(x, nbits=4)
+
+    x = [3, -4, 0, 1, -2]
+    sort_transform(x, nbits=4)
+
+    # x = np.array([0, -1, 1, -2, 2]).reshape((1, -1))
+    # mixfix_encode(x, nbits=4)
+
+    # yep, looks good
+    # print sign_extend([0, 0], 1)  # 0 0
+    # print sign_extend([1, 1], 1)  # -1 -1
+    # print sign_extend([1, 1], 2)  # 1 1
+    # print sign_extend([2, 1], 2)  # -2 1
+
+
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
 
-    x = [3, -4, 0, 1, -2]
-    sort_transform(x, nbits=4)
-
-    x = [3, -4, 0, 1, -2]
-    sort_transform(x, nbits=4)
-
-    x = np.array([0, -1, 1, -2, 2]).reshape((1, -1))
-    mixfix_encode(x, nbits=4)
+    main()

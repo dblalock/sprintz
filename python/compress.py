@@ -3,6 +3,8 @@
 import numpy as np
 
 
+# ================================================================ Funcs
+
 def nbits_cost(diffs, signed=True):
     """
     >>> [nbits_cost(i) for i in [0, 1, 2, 3, 4, 5, 7, 8, 9]]
@@ -39,6 +41,19 @@ def nbits_cost(diffs, signed=True):
     nbits[diffs == 0] = 0
 
     return nbits.reshape(shape) if nbits.size > 1 else nbits[0]  # unpack if scalar
+
+
+def zigzag_encode(x):
+    """
+    >>> [zigzag_encode(i) for i in [0,1,-1,2,-2,3,-3]]
+    [0, 1, 2, 3, 4, 5, 6]
+    """
+    x = np.asarray(x)
+    return (np.abs(x) << 1) - (x > 0).astype(np.int32)
+
+
+def zigzag_decode(x):
+    return np.bitwise_xor(x >> 1, -np.bitwise_and(x, 1))
 
 
 if __name__ == '__main__':

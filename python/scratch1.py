@@ -13,10 +13,11 @@ from .utils import files
 from .utils import sliding_window as window
 
 from . import compress
+from . import hashing
 from . import learning
 
 from .scratch2 import sort_transform, mixfix_encode, mixfix_cost, zigzag_encode
-
+from .scratch2 import prefix_lut_transform
 
 SAVE_DIR = 'figs/ucr/'
 
@@ -510,7 +511,8 @@ def convert_to_blocks(diffs):
     return blocks.reshape((-1, 8))
 
 
-def quantize(X, numbits, keep_nrows=100):
+def quantize(X, numbits, keep_nrows=-1):
+    keep_nrows = keep_nrows if keep_nrows > 0 else len(X)
     maxval = (1 << numbits) - 1
     X = X[:keep_nrows]
     X = X - np.min(X)
@@ -606,27 +608,57 @@ def inflection_encode(blocks):
     return blocks_out.reshape(shape)
 
 
+# def split_dyn_delta(blocks):
+#     blocks_diff = delta_encode(blocks)
+#     blocks_out = np.empty(blocks.shape)
+#     blocks_out[:, :4] = take_best_of_each([blocks[:, :4], blocks_diff[:, :4]])
+#     blocks_out[:, 4:] = take_best_of_each([blocks[:, 4:], blocks_diff[:, 4:]])
+#     return blocks_out
+
+
+# def split_dyn_filt(blocks):
+#     # blocks_out = np.empty(blocks.shape)
+#     # filters = learning.greedy_brute_filters(
+#         # blocks, block_sz=4, nfilters=4, nbits=4, verbose=2, step_sz=.25,
+#         # blocks, block_sz=4, nfilters=4, nbits=3, verbose=2, step_sz=.5,
+#         # loss='l2')
+#     shape = blocks.shape
+#     assert shape[1] == 8
+#     new_shape = (shape[0] * 2, shape[1] / 2)
+#     blocks_out = dyn_filt(blocks.reshape(new_shape), block_sz=4, nfilters=4)
+#     # blocks_out[:, :4] = dyn_filt(blocks[:, :4], filters=filters)
+#     # blocks_out[:, 4:] = dyn_filt(blocks[:, 4:], filters=filters)
+#     return blocks_out.reshape(shape)
+
+
 def take_best_of_each(blocks_list, loss='linf', axis=-1, return_counts=False):
     """for each row idx, takes the row from any matrix in blocks_list that has
     the smallest loss (max abs value by default)"""
     best_blocks = np.copy(blocks_list[0])
-    # best_costs = np.max(np.abs(best_blocks), axis=1)
-    best_costs = learning.compute_loss(best_blocks, loss=loss, axis=axis)
-    if return_counts:
-        counts = np.zeros(len(blocks_list), dtype=np.int32)
+
+    all_costs = [learning.compute_loss(blocks, loss=loss, axis=axis) for blocks in blocks_list]
+    best_costs = all_costs[0]
+    # best_costs = learning.compute_loss(best_blocks, loss=loss, axis=axis)
+    # if return_counts:
+        # counts = np.zeros(len(blocks_list), dtype=np.int32)
     for i, other_blocks in enumerate(blocks_list[1:]):
         # costs = np.max(np.abs(other_blocks), axis=1)
-        costs = learning.compute_loss(other_blocks, loss=loss, axis=axis)
+        # costs = learning.compute_loss(other_blocks, loss=loss, axis=axis)
+        costs = all_costs[i + 1]
         take_idxs = costs < best_costs
         best_costs = np.minimum(costs, best_costs)
         best_blocks[take_idxs] = other_blocks[take_idxs]
 
-        if return_counts:
-            counts[i + 1] = np.sum(take_idxs)
+        # if return_counts:
+        #     counts[i + 1] = np.sum(take_idxs)
 
     if return_counts:
-        counts[0] = len(best_blocks) - np.sum(counts)
+        all_costs = np.vstack(all_costs)
+        argmins = np.argmin(all_costs, axis=0)
+        counts = np.bincount(argmins)
         return best_blocks, counts
+        # counts[0] = len(best_blocks) - np.sum(counts)
+        # return best_blocks, counts
 
     return best_blocks
 
@@ -638,18 +670,28 @@ def delta_encode(blocks):
     return blocks_diff.reshape(blocks.shape)
 
 
-def encode_fir(blocks, filt):
-    """
-    Note that this includes the prefixes that aren't encoded (eg, first element,
-    and first two elements, in below examples)
+def dyn_delta_encode(blocks):
+    offsetBlocks = delta_encode(blocks)
+    return maybe_delta_encode(offsetBlocks)
 
-    >>> encode_fir([0,1,2,2,0,0], [1])  # delta coding
-    array([ 0,  1,  1,  0, -2,  0])
-    >>> encode_fir([0,1,2,2,0,0], [2, -1])  # double delta coding
-    array([ 0,  1,  0, -1, -2,  2])
-    """
+
+def encode_fir(blocks, filt):
+    # """
+    # Note that this includes the prefixes that aren't encoded (eg, first element,
+    # and first two elements, in below examples)
+
+    # >>> encode_fir([0,1,2,2,0,0], [1])  # delta coding
+    # array([ 0,  1,  1,  0, -2,  0])
+    # >>> encode_fir([0,1,2,2,0,0], [2, -1])  # double delta coding
+    # array([ 0,  1,  0, -1, -2,  2])
+    # >>> encode_fir([0,1,2,2,0,0], [1, 0])  # delta coding, longer filt
+    # array([ 0,  1,  1,  0, -2,  0])
+    # """
     # pretty sure this is equivalent to just convolving with [1, -filt]
+    print "convolving with filter: ", filt
+
     filt = np.asarray([0] + list(filt)).ravel()
+
     ret = np.array(blocks, dtype=filt.dtype)
     shape = ret.shape
     ret = ret.ravel()
@@ -659,31 +701,10 @@ def encode_fir(blocks, filt):
     return ret.reshape(shape)
 
 
-def possibly_delta_encode(blocks):
-    return take_best_of_each([blocks, delta_encode(blocks)])
-
-
-def split_dyn_delta(blocks):
-    blocks_diff = delta_encode(blocks)
-    blocks_out = np.empty(blocks.shape)
-    blocks_out[:, :4] = take_best_of_each([blocks[:, :4], blocks_diff[:, :4]])
-    blocks_out[:, 4:] = take_best_of_each([blocks[:, 4:], blocks_diff[:, 4:]])
-    return blocks_out
-
-
-def split_dyn_filt(blocks):
-    # blocks_out = np.empty(blocks.shape)
-    # filters = learning.greedy_brute_filters(
-        # blocks, block_sz=4, nfilters=4, nbits=4, verbose=2, step_sz=.25,
-        # blocks, block_sz=4, nfilters=4, nbits=3, verbose=2, step_sz=.5,
-        # loss='l2')
-    shape = blocks.shape
-    assert shape[1] == 8
-    new_shape = (shape[0] * 2, shape[1] / 2)
-    blocks_out = dyn_filt(blocks.reshape(new_shape), block_sz=4, nfilters=4)
-    # blocks_out[:, :4] = dyn_filt(blocks[:, :4], filters=filters)
-    # blocks_out[:, 4:] = dyn_filt(blocks[:, 4:], filters=filters)
-    return blocks_out.reshape(shape)
+def maybe_delta_encode(blocks):
+    ret, counts = take_best_of_each([blocks, delta_encode(blocks)], return_counts=True)
+    print "delta, delta-delta fracs: ", counts / float(counts.sum())
+    return ret
 
 
 def dyn_filt(blocks, filters=None, **learn_kwargs):
@@ -692,16 +713,21 @@ def dyn_filt(blocks, filters=None, **learn_kwargs):
     # filters = ([1], [2, -1])  # only delta and delta-delta; should match dyn_delta
     # filters = ([1, 0, 0, 0], [2, -1, 0, 0])  # only delta and delta-delta; should match dyn_delta
 
+    # print "initial blocks shape: ", blocks.shape
+
     if filters is None:
         # filters = learning.greedy_brute_filters(blocks, nfilters=2)
-        learn_kwargs.setdefault('block_sz', 8)
+        learn_kwargs.setdefault('block_sz', blocks.shape[1])
         # learn_kwargs.setdefault('nfilters', 16)
         learn_kwargs.setdefault('nfilters', 4)
         learn_kwargs.setdefault('nbits', 3)
         learn_kwargs.setdefault('verbose', 2)  # TODO change
         learn_kwargs.setdefault('step_sz', .5)
-        learn_kwargs.setdefault('loss', 'l1')
+        learn_kwargs.setdefault('loss', 'linf')
         filters = learning.greedy_brute_filters(blocks, **learn_kwargs)
+
+        # filters = filters[:2]  # TODO rm after debug
+        # filters[1, :] = 0
 
         # print "got filters:", filters[:, ::-1]
         # import sys; sys.exit()
@@ -734,14 +760,19 @@ def dyn_filt(blocks, filters=None, **learn_kwargs):
         ret = blocks.ravel() - ret
         return ret.reshape(blocks.shape)
 
+    # print "blocks shape: ", blocks.shape
+
     blocks_list = [encode_fir(blocks, filt) for filt in filters[:, ::-1]]
-    return take_best_of_each(blocks_list, loss='l2').astype(np.int32)
+    # return take_best_of_each(blocks_list, loss='l2').astype(np.int32)
     # return take_best_of_each(blocks_list, loss='linf').astype(np.int32)
 
-    # blocks, counts = take_best_of_each(
-    #     blocks_list, loss='l2', return_counts=True)
-    # print "  approx fraction each filter chosen:\n     ", counts / float(np.sum(counts))
-    # return blocks.astype(np.int32)
+    blocks, counts = take_best_of_each(
+        blocks_list, loss='linf', return_counts=True)
+    print "  fraction each filter chosen:\n     ", counts / float(np.sum(counts))
+
+    # print "final blocks shape: ", blocks.shape
+
+    return blocks.astype(np.int32)
 
 
 def name_transforms(transforms):
@@ -751,15 +782,15 @@ def name_transforms(transforms):
 
 
 def apply_transforms(X, blocks, transform_names, k=-1, side=None,
-                     chunk_sz=-1, **nn_kwargs):
+                     chunk_sz=-1, **kwargs):
     # diffs_is_cheating=True, k=-1, **nn_kwargs):
 
     # if diffs_is_cheating:
     #     # diffs = encode_fir(X, [1])
         # diffs = delta_encode(X)
 
-    k_left = nn_kwargs.get('k_left', 0)
-    k_right = nn_kwargs.get('k_right', 0)
+    k_left = kwargs.get('k_left', 0)
+    k_right = kwargs.get('k_right', 0)
     if side == 'left' and k_left > 0:
         k = k_left
     elif side == 'right' and k_right > 0:
@@ -771,6 +802,11 @@ def apply_transforms(X, blocks, transform_names, k=-1, side=None,
 
     while len(transform_names):
         name = transform_names[0]
+        if name is None:
+            transform_names = transform_names[1:]  # pop first transform
+            continue
+        if name is 'sub_mean':
+            offsetBlocks = offsetBlocks - np.mean(X)
 
         # first round of transforms; defines offsetBlocks var
         if name == 'delta':  # delta encode deltas
@@ -780,21 +816,22 @@ def apply_transforms(X, blocks, transform_names, k=-1, side=None,
             offsetBlocks = delta_encode(delta_encode(offsetBlocks))
 
         elif name == 'dyn_delta':  # pick delta or delta-delta
-            offsetBlocks = delta_encode(offsetBlocks)
-            offsetBlocks = possibly_delta_encode(offsetBlocks)
+            offsetBlocks = dyn_delta_encode(offsetBlocks)
+            # offsetBlocks = delta_encode(offsetBlocks)
+            # offsetBlocks = _delta_encode(offsetBlocks)
 
         elif name == 'maybe_delta':
-            offsetBlocks = possibly_delta_encode(offsetBlocks)
+            offsetBlocks = maybe_delta_encode(offsetBlocks)
 
-        elif name == 'split_dyn':
-            offsetBlocks = delta_encode(offsetBlocks)
-            offsetBlocks = split_dyn_delta(offsetBlocks)
+        # elif name == 'split_dyn':
+        #     offsetBlocks = delta_encode(offsetBlocks)
+        #     offsetBlocks = split_dyn_delta(offsetBlocks)
 
         elif name == 'dyn_filt':
-            offsetBlocks = dyn_filt(blocks)
+            offsetBlocks = dyn_filt(offsetBlocks)
 
-        elif name == 'split_dyn_filt':
-            offsetBlocks = split_dyn_filt(blocks)
+        # elif name == 'split_dyn_filt':
+        #     offsetBlocks = split_dyn_filt(blocks)
 
         if name == 'center':
             mins = np.min(offsetBlocks, axis=1)
@@ -807,7 +844,7 @@ def apply_transforms(X, blocks, transform_names, k=-1, side=None,
 
         if name == 'nn':
             print "actually doing nn encoding"
-            offsetBlocks = nn_encode(offsetBlocks, **nn_kwargs)
+            offsetBlocks = nn_encode(offsetBlocks, **kwargs)
 
         if name == 'avg':
             offsetBlocks2 = np.empty(offsetBlocks.shape, dtype=np.int32)
@@ -856,6 +893,15 @@ def apply_transforms(X, blocks, transform_names, k=-1, side=None,
             print "autocorr at true lag: ", corr_mat[0, 1]  # off diag
             x[lag:] = x[lag:] - x[:-lag]
             offsetBlocks = x.reshape(offsetBlocks.shape)
+
+        if name == 'hash':
+            offsetBlocks = hashing.hash_predict_transform(offsetBlocks)
+
+        if name == 'prefix_lut':
+            offsetBlocks = prefix_lut_transform(offsetBlocks)
+
+        if name == 'sort_transform':
+            offsetBlocks = sort_transform(offsetBlocks)
 
         transform_names = transform_names[1:]  # pop first transform
 
@@ -1211,13 +1257,18 @@ def main():
     # ------------------------ experimental params
 
     # left_transforms = None
-    left_transforms = 'delta'
+    # left_transforms = 'sub_mean'
+    # left_transforms = 'delta'
     # left_transforms = ['delta', 'blocklen=4']
-    # left_transforms = 'dyn_delta'
+    left_transforms = 'dyn_delta'
+    # left_transforms = ['dyn_delta', 'blocklen=4']
+    # left_transforms = ['blocklen=2', 'dyn_delta', 'blocklen=8']
+    # left_transforms = ['blocklen=4', 'dyn_delta', 'blocklen=8']
     # left_transforms = 'double_delta'  # delta encode deltas
     # left_transforms = ['dyn_delta', 'kmeans']
 
     # right_transforms = None
+    # right_transforms = 'delta'
     # right_transforms = 'nn'
     # right_transforms = 'nn7'
     # right_transforms = 'double_delta'  # delta encode deltas
@@ -1225,11 +1276,25 @@ def main():
     # right_transforms = 'dyn_delta'  # pick single or double delta for each block
     # right_transforms = 'dyn_filt'
     # right_transforms = 'VAR'
+    # right_transforms = 'hash'
     # right_transforms = ['delta', 'blocklen=32']
     # right_transforms = ['delta', 'blocklen=16']
     # right_transforms = ['delta', 'blocklen=4']
-    # right_transforms = ['delta', 'blocklen=2']
-    right_transforms = ['delta', 'autocoracle']
+    # right_transforms = ['delta', 'autocoracle']
+    # right_transforms = ['delta', 'blocklen=2', 'kmeans']
+    # right_transforms = ['delta', 'blocklen=2', 'online_kmeans']
+    # right_transforms = ['dyn_delta', 'blocklen=2', 'online_kmeans']
+    # right_transforms = ['dyn_delta', 'prefix_lut']
+    right_transforms = ['dyn_delta', 'sort_transform']
+    # right_transforms = ['prefix_lut', 'dyn_delta']
+    # right_transforms = ['dyn_delta', 'blocklen=4']
+    # right_transforms = ['dyn_delta', 'blocklen=4', 'online_kmeans']
+    # right_transforms = ['blocklen=4', 'dyn_filt']
+    # right_transforms = ['blocklen=1', 'dyn_delta']
+    # right_transforms = ['blocklen=2', 'dyn_delta', 'blocklen=8']
+    # right_transforms = ['blocklen=4', 'dyn_delta', 'blocklen=8']
+    # right_transforms = ['blocklen=16', 'dyn_delta', 'blocklen=8']
+    # right_transforms = ['blocklen=8', 'dyn_filt', 'blocklen=8']
     # right_transforms = ['autocoracle', 'delta']
     # right_transforms = ['nn', 'dyn_delta']
     # right_transforms = ['delta', 'nn']
@@ -1238,6 +1303,9 @@ def main():
     # right_transforms = ['dyn_delta', 'kmeans']
     # right_transforms = ['delta', 'online_kmeans']
     # right_transforms = ['dyn_delta', 'online_kmeans']
+    # right_transforms = ['dyn_delta', 'blocklen=4']
+    # right_transforms = ['dyn_delta', 'blocklen=2']
+    # right_transforms = ['dyn_delta', 'blocklen=16']
     # right_transforms = ['delta', 'nn']
     # right_transforms = ['nn']
     # right_transforms = ['delta', 'nn']
@@ -1274,8 +1342,8 @@ def main():
     invert_neighbors = False
     # invert_neighbors = True
 
-    nn_loss = 'l2'
-    # nn_loss = 'linf'
+    # nn_loss = 'l2'
+    nn_loss = 'linf'
 
     # mean_normalize = True
     mean_normalize = False
@@ -1299,10 +1367,11 @@ def main():
     k_left = -1
     k_right = -1
     # k = 4
+    # k = 8
     # k = 16
-    # k = 32
+    k = 32
     # k = 64
-    k = 128
+    # k = 128
     # k = 256
     # k = 1024
     # k_left = 256
@@ -1350,13 +1419,89 @@ def main():
 
     # ------------------------ main loop
 
-    # for i, d in enumerate(dsets):
+    # if False:
+    if True:
+        from .utils import distance as dist
+        from .utils import sliding_window as win
+        # k = 16
+        k = 128
+        n = 16
+        # n = 32
+        block_sz = 8
+        block_sz = 2
+
+        subdir = 'centroids'
+        if block_sz != 8:
+            subdir += '_blocksz={}'.format(block_sz)
+        subdir += '_k={}'.format(k)
+
+        # for d in list(dsets)[5:10]:
+        # for d in list(dsets)[26:27]:  # olive oil
+        # for d in list(dsets)[:5]:
+        # for d in list(dsets)[0:1]:
+        for d in list(dsets):
+            data = d.X
+            # print "X.shape", X.shape
+            data = quantize(data, numbits, keep_nrows=n)
+            # mats = (data, delta_encode(data))
+            blocks = convert_to_blocks(data)
+            rhs_data = dyn_delta_encode(blocks)
+            rhs_data = rhs_data.reshape(data.shape)
+            mats = (data, rhs_data)
+            names = ('raw', 'dyn deltas (zoomed)')
+            fig, all_axes = plt.subplots(3, 2, figsize=(11, 8))
+
+            for i, X in enumerate(mats):
+                name = names[i]
+                axes = all_axes[:, i]
+
+                # print "X.shape", X.shape
+                all_windows = [win.sliding_window_1D(ts, block_sz) for ts in X]
+                all_windows = np.vstack(all_windows)
+                # print "X.shape", X.shape
+                centroids, assigs = dist.kmeans(all_windows, k=k)
+
+                # print "all_windows min, max", np.min(all_windows), np.max(all_windows)
+                # print "centroids min, max", np.min(centroids), np.max(centroids)
+
+                axes[0].set_title(d.name + ' ' + name)
+                axes[1].set_title("{} kmeans centroids".format(k))
+                axes[0].plot(X.T, lw=1)
+                if block_sz > 2:
+                    axes[1].plot(centroids.T)
+                else:
+                    # sb.jointplot(centroids[:, 0], centroids[:, 1], ax=axes[1])
+                    x, y = centroids[:, 0], centroids[:, 1]
+                    axes[1].scatter(x, y)
+
+                    # fit with np.polyfit
+                    m, b = np.polyfit(x, y, 1)
+                    axes[1].plot(x, m*x + b, 'k--', lw=1)
+                    r = np.corrcoef(x, y)[0, 1]  # take off diag of corr mat
+                    axes[1].set_title(axes[1].get_title() + ' (r = {:.2f})'.format(r))
+
+                low, high = np.percentile(X, [1, 99])
+                axes[0].set_ylim((low, high))
+
+                X_log = np.log2(np.abs(X)) * np.sign(X)
+                # axes[2].plot(compress.nbits_cost(X[:8].T), lw=1)
+                axes[2].plot(X_log.T, lw=1)
+
+                plt.tight_layout()
+            save_current_plot(d.name, subdir=subdir)
+        # plt.show()
+        return
+
     # for d in dsets:
     # for d in list(dsets)[4:8]:
+    # for d in list(dsets)[26:27]:  # olive oil
+    # for d in list(dsets)[26:29]:
+    # for d in list(dsets)[20:21]: # ItalyPowerDemand
+    # for d in list(dsets)[12:13]:  # ECGFiveDays
     # for d in list(dsets)[:4]:
     # for d in list(dsets)[1:2]:  # adiac
-    # for d in list(dsets)[:25]:
-    for d in list(dsets)[26:27]:  # olive oil
+    # for d in list(dsets)[4:5]:  # ChlorineConcentration
+    for d in list(dsets)[:25]:
         print "------------------------ {}".format(d.name)
         plot_dset(d, numbits=numbits, n=n,
                   left_transforms=left_transforms,

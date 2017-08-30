@@ -215,10 +215,16 @@ def greedy_brute_filters(x, nfilters=16, ntaps=4, nbits=4, step_sz=.5,
     # filters = np.zeros((2, ntaps))
     filters = np.zeros((2, ntaps))
     # filters = np.zeros((3, ntaps))
-    # filters[0, -1] = 1  # delta encoding
-    # filters[1, -1], filters[1, -2] = 2, -1  # delta-delta encoding
+    # filters = np.zeros((4, ntaps))
+    filters[0, -1] = 1  # delta encoding
+    filters[1, -1], filters[1, -2] = 2, -1  # delta-delta encoding
     # filters[2, -1], filters[2, -2], filters[2, -3] = 2, -3, 1  # 3delta
-    filters[1, -1] = 1  # delta encoding as second thing (first thing all 0s)
+    # filters[2, -1], filters[2, -2], filters[2, -3] = .5, .5, 0  # lpf
+    # filters[3, -1], filters[3, -2], filters[2, -3] = 1, -1, 0  # alternating delta
+    # filters[1, -1] = 1  # delta encoding as second thing (first thing all 0s)
+
+    if len(filters) == nfilters:
+        return filters
 
     candidates = all_possible_filters(ntaps, nbits, step_sz)
 
@@ -321,7 +327,7 @@ def sub_kmeans(blocks, k=16, verbose=1):
     centroids, assigs = dist.kmeans(blocks, k=k)
     centroids = centroids.astype(np.int32)
     assert len(blocks) == len(assigs)
-    print "kmeans avg bin size: {:.3f}".format(len(block) / float(k))
+    print "kmeans avg bin size: {:.3f}".format(len(blocks) / float(k))
     print "kmeans bincounts: ", np.bincount(assigs)
     # all_rows = np.arange(len(assigs))
     # centroids[:] = 0 # TODO rm
@@ -350,10 +356,10 @@ def _sum_of_squares(x):
 class KmeansCompressor(object):
     __slots__ = 'it k centroids shift_amt maxpool_phase counts optional'.split()
 
-    # def __init__(self, block_len=8, k=16, shift_amt=3, maxpool_phase=False):
-    def __init__(self, block_len=8, k=16, shift_amt=3, maxpool_phase=True, optional=True):
+    # def __init__(self, block_sz=8, k=16, shift_amt=3, maxpool_phase=False):
+    def __init__(self, block_sz=8, k=16, shift_amt=3, maxpool_phase=True, optional=True):
         self.k = k
-        self.centroids = np.empty((k, block_len), dtype=np.int32)
+        self.centroids = np.empty((k, block_sz), dtype=np.int32)
         self.centroids[0, :] = 0
         self.it = 0
         self.shift_amt = shift_amt
@@ -370,7 +376,7 @@ class KmeansCompressor(object):
 
         self.it += 1  # increment at top because centroid 0 is reserved
 
-        block_len = len(block)
+        block_sz = len(block)
         ncentriods = min(self.it, self.k)
 
         if self.it % 100 == 1:
@@ -454,12 +460,12 @@ class KmeansCompressor(object):
             # SELF: pick up here
 
 
-        return out_block, idx * block_len + rotation if self.maxpool_phase else idx
+        return out_block, idx * block_sz + rotation if self.maxpool_phase else idx
 
 
 def sub_online_kmeans(blocks, k=16, verbose=1, **kwargs):
     blocks = blocks.astype(np.int64)
-    encoder = KmeansCompressor(k=k)
+    encoder = KmeansCompressor(k=k, block_sz=blocks.shape[1])
     out = np.empty(blocks.shape, dtype=np.int32)
     for i, block in enumerate(blocks):
         out[i], _ = encoder.feed_block(block)
