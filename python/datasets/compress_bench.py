@@ -61,33 +61,48 @@ def _ensure_list_or_tuple(x):
 
 
 def write_dataset(mat, name, dtypes=(np.uint8, np.uint16),
-                   order='c', subdir='', verbose=2):
+                   order='c', delta_encode=False, subdir='', verbose=2):
     dtypes = _ensure_list_or_tuple(dtypes)
 
     dtype_names = {np.uint8: 'uint8', np.uint16: 'uint16'}
+    dtype_names = {np.uint8: 'uint8', np.uint16: 'uint16',
+                   np.int8: 'int8', np.int16: 'int16'}
+    utype_to_stype = {np.uint8: np.int8, np.uint16: np.int16}
     order_to_dir = {'c': paths.COMPRESSION_ROWMAJOR_DIR,
                     'f': paths.COMPRESSION_COLMAJOR_DIR}
 
     if verbose > 1:
-        print "mat[:20]: ", mat[:20]
+        print "mat[:10]: ", mat[:10]
+
+    # quantize_axis = 0
+    # if order == 'f':
+    #     mat = np.ascontiguousarray(mat.T)  # tofile always writes in C order
+    #     quantize_axis = 1
+    #     if verbose > 1:
+    #         print "colmajor mat[:20]: ", mat[:20]
 
     out_paths = []
-    quantize_axis = 0
-    if order == 'f':
-        mat = np.ascontiguousarray(mat.T)  # tofile always writes in C order
-        quantize_axis = 1
-        if verbose > 1:
-            print "colmajor mat[:20]: ", mat[:20]
-
     for dtype in dtypes:
-        store_mat = _quantize(mat, dtype=dtype, axis=quantize_axis)
+        store_mat = _quantize(mat, dtype=dtype)
+
+        if delta_encode:  # NOTE: this ignores overflows
+            store_mat = store_mat.astype(np.int32)
+            store_mat[1:, :] = store_mat[1:, :] - store_mat[:-1, :]
+            dtype = utype_to_stype[dtype]
+            store_mat = store_mat.astype(dtype)
 
         base_savedir = order_to_dir[order]
-        savedir = os.path.join(base_savedir, dtype_names[dtype])
+        child_dir = dtype_names[dtype]
+        if delta_encode:
+            child_dir += '_deltas'
+        savedir = os.path.join(base_savedir, child_dir)
         if subdir:
             savedir = os.path.join(savedir, subdir)
         ensure_dir_exists(savedir)
         path = os.path.join(savedir, name + '.dat')
+
+        if order == 'f':
+            store_mat = np.ascontiguousarray(store_mat.T)  # tofile always writes in C order
         store_mat.tofile(path)
         out_paths.append(path)
 
@@ -96,26 +111,29 @@ def write_dataset(mat, name, dtypes=(np.uint8, np.uint16),
 
         load_mat = np.fromfile(path, dtype=dtype)
 
-        if verbose > 1:
-            print "stored mat shape: ", load_mat.shape
-            print "stored mat[:20]: ", store_mat[:20]
-            print "loaded mat[:20]: ", load_mat[:20]
+        # if verbose > 1:
+        #     print "stored mat shape: ", load_mat.shape
+        #     print "stored mat[:10]: ", store_mat[:10]
+        #     print "loaded mat[:10]: ", load_mat[:10]
 
         assert np.array_equal(store_mat.ravel(), load_mat.ravel())
 
-        import matplotlib.pyplot as plt
-        _, axes = plt.subplots(2, 2, figsize=(10, 7))
-        if order == 'f':
-            length = 5000
-            axes[0, 0].plot(store_mat[0, :length], lw=.5)
-            axes[0, 1].plot(store_mat[-1, -length:], lw=.5)
-        else:
-            length = 2000
-            axes[0, 0].plot(store_mat.ravel()[:length], lw=.5)
-            axes[0, 1].plot(store_mat.ravel()[-length:], lw=.5)
-        axes[1, 0].plot(load_mat[:length], lw=.5)
-        axes[1, 1].plot(load_mat[-length:], lw=.5)
-        plt.show()  # upper and lower plots should be identical
+        if verbose > 1:
+            import matplotlib.pyplot as plt
+            _, axes = plt.subplots(2, 2, figsize=(10, 7))
+            if order == 'f':
+                length = 5000
+                axes[0, 0].plot(store_mat[0, :length], lw=.5)
+                axes[0, 1].plot(store_mat[-1, -length:], lw=.5)
+            else:
+                length = 2000
+                axes[0, 0].plot(store_mat.ravel()[:length], lw=.5)
+                axes[0, 1].plot(store_mat.ravel()[-length:], lw=.5)
+            axes[1, 0].plot(load_mat[:length], lw=.5)
+            axes[1, 1].plot(load_mat[-length:], lw=.5)
+            # for ax in axes.ravel():
+            #     ax.set_ylim([0, 255 if dtype == np.uint8 else 65535])
+            plt.show()  # upper and lower plots should be identical
 
     return dict(zip(dtypes, out_paths))
 
@@ -211,27 +229,24 @@ def mat_from_recordings(recs):
 
 def main():
 
-    # write_normal_datasets = True
     write_normal_datasets = False
-    write_ucr_datasets = True
-    # write_ucr_datasets = False
+    write_ucr_datasets = False
+    write_normal_datasets = True
+    # write_ucr_datasets = True
+
+    delta_encode = False
+    delta_encode = True
 
     STORAGE_ORDER = 'f'
-    STORAGE_ORDER = 'c'
-
-    # recordings = pamap.all_recordings()
-    # # print "pamap all recording shapes: ", ['foo' for r in recordings]
-    # print "pamap all recordings: ", list(recordings)
-    # print "pamap all recording shapes: ", [r.data.shape for r in recordings]
-    # return
+    # STORAGE_ORDER = 'c'
 
     if write_normal_datasets:
         funcs_and_names = [
-            # (ampds.all_gas_recordings, 'ampd_gas'),
-            # (ampds.all_water_recordings, 'ampd_water'), # TODO get it working
-            # (ampds.all_power_recordings, 'ampd_power'),
-            (ampds.all_weather_recordings, 'ampd_weather'),
-            # (uci_gas.all_recordings, 'uci_gas'),
+            (ampds.all_gas_recordings, 'ampd_gas'),
+            (ampds.all_water_recordings, 'ampd_water'),
+            (ampds.all_power_recordings, 'ampd_power'),
+            # (ampds.all_weather_recordings, 'ampd_weather'),
+            (uci_gas.all_recordings, 'uci_gas'),
             # (pamap.all_recordings, 'pamap'),
             # (msrc.all_recordings, 'msrc'),
         ]
@@ -240,15 +255,18 @@ def main():
             recordings = func()
             print "data shapes: ", [r.data.shape for r in recordings]
             mat = mat_from_recordings(recordings)
-            write_dataset(mat, name, order=STORAGE_ORDER, subdir=name, verbose=2)
+            write_dataset(mat, name, order=STORAGE_ORDER, subdir=name,
+                          delta_encode=delta_encode)
 
     if write_ucr_datasets:
         # i = 0 # TODO rm
         # for dset in ucr.origUCRDatasets():
+        # for dset in list(ucr.allUCRDatasets())[:2]:
         for dset in ucr.allUCRDatasets():
             mat = concat_and_interpolate(dset.X)
             dtype2path = write_dataset(mat, dset.name, order=STORAGE_ORDER,
-                                       subdir='ucr', verbose=2)
+                                       subdir='ucr', delta_encode=delta_encode,
+                                       verbose=1)
 
             # # break
             # if i == 2:

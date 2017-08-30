@@ -123,6 +123,11 @@ def read_data_file(dataFile):
 
 
 @_memory.cache
+def _create_recording(*args, **kwargs):
+    return Recording(*args, **kwargs)
+
+
+@_memory.cache
 def all_recordings(idxs=None):
     dataFiles, tagFiles = all_file_names()
     recs = []
@@ -130,9 +135,9 @@ def all_recordings(idxs=None):
         idxs = range(len(dataFiles))
     for i in idxs:
         try:
-            r = Recording(dataFiles[i], tagFiles[i], recID=i)
+            # r = Recording(dataFiles[i], tagFiles[i], recID=i)
+            r = _create_recording(dataFiles[i], tagFiles[i], recID=i)
             recs.append(r)
-            # yield r
         except IndexError:  # empty or all 0s file -> IndexError
             print("skipping broken recording #{}".format(i))
             continue
