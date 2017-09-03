@@ -90,6 +90,34 @@ static inline void print(const char* str) {
 }
 #endif
 
+template<class T> // dumps the bits in logical order (ie, msb always first)
+inline void dumpBits(T x, bool newline=true) {
+	// for (int i = 0; i < sizeof(x) ; i++) {
+	for (int i = sizeof(x) - 1; i >= 0 ; i--) {
+		std::cout << " ";
+		for (int j = 7; j >= 0; j--) {
+			uint64_t mask = ((uint64_t)1) << (8*i + j);
+			uint64_t masked = mask & x;
+			std::cout << (bool)masked;
+		}
+	}
+	if (newline) { std::cout << "\n"; }
+}
+
+template<class T> // dumps the raw bits in memory order
+inline void dumpEndianBits(T x, bool newline=true) {
+	const uint8_t* ptr = reinterpret_cast<const uint8_t*>(&x);
+	for (int i = 0; i < sizeof(x); i++) {
+		std::cout << " ";
+		const uint8_t byte = *(ptr + i);
+		for (int j = 0; j < 8; j++) {
+			uint64_t mask = ((uint8_t)1) << j;
+			uint64_t masked = mask & byte;
+			std::cout << (bool)masked;
+		}
+	}
+	if (newline) { std::cout << "\n"; }
+}
 
 
 #endif
