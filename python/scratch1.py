@@ -8,7 +8,8 @@ import numpy as np
 import seaborn as sb
 
 # from .datasets import ucr
-from . import datasets as ds
+# from . import datasets as ds
+from .datasets import ucr
 from .utils import files
 from .utils import sliding_window as window
 
@@ -1274,7 +1275,7 @@ def main():
     # right_transforms = 'double_delta'  # delta encode deltas
     # right_transforms = '1.5_delta'  # sub half of prev delta from each delta
     # right_transforms = 'dyn_delta'  # pick single or double delta for each block
-    # right_transforms = 'dyn_filt'
+    right_transforms = 'dyn_filt'
     # right_transforms = 'VAR'
     # right_transforms = 'hash'
     # right_transforms = ['delta', 'blocklen=32']
@@ -1285,7 +1286,7 @@ def main():
     # right_transforms = ['delta', 'blocklen=2', 'online_kmeans']
     # right_transforms = ['dyn_delta', 'blocklen=2', 'online_kmeans']
     # right_transforms = ['dyn_delta', 'prefix_lut']
-    right_transforms = ['dyn_delta', 'sort_transform']
+    # right_transforms = ['dyn_delta', 'sort_transform']
     # right_transforms = ['prefix_lut', 'dyn_delta']
     # right_transforms = ['dyn_delta', 'blocklen=4']
     # right_transforms = ['dyn_delta', 'blocklen=4', 'online_kmeans']
@@ -1389,7 +1390,7 @@ def main():
     #   -actually, prolly bake this into nbits_cost cuz otherwise leading 0s
     #   and more than one leading 1 will make it underestimate costs
 
-    dsets = ds.smallUCRDatasets() if small else ds.origUCRDatasets()
+    dsets = ucr.smallUCRDatasets() if small else ucr.origUCRDatasets()
 
     # ------------------------ name output dir based on params
     suffix = ""
@@ -1419,8 +1420,8 @@ def main():
 
     # ------------------------ main loop
 
-    # if False:
-    if True:
+    # if True:
+    if False:
         from .utils import distance as dist
         from .utils import sliding_window as win
         # k = 16
@@ -1450,6 +1451,8 @@ def main():
             mats = (data, rhs_data)
             names = ('raw', 'dyn deltas (zoomed)')
             fig, all_axes = plt.subplots(3, 2, figsize=(11, 8))
+
+            print "---- ", d.name
 
             for i, X in enumerate(mats):
                 name = names[i]

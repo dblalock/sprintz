@@ -47,8 +47,10 @@ def zigzag_encode(x):
     """
     >>> [zigzag_encode(i) for i in [0,1,-1,2,-2,3,-3]]
     [0, 1, 2, 3, 4, 5, 6]
+    >>> zigzag_encode([0,1,-1,2,-2,3,-3])
+    array([0, 1, 2, 3, 4, 5, 6], dtype=int32)
     """
-    x = np.asarray(x)
+    x = np.asarray(x, dtype=np.int32)
     return (np.abs(x) << 1) - (x > 0).astype(np.int32)
 
 

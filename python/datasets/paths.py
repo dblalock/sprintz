@@ -4,11 +4,9 @@ import os
 
 DATASETS_DIR = os.path.expanduser("~/Desktop/datasets/")
 
-j = os.path.join     # abbreviation
-
 
 def to_path(*args):
-    return j(DATASETS_DIR, *args)
+    return os.path.join(DATASETS_DIR, *args)
 
 
 # straightforward datasets
