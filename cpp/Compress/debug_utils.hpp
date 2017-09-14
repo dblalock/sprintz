@@ -119,5 +119,17 @@ inline void dumpEndianBits(T x, bool newline=true) {
 	if (newline) { std::cout << "\n"; }
 }
 
+#ifdef __AVX__
+#include <immintrin.h>
+
+inline void dump_m128i(const __m128i& v, bool newline=true) {
+	for (int i = 0; i < 2; i++) {
+		dumpEndianBits(_mm_extract_epi64(v, i), false);
+        std::cout << "  ";
+	}
+    if (newline) { std::cout << "\n"; }
+}
+
+#endif
 
 #endif

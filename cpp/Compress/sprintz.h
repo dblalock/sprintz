@@ -23,10 +23,29 @@
 #endif
 
 #ifdef USE_X86_INTRINSICS
-    // #include "immintrin.h"
-    #include "xmmintrin.h" // for _mm_movemask_pi8
+     #include "immintrin.h"
+    #include "emmintrin.h"  // for _mm_set1_epi16
+    #include "smmintrin.h"  // for _mm_minpos_epu16
+//    #include "xmmintrin.h" // for _mm_movemask_pi8
 #endif
 
+#define max(x, y) ( ((x) > (y)) ? (x) : (y) )
+#define min(x, y) ( ((x) < (y)) ? (x) : (y) )
+
+static const uint8_t _NBITS_COST_I8[256] = {
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7, 7,
+    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+    7, 7, 7, 7, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5,
+    5, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 2, 1, 0, 2, 3, 3, 4, 4, 4, 4, 5, 5,
+    5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7,
+    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+    7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8};
+static const uint8_t* NBITS_COST_I8 = _NBITS_COST_I8 + 128; // so offsets can be signed
 
 uint16_t compressed_size_bound(uint16_t in_sz) {
     return (in_sz * 9) / 8 + 9; // at worst, all literals
@@ -98,7 +117,7 @@ uint16_t decompress8b_naiveDelta(const int8_t* src, uint16_t in_sz,
 
 
 #define _TILE_BYTE(byte)                                                    \
-    (byte << 0 | byte << 8 | byte << 16 | byte << 24 |                        \
+    (byte << 0 | byte << 8 | byte << 16 | byte << 24 |                      \
     byte << 32 | byte << 40 | byte << 48 | byte << 56)
 
 #define TILE_BYTE(byte) _TILE_BYTE(((uint64_t)byte))
@@ -166,13 +185,9 @@ uint64_t decompress8b_bitpack(const uint8_t* src, uint64_t in_sz, uint8_t* dest,
     uint8_t* orig_dest = dest;
     uint64_t mask = kBitpackMasks[nbits];
 
-    // TODO try packing into simd reg to minimize number of stores; also
-    // consider repeating this loop for each value of nbits because it
-    // isn't actually making the unrolled offsets to src be immediates
-    //
+
     // TODO if more complicated stuff doesn't help (which it doesn't look
     // like it's going to), revert to simplest impl
-
 
 #define MAIN_LOOP(nbits)                                                        \
     for (uint64_t g = 0; g < ngroups; g++) {                                    \
@@ -237,140 +252,152 @@ uint64_t decompress8b_bitpack(const uint8_t* src, uint64_t in_sz, uint8_t* dest,
     return dest - orig_dest;
 }
 
-// ------------------------------------------------ just bit shuffling
+// ------------------------------------------------ Sprintz Low Latency
 
-// see
-//  -https://github.com/kiyo-masui/bitshuffle/blob/master/src/bitshuffle_core.c
-//  -http://www.hackersdelight.org/hdcodetxt/transpose8.c.txt
+uint8_t needed_nbits_epi16x8_v1(__m128i v) {
+    // TODO even faster to zigzag and sub fromm 255 16 at once, then minpos
+    // on each half
 
-/* Transpose 8x8 bit array packed into a single quadword *x*.
- * *t* is workspace. */
-#define TRANS_BIT_8X8_64_LE(x, t) {                                               \
-        t = (x ^ (x >> 7)) & 0x00AA00AA00AA00AALL;                          \
-        x = x ^ t ^ (t << 7);                                               \
-        t = (x ^ (x >> 14)) & 0x0000CCCC0000CCCCLL;                         \
-        x = x ^ t ^ (t << 14);                                              \
-        t = (x ^ (x >> 28)) & 0x00000000F0F0F0F0LL;                         \
-        x = x ^ t ^ (t << 28);                                              \
+    static const __m128i max_vals = _mm_set1_epi16(0xffff);
+
+    // zigzag encode
+    v = _mm_xor_si128(_mm_srai_epi16(v, 15), _mm_slli_epi16(v, 1));
+    // quasi-zigzag encode; lsb is wrong, but doesn't matter
+    // v = _mm_xor_epi16(_mm128_srai_epi16(v, 15), _mm_slli_epi16(v, 1));
+
+    __m128i subbed = _mm_subs_epu16(max_vals, v); // turn max value into min value
+
+    // extract minimum value
+    __m128i minval_and_idx = _mm_minpos_epu16(subbed);
+    uint16_t minval = (uint16_t) _mm_extract_epi16(minval_and_idx, 0);
+    // uint16_t idx = (uint16_t) _mm_extract_epi16(minval_and_idx, 1);
+    uint16_t maxval = 0xffff - minval;
+
+    return maxval ? _bit_scan_reverse(maxval) + 1 : 0; // bsr undefined if input all 0s
+}
+
+uint8_t needed_nbits_epi16x8(__m128i v) {
+    int all_zeros = _mm_test_all_zeros(v, v);
+    if (all_zeros) { return 0; }
+
+    // printf("input vector:\n");
+    // dump_m128i(v);
+
+    // get everything negative
+    __m128i all_ones = _mm_cmpeq_epi16(v, v);
+    v = _mm_xor_si128(v, _mm_cmpgt_epi16(v, all_ones));
+
+    // invert and extract minimum value; now has a leading 0
+    __m128i minval_and_idx = _mm_minpos_epu16(v);
+    __m128i neg_minval_etc = _mm_xor_si128(minval_and_idx, all_ones);
+
+    // this version uses andn to omit the above xor and mask upper 2B of u32
+    uint16_t maxval = (uint16_t) _mm_extract_epi16(neg_minval_etc, 0);
+    return 33 - __builtin_clz((uint32_t)maxval); // 33 because treats as uint32
+
+    // this version has to do the xor, but doesn't have to andn
+//    uint32_t maxval = (uint32_t) _mm_extract_epi32(neg_minval_etc, 0);
+//    maxval = (maxval << 16) | (maxval >> 16); // compiles to ROL or ROR
+//    return 17 - __builtin_clz(maxval);
+
+//    printf("maxval = %d, minpos = %d\n", (maxval << 16) >> 16, _mm_extract_epi32(minval_and_idx, 1));
+//    dumpEndianBits(maxval);
+//    printf("maxval << 16:\n");
+//    dumpEndianBits(maxval << 16);
+//    printf("nlz: %d\n", __builtin_clz(maxval << 16));
+
+    // rotate bits left by 16; we don't just shift so that bit 15 is
+    // guaranteed to be a 1, and we therefore don't fail when maxval == 0
+//    __asm__ ("roll %1, %0" : "+g" (maxval) : "cI" ((uint8_t)16));
+//    __asm__ ("roll $16, %0" : "+g" (maxval));
+//    maxval = (maxval << 16) | (maxval >> 16); // compiles to ROL or ROR
+
+//    printf("maxval rotated:\n");
+//    dumpEndianBits(maxval);
+
+//    return 17 - __builtin_clz(maxval);
+}
+
+uint8_t needed_nbits_epi8x8(__m128i v) {
+    return needed_nbits_epi16x8(_mm_cvtepi8_epi16(v));
+
+    // unpack low half of v into epi16s and use epi16 func
+    // v = _mm_unpacklo_epi8(v, _mm_xor_si128(v, v));
+    // v = _mm_unpacklo_epi8(_mm_xor_si128(v, v), v);
+    // uint8_t nbits_16 = needed_nbits_epi16x8(v)
+    // return max(0, ((int8_t)nbits_16) - 8);
+}
+
+uint8_t needed_nbits_i16x8(int16_t* x) {
+    // printf("bits, treating it as int array:\n");
+    // for (int i = 0; i < 8; i++) {
+    //     printf("%d: ", x[i]);
+    //     dumpEndianBits(x[i]);
+    // }
+
+    __m128i v = _mm_loadu_si128((__m128i*)x);
+    // printf("bits right after loading input:\n");
+    // dump_m128i(v);
+    return needed_nbits_epi16x8(v);
+}
+
+uint8_t needed_nbits_i8x8(int8_t* x) {
+    __m128i v = _mm_loadu_si128((__m128i*)x);
+    return needed_nbits_epi8x8(v);
+}
+
+uint8_t needed_nbits_i8x8_simple(int8_t* x) {
+    uint8_t max_nbits = NBITS_COST_I8[*x];
+    int8_t* end = x + 8;
+    ++x;
+    for ( ; x < end; ++x) {
+        max_nbits = max(max_nbits, NBITS_COST_I8[*x]);
+    }
+    return max_nbits;
+}
+uint8_t needed_nbits_i16x8_simple(int16_t* x) {
+    int16_t val = *x;
+    bool all_zeros = val == 0;
+
+    // printf("val, xord val:\n");
+    // dumpBits(val);
+    val ^= val >> 15;  // flip bits if negative
+    // dumpBits(val);
+
+    uint8_t min_nlz = __builtin_clz(val);
+    int16_t* end = x + 8;
+    x++;
+    for ( ; x < end; ++x) {
+        val = *x;
+        all_zeros &= val == 0;
+        val ^= val >> 15;
+        min_nlz = min(min_nlz, __builtin_clz(val));
+    }
+    return all_zeros ? 0: 33 - min_nlz;
+}
+
+uint64_t sprintz_ll_compress_8b(const uint8_t* src, uint64_t in_sz, uint8_t* dest,
+    uint8_t nbits)
+{
+    static const int block_sz = 8;
+    // static const int group_sz = 4;
+    assert(in_sz % block_sz == 0);
+    uint64_t nblocks = in_sz / block_sz;
+
+    uint8_t* orig_dest = dest;
+    uint64_t mask = kBitpackMasks[nbits];
+    // dest[0] = nbits;
+
+    for (uint64_t b = 0; b < nblocks; b++) {
+
     }
 
-// /* Transpose 8x8 bit array along the diagonal from upper right
-//    to lower left */
-// #define TRANS_BIT_8X8_64_BE(x, t) {                                            \
-//         t = (x ^ (x >> 9)) & 0x0055005500550055LL;                          \
-//         x = x ^ t ^ (t << 9);                                               \
-//         t = (x ^ (x >> 18)) & 0x0000333300003333LL;                         \
-//         x = x ^ t ^ (t << 18);                                              \
-//         t = (x ^ (x >> 36)) & 0x000000000F0F0F0FLL;                         \
-//         x = x ^ t ^ (t << 36);                                              \
-//     }
-//
-//uint16_t compress8b_bitshuf_8b(const uint8_t* src, uint16_t in_sz,
-//    int8_t* dest, uint8_t nbits)
-//{
-//    assert(in_sz % 8 == 0);
-//    auto nblocks = in_sz / 8;
-//    static const int nbits = 8;
-//    for (uint16_t b = 0; b < nblocks; b++) {
-//        // for (uint8_t i = 0; i < 8; i++) { // will be needed for nbits < 8
-//            // dest[i] = 0;
-//        // }
-//        // TODO version that uses 64bit ops instead of 8b ops
-//        // for (uint8_t i = nbits - 1; i >= 0; i--) { // note descending order
-//        for (uint8_t bit = nbits - 1; bit >= 0; bit--) { // descending order
-//            uint8_t mask = 1 << bit;
-//            *dest = (src[0] & mask) >> bit | (src[1] & mask) >> bit |
-//                    (src[2] & mask) >> bit | (src[3] & mask) >> bit |
-//                    (src[4] & mask) >> bit | (src[5] & mask) >> bit |
-//                    (src[6] & mask) >> bit | (src[7] & mask) >> bit;
-//            dest++;
-//        }
-//        dest += 8;
-//    }
-//}
-//uint16_t compress8b_bitshuf_sse(const uint8_t* src, uint16_t in_sz,
-//    int8_t* dest, uint8_t nbits)
-//{
-//    assert(in_sz % 8 == 0);
-//    auto nblocks = in_sz / 8;
-//    static const int nbits = 8;
-//    for (uint16_t b = 0; b < nblocks; b++) {
-//
-//// #if defined(SSE2) // needs to also imply 64_BIT is defined
-//        uint64_t src64 = *(uint64_t*)&src;
-//        const uint64_t low_bits64 = 0x0101010101010101LL;
-//
-//        // TODO replace loop with switch that jumps based on nbits
-//
-//        for (uint8_t bit = nbits - 1; bit >= 0; bit--) { // descending order
-//            uint64_t mask = low_bits64 << bit;
-//            auto tmp = (src64 ^ mask) << (7 - bit); // store in MSBs
-//            *dest = (uint8_t) _mm_movemask_pi8(tmp);
-//            dest++;
-//        }
-//        dest += 8;
-//    }
-//}
-//
-//uint16_t compress8b_bitshuf_64(const uint8_t* src, uint16_t in_sz,
-//    int8_t* dest, uint8_t nbits)
-//{
-//    assert(in_sz % 8 == 0);
-//    auto nblocks = in_sz / 8;
-//    uint8_t max_bit = (nbits - 1) & 0x07;
-//
-//    // uint64_t e = 1;
-//    // const int little_endian = *((uint8_t *) &e) == 1;
-//
-//    for (uint16_t b = 0; b < nblocks; b++) {
-//
-//#ifdef HAS_UNALIGNED_LOADS
-//        uint64_t src64 = *(uint64_t*)&src;
-//#else
-//        uint64_t src64;
-//        for (int i = 0; i < 8; i++) {
-//            src64 = (src64 << 8) | src[i];
-//        }
-//#endif
-//        uint64_t tmp64;
-//        TRANS_BIT_8X8_64_LE(src64, tmp64);
-//
-//        for (uint8_t bit = nbits - 1; bit >= 0; bit--) { // descending order
-//            uint64_t mask = low_bits64 << bit;
-//
-//
-//            // auto tmp = (src64 ^ mask) >> bit; // store in LSBs to save a shift
-//            // *dest = (int8_t) (tmp >> 0  | tmp >> 7  | tmp >> 14 | tmp >> 21 |
-//            //                   tmp >> 28 | tmp >> 35 | tmp >> 42 | tmp >> 49);
-//            dest++;
-//        }
-//        dest += 8;
-//    }
-//}
-//
-//uint16_t compress8b_bitshuf_8b(const uint8_t* src, uint16_t in_sz,
-//    int8_t* dest, uint8_t nbits)
-//{
-//    assert(in_sz % 8 == 0);
-//    auto nblocks = in_sz / 8;
-//    uint8_t max_bit = (nbits - 1) & 0x07;
-//    for (uint16_t b = 0; b < nblocks; b++) {
-//        // TODO replace loop with switch(nbits)
-//        for (uint8_t bit = max_bit; bit >= 0; bit--) { // descending order
-//            uint8_t mask = 1 << bit;
-//            *dest = (src[0] & mask) >> bit | (src[1] & mask) >> bit |
-//                    (src[2] & mask) >> bit | (src[3] & mask) >> bit |
-//                    (src[4] & mask) >> bit | (src[5] & mask) >> bit |
-//                    (src[6] & mask) >> bit | (src[7] & mask) >> bit;
-//            dest++;
-//        }
-//        dest += 8;
-//    }
-//}
-//
-//uint16_t decompress8b_bitshuf(const int8_t* src, uint16_t in_sz, uint8_t* dest)
-//{
-//
-//}
+    // std::cout << "using nbits: " << (uint16_t)nbits << "\n";
+    std::cout << "using pext mask: ";
+    dumpBits(mask);
+
+    return -1; // TODO
+}
+
 
 #endif /* sprintz_h */
