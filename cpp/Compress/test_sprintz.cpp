@@ -24,6 +24,26 @@ using Vec_i16 = Vec<int16_t>;
 using Vec_u16 = Vec<uint16_t>;
 
 
+template<class T>
+void _set_random_bits(T* dest, size_t size, int max_val) {
+    T val = static_cast<T>(max_val);
+    for (int i = 0; i < size; i += 8) {
+        int highest_idx = (i / 8) % 8;
+        for (int j = i; j < i + 8; j++) {
+            if (j == highest_idx || val == 0) {
+                dest[j] = val;
+            } else {
+                if (val > 0) {
+                    dest[j] = rand() % val;
+                } else {
+                    dest[j] = -(rand() % abs(val));
+                }
+            }
+        }
+    }
+}
+
+
 TEST_CASE("smoke test", "[sanity]") {
     int x = 0;
     REQUIRE(x == 0);
@@ -83,7 +103,8 @@ TEST_CASE("smoke test", "[sanity]") {
          for (int val = -128; val <= 127; val++) {
              // for (int val = -1; val <= -1; val++) {
                  CAPTURE(val);
-                 for (int i = 0; i < SIZE; i++) { data[i] = val; }
+//                 for (int i = 0; i < SIZE; i++) { data[i] = val; }
+                 _set_random_bits(data, SIZE, val);
                  for (int i = 0; i < SIZE; i += 8) {
                      uint8_t nbits_simple = needed_nbits_i16x8_simple(data + i);
                      CAPTURE((int)nbits_simple);
@@ -95,7 +116,8 @@ TEST_CASE("smoke test", "[sanity]") {
              for (int val = -128; val <= 127; val++) {
              // for (int val = -1; val <= -1; val++) {
                  CAPTURE(val);
-                 for (int i = 0; i < SIZE; i++) { data[i] = val; }
+//                 for (int i = 0; i < SIZE; i++) { data[i] = val; }
+                 _set_random_bits(data, SIZE, val);
                  for (int i = 0; i < SIZE; i += 8) {
                      uint8_t nbits = needed_nbits_i16x8(data + i);
                      CAPTURE((int)nbits);
@@ -107,7 +129,8 @@ TEST_CASE("smoke test", "[sanity]") {
      SECTION("all 16bit values") {
         // for (int val = -1; val <= -1; val++) {
         for (int val = -32768; val <= 32767; val++) {
-            for (int i = 0; i < SIZE; i++) { data[i] = val; }
+//            for (int i = 0; i < SIZE; i++) { data[i] = val; }
+            _set_random_bits(data, SIZE, val);
             for (int i = 0; i < SIZE; i += 8) {
                 CAPTURE(val);
                 uint8_t nbits = needed_nbits_i16x8(data + i);
@@ -124,15 +147,16 @@ TEST_CASE("smoke test", "[sanity]") {
  }
 
 TEST_CASE("max_nbits_i8", "[bitpack]") {
-   const uint16_t SIZE = 8;
+   const uint16_t SIZE = 8 * 8;
    int8_t data[SIZE];
    // Vec_i8 raw(sz);
    // raw.setRandom(); // random vals in [0, 255]
 
     SECTION("nbits_simple") {
+        srand(123);
         for (int val = -128; val <= 127; val++) {
             CAPTURE(val);
-            for (int i = 0; i < SIZE; i++) { data[i] = val; }
+            _set_random_bits(data, SIZE, val);
             for (int i = 0; i < SIZE / 8; i += 8) {
                 uint8_t nbits_simple = needed_nbits_i8x8_simple(data + i);
                 REQUIRE(nbits_simple == NBITS_COST_I8[val]);
@@ -142,7 +166,8 @@ TEST_CASE("max_nbits_i8", "[bitpack]") {
     SECTION("nbits_simd") {
        for (int val = -128; val <= 127; val++) {
            CAPTURE(val);
-           for (int i = 0; i < SIZE; i++) { data[i] = val; }
+//           for (int i = 0; i < SIZE; i++) { data[i] = val; }
+           _set_random_bits(data, SIZE, val);
            for (int i = 0; i < SIZE / 8; i += 8) {
                uint8_t nbits = needed_nbits_i8x8(data + i);
                CAPTURE((int)nbits);
