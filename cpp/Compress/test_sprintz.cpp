@@ -49,50 +49,52 @@ TEST_CASE("smoke test", "[sanity]") {
     REQUIRE(x == 0);
 }
 
-//TEST_CASE("building blocks", "[sanity]") {
-//    uint16_t sz = 1024;
-//    Vec_u8 raw(sz);
-//    raw.setRandom(); // random vals in [0, 255]
+TEST_CASE("building blocks", "[sanity]") {
+    uint16_t sz = 16;
+    Vec_u8 raw(sz);
+    raw.setRandom(); // random vals in [0, 255]
+
+    Vec_i8 compressed(sz);
+    Vec_u8 decompressed(sz);
+
+    SECTION("naiveDelta") {
+//        std::cout << raw.cast<uint16_t>();
+        auto len = compress8b_naiveDelta(raw.data(), sz, compressed.data());
+        REQUIRE(len == sz);
+        auto len2 = decompress8b_naiveDelta(compressed.data(), len, decompressed.data());
+        REQUIRE(len2 == sz);
+
+        REQUIRE(ar::all_eq(raw, decompressed));
+//        std::cout << raw.cast<int16_t>();
+//        std::cout << "------\n";
+//        std::cout << decompressed.cast<int16_t>();
+    }
+
+    SECTION("bitpack") {
+        Vec_u8 compressed(sz);
+//        for (uint8_t nbits = 1; nbits <= 1; nbits++) {
+        for (uint8_t nbits = 1; nbits <= 8; nbits++) {
+            CAPTURE(nbits);
+
+            raw.setRandom();
+            raw /= (1 << (8 - nbits));
+
+            auto len = compress8b_bitpack(raw.data(), sz, compressed.data(), nbits);
+            REQUIRE(len == (sz / 8) * nbits);
+
+//            std::cout << "raw: " << raw.cast<uint16_t>();
+//            std::cout << "comp: " << compressed.cast<uint16_t>();
+
+            auto len2 = decompress8b_bitpack(compressed.data(), len, decompressed.data(), nbits);
+            REQUIRE(len2 == sz);
 //
-//    Vec_i8 compressed(sz);
-//    Vec_u8 decompressed(sz);
-//
-//    SECTION("naiveDelta") {
-////        std::cout << raw.cast<uint16_t>();
-//        auto len = compress8b_naiveDelta(raw.data(), sz, compressed.data());
-//        REQUIRE(len == sz);
-//        auto len2 = decompress8b_naiveDelta(compressed.data(), len, decompressed.data());
-//        REQUIRE(len2 == sz);
-//
-//        REQUIRE(ar::all_eq(raw, decompressed));
-////        std::cout << raw.cast<int16_t>();
-////        std::cout << "------\n";
-////        std::cout << decompressed.cast<int16_t>();
-//    }
-//
-//    SECTION("bitpack") {
-//        Vec_u8 compressed(sz);
-////        for (uint8_t nbits = 1; nbits <= 1; nbits++) {
-//        for (uint8_t nbits = 1; nbits <= 8; nbits++) {
-//            raw.setRandom();
-//            raw /= (1 << (8 - nbits));
-//
-//            auto len = compress8b_bitpack(raw.data(), sz, compressed.data(), nbits);
-//            REQUIRE(len == (sz / 8) * nbits);
-//
-////            std::cout << "raw: " << raw.cast<uint16_t>();
-////            std::cout << "comp: " << compressed.cast<uint16_t>();
-//
-//            auto len2 = decompress8b_bitpack(compressed.data(), len, decompressed.data(), nbits);
-//            REQUIRE(len2 == sz);
-////
-////            std::cout << "raw: " << raw.cast<uint16_t>();
-////            std::cout << "decomp: " << decompressed.cast<uint16_t>();
-//
-//            REQUIRE(ar::all_eq(raw, decompressed));
-//        }
-//    }
-//}
+//            std::cout << "raw: " << raw.cast<uint16_t>();
+//            std::cout << "decomp: " << decompressed.cast<uint16_t>();
+
+            REQUIRE(ar::all_eq(raw, decompressed));
+        }
+    }
+}
 
  TEST_CASE("max_nbits_i16", "[bitpack]") {
      const uint16_t SIZE = 8;
@@ -211,18 +213,50 @@ TEST_CASE("profile_bitpack_u8", "[profile][bitpack]") {
     }
 }
 
-//TEST_CASE("naiveDelta", "[sanity]") {
-//    uint16_t sz = 256;
-//    Vec_u8 raw(sz);
-//    raw.setRandom();
-//    raw *= 127;
-//    Vec_i8 compressed(sz);
-//    Vec_u8 decompressed(sz);
-//
-//    auto len = compress8b_naiveDelta(raw.data(), sz, compressed.data());
-//    REQUIRE(len == sz);
-//    auto len2 = decompress8b_naiveDelta(compressed.data(), sz, decompressed.data());
-//    REQUIRE(len2 == sz);
-//
-//    REQUIRE(ar::all_eq(raw, decompressed));
-//}
+TEST_CASE("naiveDelta", "[sanity]") {
+    uint16_t sz = 256;
+    Vec_u8 raw(sz);
+    raw.setRandom();
+    raw *= 127;
+    Vec_i8 compressed(sz);
+    Vec_u8 decompressed(sz);
+
+    auto len = compress8b_naiveDelta(raw.data(), sz, compressed.data());
+    REQUIRE(len == sz);
+    auto len2 = decompress8b_naiveDelta(compressed.data(), sz, decompressed.data());
+    REQUIRE(len2 == sz);
+
+    REQUIRE(ar::all_eq(raw, decompressed));
+}
+
+
+TEST_CASE("delta_8b_known_input", "[delta][bitpack]") {
+    uint64_t sz = 4096; // easy debuggin if set to 16 or 32
+    Vec_u8 raw(sz);
+    for (int i = 0; i < sz; i++) {
+        raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
+//        raw(i) = (i % 16) * (i % 16);
+    }
+
+    Vec_i8 compressed(sz * 2);
+    Vec_u8 decompressed(sz);
+    compressed.setZero();
+    decompressed.setZero();
+
+//    dump_16B_aligned(raw.data());
+//    dump_16B_aligned(raw.data() + 16);
+    
+    auto len = compress8b_delta(raw.data(), sz, compressed.data());
+
+//    printf("compressed data (ignoring initial 8B) (length=%lld):\n", len);
+//    dump_16B_aligned(compressed.data() + 8);
+//    dump_16B_aligned(compressed.data() + 24);
+
+    len = decompress8b_delta(compressed.data(), sz, decompressed.data());
+
+//    printf("decompressed data (length=%lld):\n", len);
+//    dump_16B_aligned(decompressed.data());
+//    if (sz >= 32) dump_16B_aligned(decompressed.data() + 16);
+    
+    REQUIRE(ar::all_eq(raw, decompressed));
+}

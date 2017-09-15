@@ -130,6 +130,10 @@ inline void dump_m128i(const __m128i& v, bool newline=true) {
     if (newline) { std::cout << "\n"; }
 }
 
+inline void dump_16B_aligned(void* ptr, bool newline=true) {
+	dump_m128i(_mm_loadu_si128((__m128i*)ptr), newline);
+}
+
 #endif
 
 #endif

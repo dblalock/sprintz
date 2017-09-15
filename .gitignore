@@ -115,3 +115,5 @@ notes.txt
 joblib/
 figs/
 _results/
+
+*.todo
