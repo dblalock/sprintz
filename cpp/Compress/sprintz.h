@@ -74,6 +74,13 @@ static const uint64_t kBitpackMasks8[9] = {
     TILE_BYTE(0x1f), TILE_BYTE(0x3f), TILE_BYTE(0x7f), TILE_BYTE(0xff),
 };
 
+static const uint64_t kBitUnpackMasks8[9] = {
+    0,
+    TILE_BYTE(0x01) << 7, TILE_BYTE(0x03) << 6, TILE_BYTE(0x07) << 5,
+    TILE_BYTE(0x0f) << 4, TILE_BYTE(0x1f) << 3, TILE_BYTE(0x3f) << 2,
+    TILE_BYTE(0x7f) << 1, TILE_BYTE(0xff) << 0,
+};
+
 // like above, second-highest value (here 0x7fff) is replaced with highest value
 static const uint64_t kBitpackMasks16[17] = {
     0,
@@ -112,9 +119,6 @@ uint8_t needed_nbits_epi16x8(__m128i v) {
     int all_zeros = _mm_test_all_zeros(v, v);
     if (all_zeros) { return 0; }
 
-    // printf("input vector:\n");
-    // dump_m128i(v);
-
     // get everything negative
     __m128i all_ones = _mm_cmpeq_epi16(v, v);
     v = _mm_xor_si128(v, _mm_cmpgt_epi16(v, all_ones));
@@ -131,45 +135,14 @@ uint8_t needed_nbits_epi16x8(__m128i v) {
 //    uint32_t maxval = (uint32_t) _mm_extract_epi32(neg_minval_etc, 0);
 //    maxval = (maxval << 16) | (maxval >> 16); // compiles to ROL or ROR
 //    return 17 - __builtin_clz(maxval);
-
-//    printf("maxval = %d, minpos = %d\n", (maxval << 16) >> 16, _mm_extract_epi32(minval_and_idx, 1));
-//    dumpEndianBits(maxval);
-//    printf("maxval << 16:\n");
-//    dumpEndianBits(maxval << 16);
-//    printf("nlz: %d\n", __builtin_clz(maxval << 16));
-
-    // rotate bits left by 16; we don't just shift so that bit 15 is
-    // guaranteed to be a 1, and we therefore don't fail when maxval == 0
-//    __asm__ ("roll %1, %0" : "+g" (maxval) : "cI" ((uint8_t)16));
-//    __asm__ ("roll $16, %0" : "+g" (maxval));
-//    maxval = (maxval << 16) | (maxval >> 16); // compiles to ROL or ROR
-
-//    printf("maxval rotated:\n");
-//    dumpEndianBits(maxval);
-
-//    return 17 - __builtin_clz(maxval);
 }
 
 uint8_t needed_nbits_epi8x8(__m128i v) {
     return needed_nbits_epi16x8(_mm_cvtepi8_epi16(v));
-
-    // unpack low half of v into epi16s and use epi16 func
-    // v = _mm_unpacklo_epi8(v, _mm_xor_si128(v, v));
-    // v = _mm_unpacklo_epi8(_mm_xor_si128(v, v), v);
-    // uint8_t nbits_16 = needed_nbits_epi16x8(v)
-    // return max(0, ((int8_t)nbits_16) - 8);
 }
 
 uint8_t needed_nbits_i16x8(int16_t* x) {
-    // printf("bits, treating it as int array:\n");
-    // for (int i = 0; i < 8; i++) {
-    //     printf("%d: ", x[i]);
-    //     dumpEndianBits(x[i]);
-    // }
-
     __m128i v = _mm_loadu_si128((__m128i*)x);
-    // printf("bits right after loading input:\n");
-    // dump_m128i(v);
     return needed_nbits_epi16x8(v);
 }
 
@@ -181,8 +154,8 @@ uint8_t needed_nbits_i8x8(int8_t* x) {
 uint8_t needed_nbits_i8x8_simple(int8_t* x) {
     uint8_t max_nbits = NBITS_COST_I8[*x];
     int8_t* end = x + 8;
-    ++x;
-    for ( ; x < end; ++x) {
+    x++;
+    for ( ; x < end; x++) {
         max_nbits = max(max_nbits, NBITS_COST_I8[*x]);
     }
     return max_nbits;
@@ -191,15 +164,11 @@ uint8_t needed_nbits_i16x8_simple(int16_t* x) {
     int16_t val = *x;
     bool all_zeros = val == 0;
 
-    // printf("val, xord val:\n");
-    // dumpBits(val);
     val ^= val >> 15;  // flip bits if negative
-    // dumpBits(val);
-
     uint8_t min_nlz = __builtin_clz(val);
     int16_t* end = x + 8;
     x++;
-    for ( ; x < end; ++x) {
+    for ( ; x < end; x++) {
         val = *x;
         all_zeros &= val == 0;
         val ^= val >> 15;
@@ -390,66 +359,52 @@ uint64_t decompress8b_bitpack(const uint8_t* src, uint64_t in_sz, uint8_t* dest,
     return dest - orig_dest;
 }
 
-// ------------------------------------------------ delta + bit packing
+// ------------------------------------------------ delta + bit packing simple
 
-int64_t compress8b_delta(uint8_t* src, size_t len, int8_t* dest) {
-
-    // TODO blocks of 8 instead of 2 so that headers don't waste bits
-    // -can just do a loop and then pext to get the header bytes
-
+int64_t compress8b_delta_simple(uint8_t* src, size_t len, int8_t* dest,
+    bool write_size=true)
+{
     static constexpr int block_sz = 8;
     static constexpr int group_sz_blocks = 2;
     static constexpr int group_sz = group_sz_blocks * block_sz;
-    assert(len % group_sz == 0);  // TODO handle stuff at end
     size_t nblocks = len / block_sz;
+    size_t ngroups = len / group_sz;
     int8_t* orig_dest = dest;
 
+    // assert(len % group_sz == 0);  // TODO handle stuff at end
+
     // store how long this is
-    *(uint64_t*)dest = len;
-    dest += 8;
+    if (write_size) {
+        *(uint64_t*)dest = len;
+        dest += 8;
+    }
 
     // figure out where header bytes end and packed values begin
     uint8_t* header_dest = (uint8_t*)dest;
     dest += (nblocks / 2);
-//    int8_t* dest = dest + (nblocks / 2);
 
-    // TODO shift stuff straight into u64s; don't touch L1 cache
-    uint8_t delta_buff[group_sz];
+    int8_t delta_buff[group_sz];
     uint8_t prev_val = 0;
 
     // for each pair of 2 blocks
     size_t nblocks_even = (nblocks / group_sz_blocks) * group_sz_blocks;
-    for (int b = 0; b < nblocks_even; b += 2) {
-        // delta_buff[0] = *src - prev_val;
-        // prev_val = *src;
-        // src++;
-        // if (b == 2) printf("writing deltas:\n");
+    // for (int b = 0; b < nblocks_even; b += 2) {
+    for (int g = 0; g < ngroups; g++) {
         for (int i = 0; i < group_sz; i++) {
             delta_buff[i] = (*src - prev_val);
-            // if (b == 2) printf("%d ", delta_buff[i]);
             prev_val = *src;
             src++;
         }
-        // if (b == 2) printf("\n");
 
+        // write header
         uint8_t nbits0 = needed_nbits_i8x8((int8_t*)delta_buff + 8 * 0);
         uint8_t nbits1 = needed_nbits_i8x8((int8_t*)delta_buff + 8 * 1);
-        // nbits0 -= nbits0 == 8; // map 8 to 7, since only 3b
-        // nbits1 -= nbits1 == 8;
         nbits0 += nbits0 == 7; // 7b will be treated as 8b at decoder
         nbits1 += nbits1 == 7;
-
-        // uint8_t nbits0 = 8, nbits1 = 8; // TODO rm
-
-        // write headers  // TODO write 7s if nbits is 8
         uint8_t write_nbits0 = nbits0 - (nbits0 == 8);
         uint8_t write_nbits1 = nbits1 - (nbits1 == 8);
         *header_dest = (write_nbits0 | (write_nbits1 << 4));
-        // *header_dest = (nbits0 | (nbits1 << 4));
         header_dest++;
-
-        // printf("nbits = %d, %d; wrote header:\n", nbits0, nbits1);
-        // dumpEndianBits(*(header_dest - 1));
 
         // write packed data
         uint64_t mask0 = kBitpackMasks8[nbits0];
@@ -457,35 +412,170 @@ int64_t compress8b_delta(uint8_t* src, size_t len, int8_t* dest) {
         uint64_t data0 = *(uint64_t*)(delta_buff + 8 * 0);
         uint64_t data1 = *(uint64_t*)(delta_buff + 8 * 1);
 
-        // printf("deltas0, deltas1:\n");
-        // dumpEndianBits(data0);
-        // dumpEndianBits(data1);
-        // printf("deltas0, deltas1, data1 with mask:\n");
-        // dumpEndianBits(_pext_u64(data1, mask1));
-
-        // if (b == 2) printf("immediately read back deltas:\n");
         *((uint64_t*)dest) = _pext_u64(data0, mask0);
-        // uint64_t deltas0 = _pdep_u64(*((uint64_t*)dest), mask0);
         dest += nbits0;
         *((uint64_t*)dest) = _pext_u64(data1, mask1);
-        // uint64_t deltas1 = _pdep_u64(*((uint64_t*)dest), mask1);
         dest += nbits1;
-
-        // if (b == 2) dumpEndianBits(deltas0);
-        // if (b == 2) dumpEndianBits(deltas1);
-
-        // if (b == 2) {
-        //     printf("read back deltas:\n");
-        //     uint64_t deltas0 = _pdep_u64(*(uint64_t*)(dest - nbits0 - nbits1), mask0);
-        //     uint64_t deltas1 = _pdep_u64(*(uint64_t*)(dest - nbits1), mask1);
-        //     dumpEndianBits(deltas0);
-        //     dumpEndianBits(deltas1);
-        // }
-
-        // printf("wrote second block to dest:\n");
-        // dumpEndianBits(*((uint64_t*)(dest - nbits1)));
     }
+    // final trailing samples just get copied with no compression
+    size_t remaining_len = len % group_sz;
+    // printf("trailing data: (%lu samples)\n", remaining_len);
+    // for (int i = 0; i < remaining_len; i++) {
+    //     printf("%d ", src[i]);
+    // }
+    // printf("\n");
+    memcpy(dest, src, remaining_len);
+    dest += remaining_len;
+
     return dest - orig_dest;
+}
+
+int64_t decompress8b_delta_simple(int8_t* src, size_t len, uint8_t* dest) {
+    static constexpr int block_sz = 8;
+    static constexpr int group_sz_blocks = 2;
+    static constexpr int group_sz = group_sz_blocks * block_sz;
+    uint8_t* orig_dest = dest;
+
+    // TODO only use 6B for length and last 2B for other info, such
+    // as whether anything took > 6 bits (shorter loop if so)
+
+    // read in size of original data
+    uint64_t orig_len = *(uint64_t*)src;
+    src += 8;
+
+    // figure out number of blocks and where packed data starts
+    size_t nblocks = orig_len / block_sz;
+    size_t ngroups = orig_len / group_sz;
+    uint8_t* header_src = (uint8_t*)src;
+    src += nblocks / 2;
+
+    int8_t prev_val = 0;
+    // size_t nblocks_even = (nblocks / group_sz_blocks) * group_sz_blocks;
+    // for (int b = 0; b < nblocks_even; b += 2) {
+    for (int g = 0; g < ngroups; g++) {
+        // read header to get nbits for each block
+        uint8_t header = *header_src;
+        header_src++;
+        uint8_t nbits0 = header & 0x0f;
+        uint8_t nbits1 = header >> 4;
+        nbits0 += nbits0 == 7;
+        nbits1 += nbits1 == 7;
+
+        // unpack deltas
+        // uint64_t mask0 = kBitpackMasks8[nbits0];
+        // uint64_t mask1 = kBitpackMasks8[nbits1];
+        // uint64_t deltas0 = _pdep_u64(*(uint64_t*)src, mask0);
+        // src += nbits0;
+        // uint64_t deltas1 = _pdep_u64(*(uint64_t*)src, mask1);
+        // src += nbits1;
+
+        uint64_t mask0 = kBitUnpackMasks8[nbits0];
+        uint64_t mask1 = kBitUnpackMasks8[nbits1];
+        int64_t deltas0 = _pdep_u64(*(uint64_t*)src, mask0);
+        src += nbits0;
+        int64_t deltas1 = _pdep_u64(*(uint64_t*)src, mask1);
+        src += nbits1;
+
+        // cumsum each block; the tricky part here is that we unpacked
+        // everything into the most significant bits, so that we could
+        // shift right arithmetic to get sign extension
+        // for (int shift = 0; shift < 64; shift += 8) {
+        //     int8_t delta = (deltas0 >> shift) & 0xff;
+        //     *dest = prev_val + (delta >> (8 - nbits0));
+        for (int shift = 56; shift >= 0; shift -= 8) {
+            // int8_t delta = ((int64_t)(((int64_t)deltas0) << shift)) >> 56;
+            // printf("delta v0, v1: %d, %d\n",
+            //     ((int8_t)(deltas0 >> (56 - shift)) & 0xff) >> (8 - nbits0),
+            //     (int8_t)delta);
+            int64_t delta = (deltas0 << shift) >> (64 - nbits0);
+            *dest = prev_val + (int8_t)delta;
+            prev_val = *dest;
+            dest++;
+        }
+        // for (int shift = 0; shift < 64; shift += 8) {
+        //     int8_t delta = (deltas1 >> shift) & 0xff;
+        //     *dest = prev_val + (delta >> (8 - nbits1));
+        for (int shift = 56; shift >= 0; shift -= 8) {
+            int64_t delta = (deltas1 << shift) >> (64 - nbits1);
+            *dest = prev_val + (int8_t)delta;
+            prev_val = *dest;
+            dest++;
+        }
+    }
+
+    // size_t remaining_len = orig_len - (ngroups * group_sz);
+    size_t remaining_len = orig_len % group_sz;
+    // printf("trailing data: (%lu samples)\n", remaining_len);
+    // for (int i = 0; i < remaining_len; i++) {
+    //     printf("%d ", src[i]);
+    // }
+    // printf("\n");
+    memcpy(dest, src, remaining_len);
+
+    assert(orig_len == (dest + remaining_len - orig_dest));
+    return dest + remaining_len - orig_dest;
+}
+
+// ------------------------------------------------ delta + bit packing for real
+
+int64_t compress8b_delta(uint8_t* src, size_t len, int8_t* dest, bool write_size=true) {
+    static constexpr int block_sz = 8;
+    static constexpr int group_sz_blocks = 8;
+    static constexpr int group_sz = group_sz_blocks * block_sz;
+    size_t nblocks = len / block_sz;
+    size_t ngroups = len / group_sz;
+    int8_t* orig_dest = dest;
+
+    // store how long this is
+    if (write_size) {
+        *(uint64_t*)dest = len;
+        dest += 8;
+    }
+
+    // figure out where header bytes end and packed values begin
+    uint8_t* header_dest = (uint8_t*)dest;
+    dest += (nblocks / 2);
+
+    // uint8_t delta_buff[block_sz];  // TODO shift stuff straight into u64s
+    uint64_t delta_buff_u64;  // requires block_sz = 8
+    uint64_t nbits_buff_u64;  // requires group_sz_blocks = 8
+    uint8_t* delta_buff = (uint8_t*)&delta_buff_u64;
+    uint8_t* nbits_buff = (uint8_t*)&nbits_buff_u64;
+
+    // for each group of blocks
+    uint8_t prev_val = 0;
+    for (int g = 0; g < ngroups; g++) { // for each group
+        for (int b = 0; b < group_sz_blocks; b++) { // for each block
+            // TODO delta computation can be vectorized
+            for (int i = 0; i < block_sz; i++) { // for each sample
+                delta_buff[i] = (*src - prev_val);
+                prev_val = *src;
+                src++;
+            }
+            // info for header  // TODO vectorize these operations
+            uint8_t nbits = needed_nbits_i8x8((int8_t*)delta_buff + 8 * b);
+            nbits += nbits == 7;
+            uint8_t write_nbits = nbits - (nbits == 8);
+            nbits_buff[b] = write_nbits;
+
+            // write out packed data
+            uint64_t mask = kBitpackMasks8[nbits];
+            *((uint64_t*)dest) = _pext_u64(delta_buff_u64, mask);
+            dest += nbits;
+        }
+        // write out header for whole group; 3b for each nbits
+        static constexpr uint64_t header_mask = TILE_BYTE(0x07); // 3 ones
+        uint64_t packed_header = _pext_u64(nbits_buff_u64, header_mask);
+        header_dest += 3;
+    }
+    // compress (up to 63) trailing samples using a smaller block size / memcpy
+    size_t remaining_len = len % group_sz;
+    memcpy(dest, src, remaining_len);
+    return dest + remaining_len - orig_dest;
+
+    // version where we compress tail with a smaller block size
+    // size_t tail_len = compress8b_delta_simple(src, remaining_len, dest, false);
+    // return dest + tail_len - orig_dest;
 }
 
 int64_t decompress8b_delta(int8_t* src, size_t len, uint8_t* dest) {
@@ -500,67 +590,16 @@ int64_t decompress8b_delta(int8_t* src, size_t len, uint8_t* dest) {
     // read in size of original data
     uint64_t orig_len = *(uint64_t*)src;
     src += 8;
-    assert(orig_len % group_sz == 0);  // TODO handle stuff at end
 
     // figure out number of blocks and where packed data starts
     size_t nblocks = orig_len / block_sz;
-    // printf("decomp sees header:\n");
-    // dumpEndianBits(*src);
-    int8_t* packed_src = src + (nblocks / 2);
+    size_t ngroups = orig_len / group_sz;
+    uint8_t* header_src = (uint8_t*)src;
+    src += nblocks / 2;
 
-    // int8_t deltas[16];
     int8_t prev_val = 0;
 
-    size_t nblocks_even = (nblocks / group_sz_blocks) * group_sz_blocks;
-    for (int b = 0; b < nblocks_even; b += 2) {
-        // read header to get nbits for each block
-        uint8_t header = *src;
-        src++;
-        uint8_t nbits0 = header & 0x0f;
-        uint8_t nbits1 = header >> 4;
-        nbits0 += nbits0 == 7;
-        nbits1 += nbits1 == 7;
-
-        // unpack deltas
-        uint64_t mask0 = kBitpackMasks8[nbits0];
-        uint64_t mask1 = kBitpackMasks8[nbits1];
-        uint64_t deltas0 = _pdep_u64(*(uint64_t*)packed_src, mask0);
-        packed_src += nbits0;
-        uint64_t deltas1 = _pdep_u64(*(uint64_t*)packed_src, mask1);
-        packed_src += nbits1;
-
-        // printf("unpacked deltas:\n");
-        // dumpEndianBits(deltas0);
-        // dumpEndianBits(deltas1);
-
-        // printf("got nbits sizes: %d, %d\n", nbits0, nbits1);
-
-        // if (b == 2) {
-            // printf("got nbits sizes: %d, %d\n", nbits0, nbits1);
-            // printf("using masks:\n");
-            // dumpEndianBits(mask0);
-            // dumpEndianBits(mask1);
-        // }
-
-        // cumsum each block
-        // if (b == 2) printf("reading deltas:\n");
-        for (int shift = 0; shift < 64; shift += 8) {
-            // if (b == 2) printf("%d ", (int8_t)((deltas0 >> shift) & 0xff));
-            *dest = prev_val + ((deltas0 >> shift) & 0xff);
-            prev_val = *dest;
-            // *dest = ((deltas0 >> shift) & 0xff);
-            dest++;
-        }
-        for (int shift = 0; shift < 64; shift += 8) {
-            // if (b == 2) printf("%d ", (int8_t)((deltas1 >> shift) & 0xff));
-            *dest = prev_val + ((deltas1 >> shift) & 0xff);
-            prev_val = *dest;
-            // *dest = ((deltas1 >> shift) & 0xff);
-            dest++;
-        }
-        // if (b == 2) printf("\n");
-    }
-    return dest - orig_dest;
+    return -1; // TODO
 }
 
 // ------------------------------------------------ Sprintz LL

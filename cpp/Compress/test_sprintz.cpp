@@ -230,31 +230,61 @@ TEST_CASE("naiveDelta", "[sanity]") {
 }
 
 
+//TEST_CASE("delta_8b_simple_known_input", "[delta][bitpack]") {
+//    uint64_t sz = 4096; // easy debuggin if set to 16 or 32
+//    Vec_u8 raw(sz);
+//    for (int i = 0; i < sz; i++) {
+//        raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
+//    }
+//
+//    Vec_i8 compressed(sz * 2);
+//    Vec_u8 decompressed(sz);
+//    compressed.setZero();
+//    decompressed.setZero();
+//
+////    dump_16B_aligned(raw.data());
+////    dump_16B_aligned(raw.data() + 16);
+//    
+//    auto len = compress8b_delta_simple(raw.data(), sz, compressed.data());
+//
+////    printf("compressed data (ignoring initial 8B) (length=%lld):\n", len);
+////    dump_16B_aligned(compressed.data() + 8);
+////    dump_16B_aligned(compressed.data() + 24);
+//
+//    len = decompress8b_delta_simple(compressed.data(), sz, decompressed.data());
+//
+////    printf("decompressed data (length=%lld):\n", len);
+////    dump_16B_aligned(decompressed.data());
+////    if (sz >= 32) dump_16B_aligned(decompressed.data() + 16);
+//    
+//    REQUIRE(ar::all_eq(raw, decompressed));
+//}
+
 TEST_CASE("delta_8b_known_input", "[delta][bitpack]") {
-    uint64_t sz = 4096; // easy debuggin if set to 16 or 32
+    uint64_t sz = 4096 + 17; // easy debugging if set to 16 or 32
+//    uint64_t sz = 32; // easy debugging if set to 16 or 32
     Vec_u8 raw(sz);
     for (int i = 0; i < sz; i++) {
         raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
-//        raw(i) = (i % 16) * (i % 16);
     }
-
+    
     Vec_i8 compressed(sz * 2);
     Vec_u8 decompressed(sz);
     compressed.setZero();
     decompressed.setZero();
-
+    
 //    dump_16B_aligned(raw.data());
 //    dump_16B_aligned(raw.data() + 16);
     
-    auto len = compress8b_delta(raw.data(), sz, compressed.data());
-
-//    printf("compressed data (ignoring initial 8B) (length=%lld):\n", len);
+    auto len = compress8b_delta_simple(raw.data(), sz, compressed.data());
+    
+    printf("compressed data (ignoring initial 8B) (length=%lld):\n", len);
 //    dump_16B_aligned(compressed.data() + 8);
 //    dump_16B_aligned(compressed.data() + 24);
-
-    len = decompress8b_delta(compressed.data(), sz, decompressed.data());
-
-//    printf("decompressed data (length=%lld):\n", len);
+    
+    len = decompress8b_delta_simple(compressed.data(), sz, decompressed.data());
+    
+    printf("decompressed data (length=%lld):\n", len);
 //    dump_16B_aligned(decompressed.data());
 //    if (sz >= 32) dump_16B_aligned(decompressed.data() + 16);
     
