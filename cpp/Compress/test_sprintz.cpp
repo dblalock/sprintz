@@ -248,7 +248,7 @@ void _test_delta_8_simple_known_input(int64_t sz) {
 
 TEST_CASE("delta_8b_simple_known_input", "[delta][bitpack]") {
     vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66, 72,
-        127, 128, 129, 4086, 4096 + 17};
+        127, 128, 129, 4096, 4096 + 17};
     for (auto sz : sizes) {
         _test_delta_8_simple_known_input(sz);
     }
@@ -289,7 +289,7 @@ void _test_delta_8_known_input(int64_t sz) {
 
 TEST_CASE("delta_8b_known_input", "[delta][bitpack]") {
     vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66, 72,
-        127, 128, 129, 4086, 4096 + 17};
+        127, 128, 129, 4096, 4096 + 17};
     for (auto sz : sizes) {
         _test_delta_8_known_input(sz);
     }
@@ -319,9 +319,46 @@ void _test_doubledelta_8_known_input(int64_t sz) {
 }
 TEST_CASE("doubledelta_8b_known_input", "[delta][bitpack]") {
     vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66, 72,
-        127, 128, 129, 4086, 4096 + 17};
+        127, 128, 129, 4096, 4096 + 17};
 //    vector<int64_t> sizes {64};
     for (auto sz : sizes) {
         _test_doubledelta_8_known_input(sz);
+    }
+}
+
+void _test_dyndelta_8_known_input(int64_t sz) {
+    Vec_u8 raw(sz);
+    for (int i = 0; i < sz; i++) {
+        raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
+    }
+    
+    Vec_i8 compressed(sz * 2);
+    Vec_u8 decompressed(sz);
+    compressed.setZero();
+    decompressed.setZero();
+    
+    auto len = compress8b_dyndelta(raw.data(), sz, compressed.data());
+    
+//    printf("compressed data (ignoring initial 8B) (length=%lld):\n", len);
+//    for (int i = 8; i <= len - 16; i += 16) {
+//        dump_16B_aligned(compressed.data() + i);
+//    }
+    
+    len = decompress8b_dyndelta(compressed.data(), sz, decompressed.data());
+    
+//    printf("decompressed data (length=%lld):\n", len);
+//    for (int i = 0; i <= sz - 16; i += 16) {
+//        dump_16B_aligned(decompressed.data() + i);
+//    }
+
+//    CAPTURE(sz);
+    REQUIRE(ar::all_eq(raw, decompressed));
+}
+TEST_CASE("dyndelta_8b_known_input", "[delta][bitpack]") {
+    vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66, 72,
+        127, 128, 129, 4096, 4096 + 17};
+//    vector<int64_t> sizes {64};
+    for (auto sz : sizes) {
+        _test_dyndelta_8_known_input(sz);
     }
 }

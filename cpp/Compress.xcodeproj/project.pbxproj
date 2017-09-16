@@ -24,6 +24,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		726D10581F6DCDD200080495 /* bitpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = bitpack.h; path = Compress/bitpack.h; sourceTree = "<group>"; };
 		72E01C651EB554200038A2B9 /* Compress */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Compress; sourceTree = BUILT_PRODUCTS_DIR; };
 		72E01C681EB554200038A2B9 /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
 		72E01C6F1EB554770038A2B9 /* signal.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = signal.hpp; sourceTree = "<group>"; };
@@ -372,6 +373,7 @@
 		72E01C5C1EB554200038A2B9 = {
 			isa = PBXGroup;
 			children = (
+				726D10581F6DCDD200080495 /* bitpack.h */,
 				72E01C671EB554200038A2B9 /* Compress */,
 				72E01C661EB554200038A2B9 /* Products */,
 			);
