@@ -112,7 +112,10 @@
 	#define REQUIRE_IS_NOT_A(BASE, T) \
 		typename = typename std::enable_if<!std::is_base_of<BASE, T>::value, T>::type
 
-	#define REQUIRE_INT(T) REQUIRE_TRAIT(is_integral, T)
+    #define REQUIRE_SIGNED_INT(T) REQUIRE_TRAIT(is_integral, T)
+	#define REQUIRE_INT(T)                                                  \
+        typename = typename std::enable_if<(std::is_integral<T>::value ||   \
+            !std::is_signed<T>::value), T>::type
 	#define REQUIRE_NUM(T) REQUIRE_TRAIT(is_arithmetic, T)
 	#define REQUIRE_FLOAT(T) REQUIRE_TRAIT(is_floating_point, T)
 	#define REQUIRE_PRIMITIVE(T) REQUIRE_TRAIT(is_arithmetic, T)

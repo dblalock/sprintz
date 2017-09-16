@@ -1880,12 +1880,11 @@ static Container1<data_t1> pad(const Container1<data_t1>& data,
 // TODO binary scalar op eq(a, b[, thresh])
 
 /** Returns true if elements 0..(len-1) of x and y are equal, else false */
-template <class data_t1, class data_t2, class len_t, class float_t=double,
-	REQUIRE_INT(len_t)>
-static inline bool all_eq(const data_t1 *x, const data_t2 *y, len_t len,
+template <class data_t1, class data_t2, class float_t=double>
+static inline bool all_eq(const data_t1 *x, const data_t2 *y, int64_t len,
 	float_t thresh=kDefaultNonzeroThresh)
 {
-	for (len_t i = 0; i < len; i++) {
+	for (int64_t i = 0; i < len; i++) {
 		if (abs(x[i] - y[i]) > thresh) return false;
 	}
 	return true;
@@ -1897,7 +1896,8 @@ static inline bool all_eq(const data_t1 *x, const data_t2 *y, len_t len,
 //	if (x.size() != y.size()) return 0;
 //	return all_eq(x.data(), y.data(), x.size());
 //}
-template<class Container1, class Container2, class float_t=double>
+template<class Container1, class Container2, class float_t=double,
+    REQUIRE_NOT_PTR(Container1), REQUIRE_NOT_PTR(Container2)>
 static inline bool all_eq(const Container1& x, const Container2& y,
                           float_t thresh=kDefaultNonzeroThresh)
 {
