@@ -1,4 +1,12 @@
 //
+//  bitpack.cpp
+//  Compress
+//
+//  Created by DB on 9/16/17.
+//  Copyright © 2017 D Blalock. All rights reserved.
+//
+
+//
 //  bitpack.h
 //  Compress
 //
@@ -9,8 +17,33 @@
 #ifndef bitpack_h
 #define bitpack_h
 
-#define max(x, y) ( ((x) > (y)) ? (x) : (y) )
-#define min(x, y) ( ((x) < (y)) ? (x) : (y) )
+#include "bitpack.h"
+
+#include "immintrin.h"
+#include "emmintrin.h"  // for _mm_set1_epi16
+#include "smmintrin.h"  // for _mm_minpos_epu16
+
+#include <assert.h>
+
+#define MAX(x, y) ( ((x) > (y)) ? (x) : (y) )
+#define MIN(x, y) ( ((x) < (y)) ? (x) : (y) )
+
+
+#ifndef __cplusplus
+typedef uint8_t bool;
+#endif
+
+#define _TILE_BYTE(byte)                                                    \
+(byte << 0 | byte << 8 | byte << 16 | byte << 24 |                          \
+byte << 32 | byte << 40 | byte << 48 | byte << 56)
+
+#define TILE_BYTE(byte) _TILE_BYTE(((uint64_t)byte))
+
+#define _TILE_SHORT(short)                                                  \
+(short << 0 | short << 16 | short << 32 | short << 48)
+
+#define TILE_SHORT(short) _TILE_SHORT(((uint64_t)short))
+
 
 static const uint8_t _NBITS_COST_I8[256] = {
     8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
@@ -28,13 +61,13 @@ static const uint8_t _NBITS_COST_I8[256] = {
 static const uint8_t* NBITS_COST_I8 = _NBITS_COST_I8 + 128; // so offsets can be signed
 
 #define _TILE_BYTE(byte)                                                    \
-    (byte << 0 | byte << 8 | byte << 16 | byte << 24 |                      \
-    byte << 32 | byte << 40 | byte << 48 | byte << 56)
+(byte << 0 | byte << 8 | byte << 16 | byte << 24 |                          \
+byte << 32 | byte << 40 | byte << 48 | byte << 56)
 
 #define TILE_BYTE(byte) _TILE_BYTE(((uint64_t)byte))
 
 #define _TILE_SHORT(short)                                                  \
-    (short << 0 | short << 16 | short << 32 | short << 48)
+(short << 0 | short << 16 | short << 32 | short << 48)
 
 #define TILE_SHORT(short) _TILE_SHORT(((uint64_t)short))
 
@@ -70,31 +103,38 @@ static const uint64_t kBitpackMasks16[17] = {
     TILE_SHORT(0x1fff), TILE_SHORT(0x3fff), TILE_SHORT(0xffff), TILE_SHORT(0xffff),
 };
 
+// uint64_t _prevent_unused_warnings() {
+//     uint64_t x = kBitpackMasks8[0];
+//     uint64_t y = kBitUnpackMasks8[0];
+//     uint64_t z = kBitpackMasks16[0];
+//     return x ^ y ^ z;
+// }
+
 // ------------------------------------------------ Computing needed nbits
 
-uint8_t needed_nbits_epi16x8_v1(__m128i v) {
-    // TODO even faster to zigzag and sub fromm 255 16 at once, then minpos
-    // on each half
+//uint8_t needed_nbits_epi16x8_v1(__m128i v) {
+//    // TODO even faster to zigzag and sub fromm 255 16 at once, then minpos
+//    // on each half
+//
+//    static __m128i max_vals = _mm_set1_epi16(0xffff);
+//
+//    // zigzag encode
+//    v = _mm_xor_si128(_mm_srai_epi16(v, 15), _mm_slli_epi16(v, 1));
+//    // quasi-zigzag encode; lsb is wrong, but doesn't matter
+//    // v = _mm_xor_epi16(_mm128_srai_epi16(v, 15), _mm_slli_epi16(v, 1));
+//
+//    __m128i subbed = _mm_subs_epu16(max_vals, v); // turn max value into min value
+//
+//    // extract minimum value
+//    __m128i minval_and_idx = _mm_minpos_epu16(subbed);
+//    uint16_t minval = (uint16_t) _mm_extract_epi16(minval_and_idx, 0);
+//    // uint16_t idx = (uint16_t) _mm_extract_epi16(minval_and_idx, 1);
+//    uint16_t maxval = 0xffff - minval;
+//
+//    return maxval ? _bit_scan_reverse(maxval) + 1 : 0; // bsr undefined if input all 0s
+//}
 
-    static const __m128i max_vals = _mm_set1_epi16(0xffff);
-
-    // zigzag encode
-    v = _mm_xor_si128(_mm_srai_epi16(v, 15), _mm_slli_epi16(v, 1));
-    // quasi-zigzag encode; lsb is wrong, but doesn't matter
-    // v = _mm_xor_epi16(_mm128_srai_epi16(v, 15), _mm_slli_epi16(v, 1));
-
-    __m128i subbed = _mm_subs_epu16(max_vals, v); // turn max value into min value
-
-    // extract minimum value
-    __m128i minval_and_idx = _mm_minpos_epu16(subbed);
-    uint16_t minval = (uint16_t) _mm_extract_epi16(minval_and_idx, 0);
-    // uint16_t idx = (uint16_t) _mm_extract_epi16(minval_and_idx, 1);
-    uint16_t maxval = 0xffff - minval;
-
-    return maxval ? _bit_scan_reverse(maxval) + 1 : 0; // bsr undefined if input all 0s
-}
-
-uint8_t needed_nbits_epi16x8(__m128i v) {
+static inline uint8_t needed_nbits_epi16x8(__m128i v) {
     int all_zeros = _mm_test_all_zeros(v, v);
     if (all_zeros) { return 0; }
 
@@ -111,35 +151,35 @@ uint8_t needed_nbits_epi16x8(__m128i v) {
     return 33 - __builtin_clz((uint32_t)maxval); // 33 because treats as uint32
 
     // this version has to do the xor, but doesn't have to andn
-//    uint32_t maxval = (uint32_t) _mm_extract_epi32(neg_minval_etc, 0);
-//    maxval = (maxval << 16) | (maxval >> 16); // compiles to ROL or ROR
-//    return 17 - __builtin_clz(maxval);
+    //    uint32_t maxval = (uint32_t) _mm_extract_epi32(neg_minval_etc, 0);
+    //    maxval = (maxval << 16) | (maxval >> 16); // compiles to ROL or ROR
+    //    return 17 - __builtin_clz(maxval);
 }
 
-uint8_t needed_nbits_epi8x8(__m128i v) {
+static inline uint8_t needed_nbits_epi8x8(__m128i v) {
     return needed_nbits_epi16x8(_mm_cvtepi8_epi16(v));
 }
 
-uint8_t needed_nbits_i16x8(int16_t* x) {
+static inline uint8_t needed_nbits_i16x8(int16_t* x) {
     __m128i v = _mm_loadu_si128((__m128i*)x);
     return needed_nbits_epi16x8(v);
 }
 
-uint8_t needed_nbits_i8x8(int8_t* x) {
+static inline uint8_t needed_nbits_i8x8(int8_t* x) {
     __m128i v = _mm_loadu_si128((__m128i*)x);
     return needed_nbits_epi8x8(v);
 }
 
-uint8_t needed_nbits_i8x8_simple(int8_t* x) {
+static inline uint8_t needed_nbits_i8x8_simple(int8_t* x) {
     uint8_t max_nbits = NBITS_COST_I8[*x];
     int8_t* end = x + 8;
     x++;
     for ( ; x < end; x++) {
-        max_nbits = max(max_nbits, NBITS_COST_I8[*x]);
+        max_nbits = MAX(max_nbits, NBITS_COST_I8[*x]);
     }
     return max_nbits;
 }
-uint8_t needed_nbits_i16x8_simple(int16_t* x) {
+static inline uint8_t needed_nbits_i16x8_simple(int16_t* x) {
     int16_t val = *x;
     bool all_zeros = val == 0;
 
@@ -151,7 +191,7 @@ uint8_t needed_nbits_i16x8_simple(int16_t* x) {
         val = *x;
         all_zeros &= val == 0;
         val ^= val >> 15;
-        min_nlz = min(min_nlz, __builtin_clz(val));
+        min_nlz = MIN(min_nlz, __builtin_clz(val));
     }
     return all_zeros ? 0: 33 - min_nlz;
 }
@@ -159,8 +199,8 @@ uint8_t needed_nbits_i16x8_simple(int16_t* x) {
 // ------------------------------------------------ horz bit packing
 // (These functions are basically for debugging / validating bitpacking consts)
 
-uint64_t compress8b_bitpack(const uint8_t* src, uint64_t in_sz, uint8_t* dest,
-    uint8_t nbits)
+static inline uint64_t compress8b_bitpack(const uint8_t* src, uint64_t in_sz, uint8_t* dest,
+                            uint8_t nbits)
 {
     static const int block_sz = 8;
     // static const int group_sz = 4;
@@ -202,8 +242,8 @@ uint64_t compress8b_bitpack(const uint8_t* src, uint64_t in_sz, uint8_t* dest,
     }
     return dest - orig_dest; // TODO
 }
-uint64_t decompress8b_bitpack(const uint8_t* src, uint64_t in_sz, uint8_t* dest,
-    uint8_t nbits)
+static inline uint64_t decompress8b_bitpack(const uint8_t* src, uint64_t in_sz, uint8_t* dest,
+                              uint8_t nbits)
 {
     static const int block_sz = 8;
     static const int group_sz = 4; // set this to 0 to not partially unroll loops
@@ -219,36 +259,36 @@ uint64_t decompress8b_bitpack(const uint8_t* src, uint64_t in_sz, uint8_t* dest,
     // like it's going to), revert to simplest impl
 
 #define MAIN_LOOP(nbits)                                                        \
-    for (uint64_t g = 0; g < ngroups; g++) {                                    \
-        for (int b = 0; b < group_sz; b++) {                                    \
-            uint64_t unpacked = _pdep_u64(*(uint64_t*)src + (b * nbits), mask); \
-            *((uint64_t*)(dest + (b * block_sz))) = unpacked;                   \
-        }                                                                       \
-        src += nbits * group_sz;                                                \
-        dest += block_sz * group_sz;                                            \
-    }                                                                           \
-    for (uint64_t b = ngroups * group_sz * block_sz; b < nblocks; b++) {        \
-        uint64_t unpacked = _pdep_u64(*(uint64_t*)src, mask);                   \
-        *((uint64_t*)dest) = unpacked;                                          \
-        src += nbits;                                                           \
-        dest += block_sz;                                                       \
-    }
+for (uint64_t g = 0; g < ngroups; g++) {                                    \
+for (int b = 0; b < group_sz; b++) {                                    \
+uint64_t unpacked = _pdep_u64(*(uint64_t*)src + (b * nbits), mask); \
+*((uint64_t*)(dest + (b * block_sz))) = unpacked;                   \
+}                                                                       \
+src += nbits * group_sz;                                                \
+dest += block_sz * group_sz;                                            \
+}                                                                           \
+for (uint64_t b = ngroups * group_sz * block_sz; b < nblocks; b++) {        \
+uint64_t unpacked = _pdep_u64(*(uint64_t*)src, mask);                   \
+*((uint64_t*)dest) = unpacked;                                          \
+src += nbits;                                                           \
+dest += block_sz;                                                       \
+}
 
 #ifdef SWITCH_ON_NBITS
     switch(nbits) {
-    case 1: MAIN_LOOP(1); break;
-    case 2: MAIN_LOOP(2); break;
-    case 3: MAIN_LOOP(3); break;
-    case 4: MAIN_LOOP(4); break;
-    case 5: MAIN_LOOP(5); break;
-    case 6: MAIN_LOOP(6); break;
-    case 7: MAIN_LOOP(7); break;
-    case 8: MAIN_LOOP(8); break;
-    default: break;
+        case 1: MAIN_LOOP(1); break;
+        case 2: MAIN_LOOP(2); break;
+        case 3: MAIN_LOOP(3); break;
+        case 4: MAIN_LOOP(4); break;
+        case 5: MAIN_LOOP(5); break;
+        case 6: MAIN_LOOP(6); break;
+        case 7: MAIN_LOOP(7); break;
+        case 8: MAIN_LOOP(8); break;
+        default: break;
     }
 #else
     // MAIN_LOOP(nbits);
-    #undef MAIN_LOOP
+#undef MAIN_LOOP
 
 #ifdef VECTOR_STORES
     __m256i fourVals = _mm256_setzero_si256();
@@ -259,25 +299,24 @@ uint64_t decompress8b_bitpack(const uint8_t* src, uint64_t in_sz, uint8_t* dest,
         }
         _mm256_storeu_si256((__m256i*)dest, fourVals);
 #else
-    __m256i fourVals = _mm256_setzero_si256();
-    for (uint64_t g = 0; g < ngroups; g++) {
-        for (int b = 0; b < group_sz; b++) {
-            uint64_t unpacked = _pdep_u64(*(uint64_t*)src + (b * nbits), mask);
-            *((uint64_t*)(dest + (b * block_sz))) = unpacked;
+        //    __m256i fourVals = _mm256_setzero_si256();
+        for (uint64_t g = 0; g < ngroups; g++) {
+            for (int b = 0; b < group_sz; b++) {
+                uint64_t unpacked = _pdep_u64(*(uint64_t*)src + (b * nbits), mask);
+                *((uint64_t*)(dest + (b * block_sz))) = unpacked;
+            }
+#endif
+            src += nbits * group_sz;
+            dest += block_sz * group_sz;
+        }
+        for (uint64_t b = ngroups * group_sz * block_sz; b < nblocks; b++) {
+            uint64_t unpacked = _pdep_u64(*(uint64_t*)src, mask);
+            *((uint64_t*)dest) = unpacked;
+            src += nbits;
+            dest += block_sz;
         }
 #endif
-        src += nbits * group_sz;
-        dest += block_sz * group_sz;
+        return dest - orig_dest;
     }
-    for (uint64_t b = ngroups * group_sz * block_sz; b < nblocks; b++) {
-        uint64_t unpacked = _pdep_u64(*(uint64_t*)src, mask);
-        *((uint64_t*)dest) = unpacked;
-        src += nbits;
-        dest += block_sz;
-    }
-#endif
-
-    return dest - orig_dest;
-}
 
 #endif /* bitpack_h */

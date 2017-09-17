@@ -13,6 +13,7 @@
 
 #include "array_utils.hpp"
 #include "sprintz.h"
+#include "bitpack.h"
 #include "timing_utils.hpp"
 
 #include "debug_utils.hpp" // TODO rm
