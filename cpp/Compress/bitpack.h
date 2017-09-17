@@ -19,8 +19,7 @@
 
 #include "bitpack.h"
 
-#include "immintrin.h"
-#include "emmintrin.h"  // for _mm_set1_epi16
+#include "immintrin.h" // for pext, pdep
 #include "smmintrin.h"  // for _mm_minpos_epu16
 
 #include <assert.h>

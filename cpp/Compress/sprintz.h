@@ -26,20 +26,20 @@ uint16_t decompress8b_naiveDelta(const int8_t* src, uint16_t in_sz,
 
 int64_t compress8b_delta_simple(uint8_t* src, size_t len, int8_t* dest,
                                 bool write_size=true);
-int64_t decompress8b_delta_simple(int8_t* src, size_t len, uint8_t* dest,
+int64_t decompress8b_delta_simple(int8_t* src, uint8_t* dest,
                                   uint64_t orig_len=0);
 
 int64_t compress8b_delta(uint8_t* src, size_t len, int8_t* dest,
                          bool write_size=true);
-int64_t decompress8b_delta(int8_t* src, size_t len, uint8_t* dest);
+int64_t decompress8b_delta(int8_t* src, uint8_t* dest);
 
 int64_t compress8b_doubledelta(uint8_t* src, size_t len, int8_t* dest,
                                bool write_size=true);
-int64_t decompress8b_doubledelta(int8_t* src, size_t len, uint8_t* dest);
+int64_t decompress8b_doubledelta(int8_t* src, uint8_t* dest);
 
 int64_t compress8b_dyndelta(uint8_t* src, size_t len, int8_t* dest,
                             bool write_size=true);
-int64_t decompress8b_dyndelta(int8_t* src, size_t len, uint8_t* dest);
+int64_t decompress8b_dyndelta(int8_t* src, uint8_t* dest);
 
 
 
