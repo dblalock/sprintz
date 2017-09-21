@@ -328,8 +328,8 @@ int64_t decompress8b_delta_online(int8_t* src, uint8_t* dest) {
     int8_t prev_val = src[-1];
     for (int g = 0; g < ngroups; g++) {
         // read header to get nbits for each block
-        // uint32_t header = *(uint32_t*)src;
-        uint32_t header = (*(uint32_t*)src) & 0x00ffffff;
+        uint32_t header = *(uint32_t*)src;
+        // uint32_t header = (*(uint32_t*)src) & 0x00ffffff;
         src += group_header_sz;
         // header_src += (group_sz_blocks * nbits_sz_bits) / 8;
 
