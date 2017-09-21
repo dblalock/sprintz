@@ -35,7 +35,7 @@ TEST_CASE("building blocks", "[bitpack]") {
             raw /= (1 << (8 - nbits));
 
             auto len = compress8b_bitpack(raw.data(), sz, compressed.data(), nbits);
-            REQUIRE(len == (sz / 8) * nbits);
+            REQUIRE(len == (sz * nbits)/ 8);
 
 //            std::cout << "raw: " << raw.cast<uint16_t>();
 //            std::cout << "comp: " << compressed.cast<uint16_t>();

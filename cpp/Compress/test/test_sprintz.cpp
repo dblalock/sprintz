@@ -141,18 +141,21 @@ TEST_CASE("naiveDelta", "[sanity]") {
 
 
 
-TEST_CASE("delta_8b_simple", "[delta][bitpack]") {
+TEST_CASE("delta_8b_simple", "[delta]") {
     TEST_COMP_DECOMP_PAIR(compress8b_delta_simple, decompress8b_delta_simple);
 }
-TEST_CASE("delta_8b", "[delta][bitpack]") {
+TEST_CASE("delta_8b", "[delta]") {
     TEST_COMP_DECOMP_PAIR(compress8b_delta, decompress8b_delta);
 }
-TEST_CASE("delta_8b_online", "[delta][bitpack][dbg]") {
+TEST_CASE("just_bitpack_8b_online", "[delta]") {
+    TEST_COMP_DECOMP_PAIR(compress8b_online, decompress8b_online);
+}
+TEST_CASE("delta_8b_online", "[delta]") {
     TEST_COMP_DECOMP_PAIR(compress8b_delta_online, decompress8b_delta_online);
 }
-TEST_CASE("doubledelta", "[delta][bitpack]") {
+TEST_CASE("doubledelta", "[delta]") {
     TEST_COMP_DECOMP_PAIR(compress8b_doubledelta, decompress8b_doubledelta);
 }
-TEST_CASE("dyndelta", "[delta][bitpack]") {
+TEST_CASE("dyndelta", "[delta]") {
     TEST_COMP_DECOMP_PAIR(compress8b_dyndelta, decompress8b_dyndelta);
 }

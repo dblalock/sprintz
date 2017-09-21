@@ -203,7 +203,10 @@ static inline uint64_t compress8b_bitpack(const uint8_t* src, uint64_t in_sz, ui
 {
     static const int block_sz = 8;
     // static const int group_sz = 4;
-    assert(in_sz % block_sz == 0);
+
+    if (nbits == 0) { return 0; }
+
+    // assert(in_sz % block_sz == 0);
     uint64_t nblocks = in_sz / block_sz;
 
     uint8_t* orig_dest = dest;
@@ -234,19 +237,27 @@ static inline uint64_t compress8b_bitpack(const uint8_t* src, uint64_t in_sz, ui
     // }
 
     for (uint64_t b = 0; b < nblocks; b++) {
-        uint64_t data = *(uint64_t*)(&src[block_sz*b]);
+        uint64_t data = *(uint64_t*)(src);
         uint64_t packed = _pext_u64(data, mask);
         *((uint64_t*)dest) = packed;
         dest += nbits;
+        src += block_sz;
     }
-    return dest - orig_dest; // TODO
+
+    size_t remaining_len = in_sz % block_sz;
+    memcpy(dest, src, remaining_len);
+
+    return dest + remaining_len - orig_dest;
 }
 static inline uint64_t decompress8b_bitpack(const uint8_t* src, uint64_t in_sz, uint8_t* dest,
                               uint8_t nbits)
 {
     static const int block_sz = 8;
-    static const int group_sz = 4; // set this to 0 to not partially unroll loops
-    assert(in_sz % nbits == 0);
+    static const int group_sz = 0; // set this to 0 to not partially unroll loops
+
+    if (nbits == 0) { return 0; }
+
+    // assert(in_sz % nbits == 0);
 
     uint64_t nblocks = in_sz / nbits;
     uint64_t ngroups = group_sz > 0 ? nblocks / group_sz : 0;
@@ -257,21 +268,22 @@ static inline uint64_t decompress8b_bitpack(const uint8_t* src, uint64_t in_sz, 
     // TODO if more complicated stuff doesn't help (which it doesn't look
     // like it's going to), revert to simplest impl
 
-#define MAIN_LOOP(nbits)                                                        \
-for (uint64_t g = 0; g < ngroups; g++) {                                    \
-for (int b = 0; b < group_sz; b++) {                                    \
-uint64_t unpacked = _pdep_u64(*(uint64_t*)src + (b * nbits), mask); \
-*((uint64_t*)(dest + (b * block_sz))) = unpacked;                   \
-}                                                                       \
-src += nbits * group_sz;                                                \
-dest += block_sz * group_sz;                                            \
-}                                                                           \
-for (uint64_t b = ngroups * group_sz * block_sz; b < nblocks; b++) {        \
-uint64_t unpacked = _pdep_u64(*(uint64_t*)src, mask);                   \
-*((uint64_t*)dest) = unpacked;                                          \
-src += nbits;                                                           \
-dest += block_sz;                                                       \
-}
+#define MAIN_LOOP(nbits)                                                    \
+    for (uint64_t g = 0; g < ngroups; g++) {                                \
+        for (int b = 0; b < group_sz; b++) {                                \
+            uint64_t unpacked = _pdep_u64(*(uint64_t*)src, mask);           \
+            *((uint64_t*)(dest + (b * block_sz))) = unpacked;               \
+            src += nbits;                                                   \
+        }                                                                   \
+        src += nbits * group_sz;                                            \
+        dest += block_sz * group_sz;                                        \
+    }                                                                       \
+    for (uint64_t b = ngroups * group_sz * block_sz; b < nblocks; b++) {    \
+        uint64_t unpacked = _pdep_u64(*(uint64_t*)src, mask);               \
+        *((uint64_t*)dest) = unpacked;                                      \
+        src += nbits;                                                       \
+        dest += block_sz;                                                   \
+    }
 
 #ifdef SWITCH_ON_NBITS
     switch(nbits) {
@@ -289,33 +301,47 @@ dest += block_sz;                                                       \
     // MAIN_LOOP(nbits);
 #undef MAIN_LOOP
 
-#ifdef VECTOR_STORES
-    __m256i fourVals = _mm256_setzero_si256();
-    for (uint64_t g = 0; g < ngroups; g++) {
-        for (int b = 0; b < group_sz; b++) {
-            uint64_t unpacked = _pdep_u64(*(uint64_t*)src + (b * nbits), mask);
-            fourVals = _mm256_insert_epi64(fourVals, unpacked, b);
-        }
-        _mm256_storeu_si256((__m256i*)dest, fourVals);
-#else
-        //    __m256i fourVals = _mm256_setzero_si256();
+    #ifdef VECTOR_STORES
+        __m256i fourVals = _mm256_setzero_si256();
         for (uint64_t g = 0; g < ngroups; g++) {
             for (int b = 0; b < group_sz; b++) {
-                uint64_t unpacked = _pdep_u64(*(uint64_t*)src + (b * nbits), mask);
-                *((uint64_t*)(dest + (b * block_sz))) = unpacked;
+                uint64_t unpacked = _pdep_u64(*(uint64_t*)(src + b * nbits), mask);
+                fourVals = _mm256_insert_epi64(fourVals, unpacked, b);
+                // src += nbits;
             }
-#endif
+            _mm256_storeu_si256((__m256i*)dest, fourVals);
             src += nbits * group_sz;
             dest += block_sz * group_sz;
         }
-        for (uint64_t b = ngroups * group_sz * block_sz; b < nblocks; b++) {
-            uint64_t unpacked = _pdep_u64(*(uint64_t*)src, mask);
-            *((uint64_t*)dest) = unpacked;
-            src += nbits;
-            dest += block_sz;
+    #else
+        //    __m256i fourVals = _mm256_setzero_si256();
+        for (uint64_t g = 0; g < ngroups; g++) {
+            for (int b = 0; b < group_sz; b++) {
+                uint64_t unpacked = _pdep_u64(*(uint64_t*)(src + b * nbits), mask);
+                *((uint64_t*)(dest + (b * block_sz))) = unpacked;
+                // src += nbits;
+            }
+            src += nbits * group_sz;
+            dest += block_sz * group_sz;
         }
-#endif
-        return dest - orig_dest;
+    #endif
+    for (uint64_t b = ngroups * group_sz * block_sz; b < nblocks; b++) {
+        uint64_t unpacked = _pdep_u64(*(uint64_t*)src, mask);
+        *((uint64_t*)dest) = unpacked;
+        src += nbits;
+        dest += block_sz;
     }
+#endif
+        // return dest - orig_dest;
+
+        size_t orig_len = (in_sz * 8) / nbits;
+        size_t remaining_len = orig_len % block_sz;
+        memcpy(dest, src, remaining_len);
+
+        return dest + remaining_len - orig_dest;
+    }
+
+// #undef MAX
+// #undef MIN
 
 #endif /* bitpack_h */
