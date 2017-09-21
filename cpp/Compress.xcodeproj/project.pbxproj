@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		726D10641F6E027F00080495 /* sprintz.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 726D10631F6E027F00080495 /* sprintz.cpp */; };
 		726D11D41F6E046900080495 /* test_sprintz.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 726D11D11F6E046800080495 /* test_sprintz.cpp */; };
+		726D11D71F74404000080495 /* test_bitpack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 726D11D61F74404000080495 /* test_bitpack.cpp */; };
 		72E01C691EB554200038A2B9 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72E01C681EB554200038A2B9 /* main.cpp */; };
 /* End PBXBuildFile section */
 
@@ -353,6 +354,8 @@
 		726D11CF1F6E046800080495 /* UmfPackSupport */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = UmfPackSupport; sourceTree = "<group>"; };
 		726D11D11F6E046800080495 /* test_sprintz.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = test_sprintz.cpp; path = test/test_sprintz.cpp; sourceTree = "<group>"; };
 		726D11D21F6E046800080495 /* timing_utils.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = timing_utils.hpp; path = test/timing_utils.hpp; sourceTree = "<group>"; };
+		726D11D51F743FE000080495 /* test_utils.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = test_utils.hpp; path = test/test_utils.hpp; sourceTree = "<group>"; };
+		726D11D61F74404000080495 /* test_bitpack.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = test_bitpack.cpp; path = test/test_bitpack.cpp; sourceTree = "<group>"; };
 		72E01C651EB554200038A2B9 /* Compress */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Compress; sourceTree = BUILT_PRODUCTS_DIR; };
 		72E01C681EB554200038A2B9 /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
 		72E980591F0AB132006E1F9B /* sprintz.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = sprintz.h; sourceTree = "<group>"; };
@@ -1032,7 +1035,9 @@
 				726D10661F6E046800080495 /* catch.hpp */,
 				726D10671F6E046800080495 /* eigen */,
 				726D11D11F6E046800080495 /* test_sprintz.cpp */,
+				726D11D61F74404000080495 /* test_bitpack.cpp */,
 				726D11D21F6E046800080495 /* timing_utils.hpp */,
+				726D11D51F743FE000080495 /* test_utils.hpp */,
 			);
 			path = Compress;
 			sourceTree = "<group>";
@@ -1097,6 +1102,7 @@
 			files = (
 				726D11D41F6E046900080495 /* test_sprintz.cpp in Sources */,
 				726D10641F6E027F00080495 /* sprintz.cpp in Sources */,
+				726D11D71F74404000080495 /* test_bitpack.cpp in Sources */,
 				72E01C691EB554200038A2B9 /* main.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
