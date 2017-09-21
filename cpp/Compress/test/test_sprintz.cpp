@@ -105,23 +105,26 @@ TEST_CASE("naiveDelta", "[sanity]") {
     } while(0);
 
 
+
+
+
 #define TEST_COMP_DECOMP_PAIR(COMP_FUNC, DECOMP_FUNC)                       \
     do {                                                                    \
         vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66,    \
-        72, 127, 128, 129, 4096, 4096 + 17};                                \
+            72, 127, 128, 129, 4096, 4096 + 17};                            \
         SECTION("known input") {                                            \
             for (auto sz : sizes) {                                         \
                 TEST_KNOWN_INPUT(sz, COMP_FUNC, DECOMP_FUNC);               \
             }                                                               \
         }                                                                   \
-        SECTION("fuzz_multiple_sizes") {                                    \
-            for (auto sz : sizes) {                                         \
-                TEST_FUZZ(sz, COMP_FUNC, DECOMP_FUNC);                      \
-            }                                                               \
-        }                                                                   \
         SECTION("zeros") {                                                  \
             for (auto sz : sizes) {                                         \
                 TEST_ZEROS(sz, COMP_FUNC, DECOMP_FUNC);                     \
+            }                                                               \
+        }                                                                   \
+        SECTION("fuzz_multiple_sizes") {                                    \
+            for (auto sz : sizes) {                                         \
+                TEST_FUZZ(sz, COMP_FUNC, DECOMP_FUNC);                      \
             }                                                               \
         }                                                                   \
         SECTION("long fuzz") {                                              \
@@ -130,13 +133,21 @@ TEST_CASE("naiveDelta", "[sanity]") {
     } while (0);
 
 
+#define DEBUG_COMP_DECOMP_PAIR(COMP_FUNC, DECOMP_FUNC)          \
+    vector<int64_t> sizes {72};                                 \
+    for (auto sz : sizes) {                                     \
+        TEST_FUZZ(sz, COMP_FUNC, DECOMP_FUNC);                  \
+    }
+
+
+
 TEST_CASE("delta_8b_simple", "[delta][bitpack]") {
     TEST_COMP_DECOMP_PAIR(compress8b_delta_simple, decompress8b_delta_simple);
 }
 TEST_CASE("delta_8b", "[delta][bitpack]") {
     TEST_COMP_DECOMP_PAIR(compress8b_delta, decompress8b_delta);
 }
-TEST_CASE("delta_8b_online", "[delta][bitpack]") {
+TEST_CASE("delta_8b_online", "[delta][bitpack][dbg]") {
     TEST_COMP_DECOMP_PAIR(compress8b_delta_online, decompress8b_delta_online);
 }
 TEST_CASE("doubledelta", "[delta][bitpack]") {
