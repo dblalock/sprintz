@@ -220,6 +220,7 @@ int64_t compress8b_delta(uint8_t* src, size_t len, int8_t* dest,
     static constexpr int group_sz_blocks = 8;
     static constexpr int group_sz = group_sz_blocks * block_sz;
     static constexpr int nbits_sz_bits = 3;
+    // static constexpr int delta_delay = 1;
 
     // printf("delta8: received data of length: %lu\n", len);
 
@@ -244,11 +245,16 @@ int64_t compress8b_delta(uint8_t* src, size_t len, int8_t* dest,
     // printf("src data:\n");
     // for (int i = 0; i < len; i++) { printf("%d ", (int)src[i]); } printf("\n");
 
-    // size_t cpy_len = MIN(8, len);
-    // memcpy(dest, src, cpy_len); // copy first 8B to simplify delta computation
-    // dest += cpy_len;
-    // src += cpy_len;
-    // len -= cpy_len;
+   // for (int i = 0; i < delta_delay; i++) {
+   //     *dest = 0;
+   //     dest++;
+   // }
+
+    size_t cpy_len = MIN(8, len);
+    memcpy(dest, src, cpy_len); // copy first 8B to simplify delta computation
+    dest += cpy_len;
+    src += cpy_len;
+    len -= cpy_len;
 
     size_t ngroups = len / group_sz;
     size_t header_sz = ngroups ? 1 + (ngroups * group_sz_blocks * nbits_sz_bits) / 8 : 0;
@@ -278,19 +284,19 @@ int64_t compress8b_delta(uint8_t* src, size_t len, int8_t* dest,
     uint8_t* nbits_buff = (uint8_t*)&nbits_buff_u64;
 
     // for each group of blocks
-    uint8_t prev_val = 0;
+     // uint8_t prev_val = 0;
     for (int g = 0; g < ngroups; g++) { // for each group
 
         for (int b = 0; b < group_sz_blocks; b++) { // for each block
-             // for (int i = block_sz - 1; i >= 0; i--) {
-             //     delta_buff[i] = src[i] - src[i-1];
-             // }
-             // src += block_sz;
-           for (int i = 0; i < block_sz; i++) { // for each sample
-               delta_buff[i] = (*src - prev_val);
-               prev_val = *src;
-               src++;
-           }
+            for (int i = block_sz - 1; i >= 0; i--) {
+                delta_buff[i] = src[i] - src[i-1];
+            }
+            src += block_sz;
+            // for (int i = 0; i < block_sz; i++) { // for each sample
+            //     delta_buff[i] = (*src - prev_val);
+            //     prev_val = *src;
+            //     src++;
+            // }
 
             // loop at the bottom lets us replace an op on reg,mem,
             // with an op on just two registers (which may or may
@@ -313,6 +319,7 @@ int64_t compress8b_delta(uint8_t* src, size_t len, int8_t* dest,
 
             // info for header
             uint8_t nbits = needed_nbits_i8x8((int8_t*)delta_buff);
+            // uint8_t nbits = 8; // TODO rm
 #ifdef VERBOSE_COMPRESS
             counts[nbits]++;
             uint8_t delta_nbits_idx;
@@ -366,6 +373,7 @@ int64_t decompress8b_delta(int8_t* src, uint8_t* dest) {
     static constexpr int group_sz = group_sz_blocks * block_sz;
     static constexpr int nbits_sz_bits = 3;
     static constexpr int nbits_sz_mask = 0x07;
+    // static constexpr int delta_delay = 1;
     uint8_t* orig_dest = dest;
 
     // int8_t* orig_src = src;  // TODO rm
@@ -374,15 +382,17 @@ int64_t decompress8b_delta(int8_t* src, uint8_t* dest) {
     uint64_t orig_len = *(uint64_t*)src;
     src += 8;
 
+//    src += delta_delay;
+
     // if (orig_len <= 8) {
     //     memcpy(dest, src, orig_len);
     //     return orig_len;
     // }
-    // size_t cpy_len = MIN(8, orig_len);
-    // memcpy(dest, src, cpy_len); // copy first 8B to simplify delta computation
-    // dest += cpy_len;
-    // src += cpy_len;
-    // orig_len -= cpy_len;
+    size_t cpy_len = MIN(8, orig_len);
+    memcpy(dest, src, cpy_len); // copy first 8B to simplify delta computation
+    dest += cpy_len;
+    src += cpy_len;
+    orig_len -= cpy_len;
 
     // figure out number of blocks and where packed data starts; we add
     // 1 extra to src so that 4B header writes don't clobber anything
@@ -390,7 +400,8 @@ int64_t decompress8b_delta(int8_t* src, uint8_t* dest) {
     uint8_t* header_src = (uint8_t*)src;
     src += ngroups ? 1 + (ngroups * group_sz_blocks * nbits_sz_bits) / 8 : 0;
 
-    int8_t prev_val = 0;
+    // int8_t prev_val = 0;
+    int8_t prev_val = header_src[-1]; // because src just got increased
     for (int g = 0; g < ngroups; g++) {
         // read header to get nbits for each block
         uint32_t header = *(uint32_t*)header_src;
@@ -427,57 +438,6 @@ int64_t decompress8b_delta(int8_t* src, uint8_t* dest) {
     return dest + remaining_orig_len - orig_dest;
 }
 
-
-// ------------------------------------------------ delta + bit packing for real
-
-
-int64_t decompress8b_delta_online(int8_t* src, uint8_t* dest) {
-    static constexpr int block_sz = 8;
-    static constexpr int group_sz_blocks = 8;
-    static constexpr int group_sz = group_sz_blocks * block_sz;
-    static constexpr int nbits_sz_bits = 3;
-    static constexpr int nbits_sz_mask = 0x07;
-    uint8_t* orig_dest = dest;
-
-    // read in size of original data
-    uint64_t orig_len = *(uint64_t*)src;
-    src += 8;
-
-    // figure out number of blocks and where packed data starts; we add
-    // 1 extra to src so that 4B header writes don't clobber anything
-    size_t ngroups = orig_len / group_sz;
-    uint8_t* header_src = (uint8_t*)src;
-    src += 1 + (ngroups * group_sz_blocks * nbits_sz_bits) / 8;
-
-    int8_t prev_val = 0;
-    for (int g = 0; g < ngroups; g++) {
-        // read header to get nbits for each block
-        uint32_t header = *(uint32_t*)header_src;
-        header_src += (group_sz_blocks * nbits_sz_bits) / 8;
-
-        // read deltas for each block
-        for (int b = 0; b < group_sz_blocks; b++) {
-            uint8_t nbits = (header >> (nbits_sz_bits * b)) & nbits_sz_mask;
-            uint64_t mask = kBitUnpackMasks8[nbits];
-            int64_t deltas = _pdep_u64(*(uint64_t*)src, mask);
-            nbits += nbits == 7;
-            src += nbits;
-
-            // cumsum deltas (stored in upper bits to get sign extension)
-            for (int shift = 56; shift >= 0; shift -= 8) {
-                int64_t delta = (deltas << shift) >> (64 - nbits);
-                *dest = prev_val + (int8_t)delta;
-                prev_val = *dest;
-                dest++;
-            }
-        }
-    }
-    size_t remaining_orig_len = orig_len % group_sz;
-    memcpy(dest, src, remaining_orig_len);
-
-    assert(orig_len == (dest + remaining_orig_len - orig_dest));
-    return dest + remaining_orig_len - orig_dest;
-}
 
 // ------------------------------------------------ double delta + bit packing
 

@@ -333,10 +333,10 @@ void _test_delta_zeros(int64_t sz) {
 }
 
 
-TEST_CASE("delta_8b", "[delta][bitpack]") {
-//    vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66, 72,
-//        127, 128, 129, 4096, 4096 + 17};
-    vector<int64_t> sizes {72};
+TEST_CASE("delta_8b", "[delta][bitpack][dbg]") { // TODO rm dbg tag
+    vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66, 72,
+        127, 128, 129, 4096, 4096 + 17};
+//    vector<int64_t> sizes {72};
     SECTION("known input") {
         for (auto sz : sizes) { _test_delta_8_known_input(sz); }
     }
