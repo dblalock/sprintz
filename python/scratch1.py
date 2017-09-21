@@ -689,7 +689,7 @@ def encode_fir(blocks, filt):
     # array([ 0,  1,  1,  0, -2,  0])
     # """
     # pretty sure this is equivalent to just convolving with [1, -filt]
-    print "convolving with filter: ", filt
+    # print "convolving with filter: ", filt
 
     filt = np.asarray([0] + list(filt)).ravel()
 
@@ -1328,9 +1328,9 @@ def main():
     # right_transforms = ['delta', 'dyn_filt']
     # right_transforms = ['delta', 'split_dyn_filt']
 
-    numbits = 16
+    # numbits = 16
     # numbits = 12
-    # numbits = 8
+    numbits = 8
 
     # num_neighbors = 256
     num_neighbors = 1024
@@ -1354,11 +1354,6 @@ def main():
 
     predict_next = False
     # predict_next = True
-
-    save = True
-    # save = False
-    small = False
-    # small = True
 
     # prefix_nbits = 8
     # prefix_nbits = 10
@@ -1386,6 +1381,11 @@ def main():
     # chunk_sz = 64
     # chunk_sz = 256
 
+    save = True
+    # save = False
+    small = False
+    # small = True
+
     # TODO add in a "transform" that encodes blocks using codes we would use
     #   -actually, prolly bake this into nbits_cost cuz otherwise leading 0s
     #   and more than one leading 1 will make it underestimate costs
@@ -1394,7 +1394,7 @@ def main():
 
     # ------------------------ name output dir based on params
     suffix = ""
-    prefix = "small/" if small else ""
+    prefix = "small-" if small else ""
     if "nn" in right_transforms:
         suffix = "_nn{}".format(num_neighbors)
         suffix += "_inv{}".format(1 if invert_neighbors else 0)
@@ -1436,11 +1436,11 @@ def main():
             subdir += '_blocksz={}'.format(block_sz)
         subdir += '_k={}'.format(k)
 
-        # for d in list(dsets)[5:10]:
         # for d in list(dsets)[26:27]:  # olive oil
         # for d in list(dsets)[:5]:
         # for d in list(dsets)[0:1]:
-        for d in list(dsets):
+        # for d in list(dsets):
+        for d in list(dsets)[7:15]:
             data = d.X
             # print "X.shape", X.shape
             data = quantize(data, numbits, keep_nrows=n)
@@ -1504,7 +1504,8 @@ def main():
     # for d in list(dsets)[:4]:
     # for d in list(dsets)[1:2]:  # adiac
     # for d in list(dsets)[4:5]:  # ChlorineConcentration
-    for d in list(dsets)[:25]:
+    # for d in list(dsets)[23:24]:  # MALLAT
+    for d in list(dsets)[:23]:
         print "------------------------ {}".format(d.name)
         plot_dset(d, numbits=numbits, n=n,
                   left_transforms=left_transforms,

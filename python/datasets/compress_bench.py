@@ -46,7 +46,7 @@ def _quantize(mat, dtype, axis=0):
     # print "quantize: got mat with shape: ", mat.shape
     mat -= np.min(mat, axis=axis, keepdims=True)
     mat = mat.astype(np.float32)
-    mat /= np.max(mat, axis=axis, keepdims=True)
+    mat /= max(1, np.max(mat, axis=axis, keepdims=True))
     if dtype == np.uint8:
         max_val = 255
     elif dtype in (np.uint16, np.uint32):  # NOTE: u32 -> 16 leading 0s
@@ -78,12 +78,7 @@ def _ensure_list_or_tuple(x):
 
 # def write_dataset(mat, name, dtypes=(np.uint8, np.uint16),
 def write_dataset(mat, name, dtype, store_as_dtype=None, order='f',
-                  delta_encode=False, zigzag_encode=False, subdir='', verbose=2):
-    # dtypes = _ensure_list_or_tuple(dtypes)
-    # quantize_dtypes = _ensure_list_or_tuple(quantize_dtypes)
-    # if store_dtypes is None:
-    # store_dtypes = _ensure_list_or_tuple(store_dtypes)
-    # assert len(quantize_dtypes) == len(store_dtypes)
+                  delta_encode=False, zigzag_encode=False, subdir='', verbose=1):
 
     dtype_names = {np.uint8: 'uint8', np.uint16: 'uint16', np.uint32: 'uint32',
                    np.int8: 'int8', np.int16: 'int16', np.int32: 'int32'}
@@ -92,18 +87,6 @@ def write_dataset(mat, name, dtype, store_as_dtype=None, order='f',
     order_to_dir = {'c': paths.COMPRESSION_ROWMAJOR_DIR,
                     'f': paths.COMPRESSION_COLMAJOR_DIR}
 
-    if verbose > 1:
-        print "mat[:10]: ", mat[:10]
-
-    # quantize_axis = 0
-    # if order == 'f':
-    #     mat = np.ascontiguousarray(mat.T)  # tofile always writes in C order
-    #     quantize_axis = 1
-    #     if verbose > 1:
-    #         print "colmajor mat[:20]: ", mat[:20]
-
-    # out_paths = []
-    # for dtype in dtypes:
     store_mat = _quantize(mat, dtype=dtype)
 
     if delta_encode:
@@ -144,10 +127,10 @@ def write_dataset(mat, name, dtype, store_as_dtype=None, order='f',
 
     load_mat = np.fromfile(path, dtype=store_as_dtype)
 
-    # if verbose > 1:
-    #     print "stored mat shape: ", load_mat.shape
-    #     print "stored mat[:10]: ", store_mat[:10]
-    #     print "loaded mat[:10]: ", load_mat[:10]
+    if verbose > 1:
+        print "stored mat shape: ", load_mat.shape
+        print "stored mat[:10]: ", store_mat[:10]
+        print "loaded mat[:10]: ", load_mat[:10]
 
     assert np.array_equal(store_mat.ravel(), load_mat.ravel())
 
@@ -247,13 +230,13 @@ def main():
     # write_normal_datasets = True
     write_ucr_datasets = True
 
-    delta_encode = False
-    zigzag_encode = False
-    # delta_encode = True
-    # zigzag_encode = True
+    # delta_encode = False
+    # zigzag_encode = False
+    delta_encode = True
+    zigzag_encode = True
 
-    STORAGE_ORDER = 'f'
-    # STORAGE_ORDER = 'c'
+    # STORAGE_ORDER = 'f'
+    STORAGE_ORDER = 'c'
 
     dtypes = [np.uint8, np.uint16]
     # dtypes = [np.uint32]

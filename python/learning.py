@@ -106,8 +106,10 @@ def all_possible_filters(ntaps, nbits=4, step_sz=.25):
 
 
 def prediction_errors(X, y, filters):
-    return y - np.dot(X, filters.T)
-
+    if len(filters):
+        return y - np.dot(X, filters.T)
+    # return y - np.dot(X, np.zeros((X.shape[1], 1)))
+    return y.reshape(len(y), 1)
 
 # def sq_prediction_errors(X, y, filters):
 #     predictions = np.dot(X, filters.T)
@@ -212,12 +214,14 @@ def greedy_brute_filters(x, nfilters=16, ntaps=4, nbits=4, step_sz=.5,
     X = window.sliding_window_1D(x[:-1], ntaps).astype(np.float32)
     y = x[ntaps:].astype(np.float32).reshape((-1, 1))  # col vect
 
+    filters = []
+    # filters = np.zeros((1, ntaps))
     # filters = np.zeros((2, ntaps))
-    filters = np.zeros((2, ntaps))
+    # filters = np.zeros((2, ntaps))
     # filters = np.zeros((3, ntaps))
     # filters = np.zeros((4, ntaps))
-    filters[0, -1] = 1  # delta encoding
-    filters[1, -1], filters[1, -2] = 2, -1  # delta-delta encoding
+    # filters[0, -1] = 1  # delta encoding
+    # filters[1, -1], filters[1, -2] = 2, -1  # delta-delta encoding
     # filters[2, -1], filters[2, -2], filters[2, -3] = 2, -3, 1  # 3delta
     # filters[2, -1], filters[2, -2], filters[2, -3] = .5, .5, 0  # lpf
     # filters[3, -1], filters[3, -2], filters[2, -3] = 1, -1, 0  # alternating delta
@@ -260,17 +264,25 @@ def greedy_brute_filters(x, nfilters=16, ntaps=4, nbits=4, step_sz=.5,
 
     # compute loss, reduced across block dimension (which is dim 1, not 2)
     axis = 1 if block_sz > 1 else -1
-    errs = compute_loss(errs, loss, axis=axis)
-    all_errs = compute_loss(all_errs, loss, axis=axis)
+    losses = compute_loss(errs, loss, axis=axis)
+    all_losses = compute_loss(all_errs, loss, axis=axis)
 
-    # take the best error attainable using the filters we have so far
-    errs = np.min(errs, axis=1).reshape(-1, 1)  # N x 1
+    # print "errs.shape: ", errs.shape
+    # return
 
     # print "y shape: ", y.shape
-    # print "errs shape: ", errs.shape
-    # print "all_errs shape: ", all_errs.shape
+    # print "losses shape: ", errs.shape
+    # print "all_losses shape: ", all_errs.shape
+    # return
 
-    assert all_errs.shape == (errs.shape[0], len(candidates))
+    # take the best loss attainable using the filters we have so far
+    if len(losses.shape) < 2:  # true iff we start with < 2 filters
+        assert len(filters) in (0, 1)
+        losses = losses.reshape(-1, 1)
+    else:
+        losses = np.min(losses, axis=1).reshape(-1, 1)  # N x 1
+
+    assert all_losses.shape == (errs.shape[0], len(candidates))
 
     if verbose > 0:
         if loss == 'l2':
@@ -279,15 +291,18 @@ def greedy_brute_filters(x, nfilters=16, ntaps=4, nbits=4, step_sz=.5,
             div_by = np.mean(np.abs(y)) * block_sz
         elif loss == 'linf':
             div_by = np.mean(np.abs(y))
-        initial_mean_err = np.mean(errs)
+        initial_mean_err = np.mean(losses)
 
-    for i in range(filters.shape[0], nfilters):
-        min_errs = np.minimum(all_errs, errs)  # N x len(candidates)
-        losses = np.mean(min_errs, axis=0)  # total err from using each filt
-        best_filt_idx = np.argmin(losses)
+    for i in range(len(filters), nfilters):
+        min_losses = np.minimum(all_losses, losses)  # N x len(candidates)
+        mean_losses = np.mean(min_losses, axis=0)  # total err from using each filt
+        best_filt_idx = np.argmin(mean_losses)
         # add best filter
-        filters = np.vstack((filters, candidates[best_filt_idx]))
-        errs = min_errs[:, best_filt_idx].reshape(y.shape)
+        if len(filters):
+            filters = np.vstack((filters, candidates[best_filt_idx]))
+        else:
+            filters = candidates[best_filt_idx]
+        losses = min_losses[:, best_filt_idx].reshape(y.shape)  # make col vect
 
         if verbose > 1:
             print "{}: mean err / var: {}".format(
