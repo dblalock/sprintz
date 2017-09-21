@@ -231,14 +231,14 @@ TEST_CASE("naiveDelta", "[sanity]") {
 }
 
 
-#define TEST_COMPRESSOR(COMP_FUNC, DECOMP_FUNC)                         \
-    Vec_i8 compressed(sz * 2 + 16);                                     \
-    Vec_u8 decompressed(sz);                                            \
+#define TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC)                     \
+    Vec_i8 compressed((SZ) * 2 + 16);                                   \
+    Vec_u8 decompressed((SZ));                                          \
     compressed.setZero();                                               \
     decompressed.setZero();                                             \
-    auto len = COMP_FUNC(raw.data(), sz, compressed.data());            \
+    auto len = COMP_FUNC(raw.data(), (SZ), compressed.data());          \
     len = DECOMP_FUNC(compressed.data(), decompressed.data());          \
-    CAPTURE(sz);                                                        \
+    CAPTURE(SZ);                                                        \
     REQUIRE(ar::all_eq(raw, decompressed));
 
 //    std::cout << "decompressed size: " << decompressed.size() << "\n";  \
@@ -246,47 +246,55 @@ TEST_CASE("naiveDelta", "[sanity]") {
 //    REQUIRE(ar::all_eq(raw, decompressed));
 
 
-void _test_delta_8_simple_known_input(int64_t sz) {
-    Vec_u8 raw(sz);
-    for (int i = 0; i < sz; i++) {
-        raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
-    }
-    
-    TEST_COMPRESSOR(compress8b_delta_simple, decompress8b_delta_simple);
-}
+//void _test_delta_8_simple_known_input(int64_t sz) {
+//    Vec_u8 raw(sz);
+//    for (int i = 0; i < sz; i++) {
+//        raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
+//    }
+//    TEST_COMPRESSOR(sz, compress8b_delta_simple, decompress8b_delta_simple);
+//}
+//
+//TEST_CASE("delta_8b_simple_known_input", "[delta][bitpack]") {
+//    vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66, 72,
+//        127, 128, 129, 4096, 4096 + 17};
+//    for (auto sz : sizes) {
+//        _test_delta_8_simple_known_input(sz);
+//    }
+//}
 
-TEST_CASE("delta_8b_simple_known_input", "[delta][bitpack]") {
-    vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66, 72,
-        127, 128, 129, 4096, 4096 + 17};
-    for (auto sz : sizes) {
-        _test_delta_8_simple_known_input(sz);
-    }
-}
+#define TEST_KNOWN_INPUT(SZ, COMP_FUNC, DECOMP_FUNC)                    \
+    do {                                                                \
+        Vec_u8 raw((SZ));                                               \
+        for (int i = 0; i < (SZ); i++) {                                \
+            raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);             \
+        }                                                               \
+        TEST_COMPRESSOR((SZ), compress8b_delta, decompress8b_delta);    \
+    } while(0);
 
-void _test_delta_8_known_input(int64_t sz) {
-    Vec_u8 raw(sz);
-    for (int i = 0; i < sz; i++) {
-        raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
-    }
-    TEST_COMPRESSOR(compress8b_delta, decompress8b_delta);
-//    
+// void _test_delta_8_known_input(int64_t sz) {
+//     Vec_u8 raw(sz);
+//     for (int i = 0; i < sz; i++) {
+//         raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
+//     }
+//     TEST_COMPRESSOR(sz, compress8b_delta, decompress8b_delta);
+//
 //    Vec_i8 compressed(sz * 2);
 //    Vec_u8 decompressed(sz);
 //    compressed.setZero();
 //    decompressed.setZero();
-//    
+//
 //    //    dump_16B_aligned(raw.data());
 //    //    dump_16B_aligned(raw.data() + 16);
-//    
+//
 //    auto len = compress8b_delta(raw.data(), sz, compressed.data());
-//    
+//
 //    printf("compressed data (ignoring initial 8B) (length=%lld):\n", len);
 //    for (int i = 8; i <= len - 16; i += 16) {
 //        dump_16B_aligned(compressed.data() + i);
 //    }
 //
 //    len = decompress8b_delta(compressed.data(), sz, decompressed.data());
-////    
+////
 //    printf("decompressed data (length=%lld):\n", len);
 //    for (int i = 64; i <= sz - 16; i += 16) {
 //        dump_16B_aligned(decompressed.data() + i);
@@ -295,126 +303,207 @@ void _test_delta_8_known_input(int64_t sz) {
 //    CAPTURE(sz);
 //    //    REQUIRE(ar::all_eq(raw.data(), decompressed.data(), 64));
 //    REQUIRE(ar::all_eq(raw, decompressed));
+//}
+
+#define TEST_FUZZ(SZ, COMP_FUNC, DECOMP_FUNC)                               \
+    do {                                                                    \
+    srand(123);                                                             \
+    Vec_u8 raw((SZ));                                                       \
+    raw.setRandom();                                                        \
+    {                                                                       \
+        TEST_COMPRESSOR((SZ), COMP_FUNC, DECOMP_FUNC);                      \
+    }                                                                       \
+    raw /= 2;                                                               \
+    {                                                                       \
+        TEST_COMPRESSOR((SZ), COMP_FUNC, DECOMP_FUNC);                      \
+    }                                                                       \
+    raw /= 2;                                                               \
+    {                                                                       \
+        TEST_COMPRESSOR((SZ), COMP_FUNC, DECOMP_FUNC);                      \
+    }                                                                       \
+    raw /= 2;                                                               \
+    {                                                                       \
+        TEST_COMPRESSOR((SZ), COMP_FUNC, DECOMP_FUNC);                      \
+    }                                                                       \
+    raw /= 2;                                                               \
+    {                                                                       \
+        TEST_COMPRESSOR((SZ), COMP_FUNC, DECOMP_FUNC);                      \
+    }                                                                       \
+    raw /= 8;                                                               \
+    {                                                                       \
+        TEST_COMPRESSOR((SZ), COMP_FUNC, DECOMP_FUNC);                      \
+    }                                                                       \
+    } while(0);
+
+
+// void _test_delta_8_fuzz(int64_t sz) {
+//     srand(123);
+//     Vec_u8 raw(sz);
+//     raw.setRandom();
+//     {
+//         TEST_COMPRESSOR(sz, compress8b_delta, decompress8b_delta);
+//     }
+//     raw /= 2;
+//     {
+//         TEST_COMPRESSOR(sz, compress8b_delta, decompress8b_delta);
+//     }
+//     raw /= 2;
+//     {
+//         TEST_COMPRESSOR(sz, compress8b_delta, decompress8b_delta);
+//     }
+//     raw /= 2;
+//     {
+//         TEST_COMPRESSOR(sz, compress8b_delta, decompress8b_delta);
+//     }
+//     raw /= 2;
+//     {
+//         TEST_COMPRESSOR(sz, compress8b_delta, decompress8b_delta);
+//     }
+//     raw /= 8;
+//     {
+//         TEST_COMPRESSOR(sz, compress8b_delta, decompress8b_delta);
+//     }
+// }
+
+// void _test_delta_zeros(int64_t sz) {
+//     Vec_u8 raw(sz);
+//     raw.setZero();
+//     TEST_COMPRESSOR(sz, compress8b_delta, decompress8b_delta);
+// }
+
+#define TEST_ZEROS(SZ, COMP_FUNC, DECOMP_FUNC)                              \
+    do {                                                                    \
+        Vec_u8 raw(sz);                                                     \
+        raw.setZero();                                                      \
+        TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);                        \
+    } while(0);
+
+
+#define TEST_COMP_DECOMP_PAIR(COMP_FUNC, DECOMP_FUNC)                       \
+    do {                                                                    \
+        vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66,    \
+        72, 127, 128, 129, 4096, 4096 + 17};                                \
+        SECTION("known input") {                                            \
+            for (auto sz : sizes) {                                         \
+                TEST_KNOWN_INPUT(sz, COMP_FUNC, DECOMP_FUNC);               \
+            }                                                               \
+        }                                                                   \
+        SECTION("fuzz_multiple_sizes") {                                    \
+            for (auto sz : sizes) {                                         \
+                TEST_FUZZ(sz, COMP_FUNC, DECOMP_FUNC);                      \
+            }                                                               \
+        }                                                                   \
+        SECTION("zeros") {                                                  \
+            for (auto sz : sizes) {                                         \
+                TEST_ZEROS(sz, COMP_FUNC, DECOMP_FUNC);                     \
+            }                                                               \
+        }                                                                   \
+        SECTION("long fuzz") {                                              \
+            TEST_FUZZ(1024 * 1024 + 7, COMP_FUNC, DECOMP_FUNC);             \
+        }                                                                   \
+    } while (0);
+
+
+TEST_CASE("delta_8b_simple", "[delta][bitpack]") {
+    TEST_COMP_DECOMP_PAIR(compress8b_delta_simple, decompress8b_delta_simple);
 }
-
-void _test_delta_8_fuzz(int64_t sz) {
-    srand(123);
-    Vec_u8 raw(sz);
-    raw.setRandom();
-    {
-        TEST_COMPRESSOR(compress8b_delta, decompress8b_delta);
-    }
-    raw /= 2;
-    {
-        TEST_COMPRESSOR(compress8b_delta, decompress8b_delta);
-    }
-    raw /= 2;
-    {
-        TEST_COMPRESSOR(compress8b_delta, decompress8b_delta);
-    }
-    raw /= 2;
-    {
-        TEST_COMPRESSOR(compress8b_delta, decompress8b_delta);
-    }
-    raw /= 2;
-    {
-        TEST_COMPRESSOR(compress8b_delta, decompress8b_delta);
-    }
-    raw /= 8;
-    {
-        TEST_COMPRESSOR(compress8b_delta, decompress8b_delta);
-    }
+TEST_CASE("delta_8b", "[delta][bitpack]") {
+    TEST_COMP_DECOMP_PAIR(compress8b_delta, decompress8b_delta);
 }
-
-void _test_delta_zeros(int64_t sz) {
-    Vec_u8 raw(sz);
-    raw.setZero();
-    TEST_COMPRESSOR(compress8b_delta, decompress8b_delta);
+TEST_CASE("doubledelta", "[delta][bitpack]") {
+    TEST_COMP_DECOMP_PAIR(compress8b_doubledelta, decompress8b_doubledelta);
 }
-
-
-TEST_CASE("delta_8b", "[delta][bitpack][dbg]") { // TODO rm dbg tag
-    vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66, 72,
-        127, 128, 129, 4096, 4096 + 17};
-//    vector<int64_t> sizes {72};
-    SECTION("known input") {
-        for (auto sz : sizes) { _test_delta_8_known_input(sz); }
-    }
-    SECTION("fuzz_multiple_sizes") {
-        for (auto sz : sizes) { _test_delta_8_fuzz(sz); }
-    }
-    SECTION("zeros") {
-        for (auto sz : sizes) { _test_delta_zeros(sz); }
-    }
-    SECTION("long fuzz") {
-        _test_delta_8_fuzz(1024 * 1024 + 7);
-    }
+TEST_CASE("dyndelta", "[delta][bitpack]") {
+    TEST_COMP_DECOMP_PAIR(compress8b_dyndelta, decompress8b_dyndelta);
 }
+//     vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66, 72,
+//         127, 128, 129, 4096, 4096 + 17};
+// //    vector<int64_t> sizes {72};
+//     SECTION("known input") {
+//         for (auto sz : sizes) {
+//             TEST_KNOWN_INPUT(sz, compress8b_delta, decompress8b_delta);
+//         }
+//     }
+//     SECTION("fuzz_multiple_sizes") {
+//         for (auto sz : sizes) {
+//             TEST_FUZZ(sz, compress8b_delta, decompress8b_delta);
+//         }
+//     }
+//     SECTION("zeros") {
+//         for (auto sz : sizes) {
+//             TEST_ZEROS(sz, compress8b_delta, decompress8b_delta);
+//         }
+//     }
+//     SECTION("long fuzz") {
+//         TEST_FUZZ(1024 * 1024 + 7, compress8b_delta, decompress8b_delta);
+//     }
+//}
 
-// TODO replace near-duplicate funcs with one templated func
-void _test_doubledelta_8_known_input(int64_t sz) {
-    Vec_u8 raw(sz);
-    for (int i = 0; i < sz; i++) {
-        raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
-    }
-    
-    Vec_i8 compressed(sz * 2);
-    Vec_u8 decompressed(sz);
-    compressed.setZero();
-    decompressed.setZero();
-    
-    auto len = compress8b_doubledelta(raw.data(), sz, compressed.data());
-    
-//    printf("compressed data (ignoring initial 8B) (length=%lld):\n", len);
-//    for (int i = 8; i <= len - 16; i += 16) {
-//        dump_16B_aligned(compressed.data() + i);
+//// TODO replace near-duplicate funcs with one templated func
+//void _test_doubledelta_8_known_input(int64_t sz) {
+//    Vec_u8 raw(sz);
+//    for (int i = 0; i < sz; i++) {
+//        raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
 //    }
-    
-    len = decompress8b_doubledelta(compressed.data(), decompressed.data());
-    REQUIRE(ar::all_eq(raw, decompressed));
-}
-TEST_CASE("doubledelta_8b_known_input", "[delta][bitpack]") {
-    vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66, 72,
-        127, 128, 129, 4096, 4096 + 17};
-//    vector<int64_t> sizes {64};
-    for (auto sz : sizes) {
-        _test_doubledelta_8_known_input(sz);
-    }
-}
-
-void _test_dyndelta_8_known_input(int64_t sz) {
-    Vec_u8 raw(sz);
-    for (int i = 0; i < sz; i++) {
-        raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
-    }
-    
-    Vec_i8 compressed(sz * 2);
-    Vec_u8 decompressed(sz);
-    compressed.setZero();
-    decompressed.setZero();
-    
-    auto len = compress8b_dyndelta(raw.data(), sz, compressed.data());
-    
-//    printf("compressed data (ignoring initial 8B) (length=%lld):\n", len);
-//    for (int i = 8; i <= len - 16; i += 16) {
-//        dump_16B_aligned(compressed.data() + i);
+//
+//    Vec_i8 compressed(sz * 2);
+//    Vec_u8 decompressed(sz);
+//    compressed.setZero();
+//    decompressed.setZero();
+//
+//    auto len = compress8b_doubledelta(raw.data(), sz, compressed.data());
+//
+////    printf("compressed data (ignoring initial 8B) (length=%lld):\n", len);
+////    for (int i = 8; i <= len - 16; i += 16) {
+////        dump_16B_aligned(compressed.data() + i);
+////    }
+//
+//    len = decompress8b_doubledelta(compressed.data(), decompressed.data());
+//    REQUIRE(ar::all_eq(raw, decompressed));
+//}
+//TEST_CASE("doubledelta_8b_known_input", "[delta][bitpack]") {
+//    vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66, 72,
+//        127, 128, 129, 4096, 4096 + 17};
+////    vector<int64_t> sizes {64};
+//    for (auto sz : sizes) {
+//        _test_doubledelta_8_known_input(sz);
 //    }
-    
-    len = decompress8b_dyndelta(compressed.data(), decompressed.data());
-    
-//    printf("decompressed data (length=%lld):\n", len);
-//    for (int i = 0; i <= sz - 16; i += 16) {
-//        dump_16B_aligned(decompressed.data() + i);
-//    }
+//}
 
-//    CAPTURE(sz);
-    REQUIRE(ar::all_eq(raw, decompressed));
-}
-TEST_CASE("dyndelta_8b_known_input", "[delta][bitpack]") {
-    vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66, 72,
-        127, 128, 129, 4096, 4096 + 17};
-//    vector<int64_t> sizes {64};
-    for (auto sz : sizes) {
-        _test_dyndelta_8_known_input(sz);
-    }
-}
+//
+//void _test_dyndelta_8_known_input(int64_t sz) {
+//    Vec_u8 raw(sz);
+//    for (int i = 0; i < sz; i++) {
+//        raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
+//    }
+//
+//    Vec_i8 compressed(sz * 2);
+//    Vec_u8 decompressed(sz);
+//    compressed.setZero();
+//    decompressed.setZero();
+//
+//    auto len = compress8b_dyndelta(raw.data(), sz, compressed.data());
+//
+////    printf("compressed data (ignoring initial 8B) (length=%lld):\n", len);
+////    for (int i = 8; i <= len - 16; i += 16) {
+////        dump_16B_aligned(compressed.data() + i);
+////    }
+//
+//    len = decompress8b_dyndelta(compressed.data(), decompressed.data());
+//
+////    printf("decompressed data (length=%lld):\n", len);
+////    for (int i = 0; i <= sz - 16; i += 16) {
+////        dump_16B_aligned(decompressed.data() + i);
+////    }
+//
+////    CAPTURE(sz);
+//    REQUIRE(ar::all_eq(raw, decompressed));
+//}
+//TEST_CASE("dyndelta_8b_known_input", "[delta][bitpack]") {
+//    vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66, 72,
+//        127, 128, 129, 4096, 4096 + 17};
+////    vector<int64_t> sizes {64};
+//    for (auto sz : sizes) {
+//        _test_dyndelta_8_known_input(sz);
+//    }
+//}
