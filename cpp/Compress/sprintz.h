@@ -41,6 +41,14 @@ int64_t compress8b_delta_online(uint8_t* src, size_t len, int8_t* dest,
                          bool write_size=true);
 int64_t decompress8b_delta_online(int8_t* src, uint8_t* dest);
 
+int64_t compress8b_delta2_online(uint8_t* src, size_t len, int8_t* dest,
+                         bool write_size=true);
+int64_t decompress8b_delta2_online(int8_t* src, uint8_t* dest);
+
+int64_t compress8b_delta_rle(uint8_t* src, size_t len, int8_t* dest,
+                         bool write_size=true);
+int64_t decompress8b_delta_rle(int8_t* src, uint8_t* dest);
+
 int64_t compress8b_doubledelta(uint8_t* src, size_t len, int8_t* dest,
                                bool write_size=true);
 int64_t decompress8b_doubledelta(int8_t* src, uint8_t* dest);

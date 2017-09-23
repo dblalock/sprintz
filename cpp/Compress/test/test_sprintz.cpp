@@ -45,7 +45,7 @@ TEST_CASE("naiveDelta", "[sanity]") {
     Vec_i8 compressed((SZ) * 2 + 16);                                   \
     Vec_u8 decompressed((SZ));                                          \
     compressed.setZero();                                               \
-    decompressed.setZero();                                             \
+    decompressed.setOnes();                                             \
     auto len = COMP_FUNC(raw.data(), (SZ), compressed.data());          \
     len = DECOMP_FUNC(compressed.data(), decompressed.data());          \
     CAPTURE(SZ);                                                        \
@@ -111,7 +111,7 @@ TEST_CASE("naiveDelta", "[sanity]") {
 #define TEST_COMP_DECOMP_PAIR(COMP_FUNC, DECOMP_FUNC)                       \
     do {                                                                    \
         vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66,    \
-            72, 127, 128, 129, 4096, 4096 + 17};                            \
+            71, 72, 73, 127, 128, 129, 4096, 4096 + 17};                    \
         SECTION("known input") {                                            \
             for (auto sz : sizes) {                                         \
                 TEST_KNOWN_INPUT(sz, COMP_FUNC, DECOMP_FUNC);               \
@@ -140,18 +140,32 @@ TEST_CASE("naiveDelta", "[sanity]") {
     }
 
 
-
+TEST_CASE("just_bitpack_8b_online", "[delta]") {
+    // this codec is not designed to handle bytes with MSB of 1, so just
+    // test it on input meeting this condition
+    vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66,
+        71, 72, 73, 127, 128, 129, 4096, 4096 + 17};
+    for (auto sz : sizes) {
+        Vec_u8 raw(sz);
+        raw.setRandom();
+        raw /= 2;
+        TEST_COMPRESSOR(sz, compress8b_online, decompress8b_online);
+    }
+}
 TEST_CASE("delta_8b_simple", "[delta]") {
     TEST_COMP_DECOMP_PAIR(compress8b_delta_simple, decompress8b_delta_simple);
 }
 TEST_CASE("delta_8b", "[delta]") {
     TEST_COMP_DECOMP_PAIR(compress8b_delta, decompress8b_delta);
 }
-TEST_CASE("just_bitpack_8b_online", "[delta]") {
-    TEST_COMP_DECOMP_PAIR(compress8b_online, decompress8b_online);
-}
 TEST_CASE("delta_8b_online", "[delta]") {
     TEST_COMP_DECOMP_PAIR(compress8b_delta_online, decompress8b_delta_online);
+}
+TEST_CASE("delta2_8b_online", "[delta][dbg]") {
+    TEST_COMP_DECOMP_PAIR(compress8b_delta2_online, decompress8b_delta2_online);
+}
+TEST_CASE("delta_8b_rle", "[delta]") {
+    TEST_COMP_DECOMP_PAIR(compress8b_delta_rle, decompress8b_delta_rle);
 }
 TEST_CASE("doubledelta", "[delta]") {
     TEST_COMP_DECOMP_PAIR(compress8b_doubledelta, decompress8b_doubledelta);
