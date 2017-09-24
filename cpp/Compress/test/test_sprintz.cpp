@@ -172,9 +172,12 @@ TEST_CASE("delta_8b_online", "[delta]") {
 TEST_CASE("delta2_8b_online", "[delta]") {
     TEST_COMP_DECOMP_PAIR(compress8b_delta2_online, decompress8b_delta2_online);
 }
-TEST_CASE("delta_8b_rle", "[delta][dbg]") {
+TEST_CASE("delta_8b_rle", "[delta]") {
     TEST_COMP_DECOMP_PAIR(compress8b_delta_rle, decompress8b_delta_rle);
-//    DEBUG_COMP_DECOMP_PAIR(compress8b_delta_rle, decompress8b_delta_rle);
+}
+TEST_CASE("delta_8b_rle2", "[delta][dbg]") {
+    TEST_COMP_DECOMP_PAIR(compress8b_delta_rle2, decompress8b_delta_rle2);
+    //    DEBUG_COMP_DECOMP_PAIR(compress8b_delta_rle, decompress8b_delta_rle);
 }
 TEST_CASE("doubledelta", "[delta]") {
     TEST_COMP_DECOMP_PAIR(compress8b_doubledelta, decompress8b_doubledelta);
