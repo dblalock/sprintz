@@ -119,6 +119,26 @@ inline void dumpEndianBits(T x, bool newline=true) {
 	if (newline) { std::cout << "\n"; }
 }
 
+template<class T> // dumps the raw bytes in memory order
+inline void dumpBytes(const T* x, size_t len=1, bool newline=true) {
+	const uint8_t* ptr = reinterpret_cast<const uint8_t*>(x);
+	size_t len_bytes = len * sizeof(T);
+	for (size_t i = 0; i < len_bytes; i++) {
+		printf("%d", (int)ptr[i]);
+		if ((i+1) % 8) {
+			printf(",");
+		} else {
+			printf("  ");
+		}
+	}
+	printf("\n");
+}
+
+template<class T, class std::enable_if< !std::is_pointer<T>::value >::type >
+inline void dumpBytes(T x, bool newline=true) {
+	dumpBytes(&x, 1, newline);
+}
+
 #ifdef __AVX__
 #include <immintrin.h>
 

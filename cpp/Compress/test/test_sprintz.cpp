@@ -49,6 +49,7 @@ TEST_CASE("naiveDelta", "[sanity]") {
     auto len = COMP_FUNC(raw.data(), (SZ), compressed.data());          \
     len = DECOMP_FUNC(compressed.data(), decompressed.data());          \
     CAPTURE(SZ);                                                        \
+    REQUIRE(decompressed.size() == SZ);                                 \
     REQUIRE(ar::all_eq(raw, decompressed));
 
 //    std::cout << "decompressed size: " << decompressed.size() << "\n";  \
@@ -110,8 +111,8 @@ TEST_CASE("naiveDelta", "[sanity]") {
 
 #define TEST_COMP_DECOMP_PAIR(COMP_FUNC, DECOMP_FUNC)                       \
     do {                                                                    \
-        vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66,    \
-            71, 72, 73, 127, 128, 129, 4096, 4096 + 17};                    \
+        vector<int64_t> sizes {1, 2, 7, 8, 15, 16, 17, 31, 32, 33, 63, 64,  \
+            66, 71, 72, 73, 127, 128, 129, 135, 136, 137, 4096, 4096 + 17}; \
         SECTION("known input") {                                            \
             for (auto sz : sizes) {                                         \
                 TEST_KNOWN_INPUT(sz, COMP_FUNC, DECOMP_FUNC);               \
@@ -133,18 +134,25 @@ TEST_CASE("naiveDelta", "[sanity]") {
     } while (0);
 
 
+//vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66,
+//    71, 72, 73, 127, 128, 129, 135, 136};
+
+
 #define DEBUG_COMP_DECOMP_PAIR(COMP_FUNC, DECOMP_FUNC)          \
-    vector<int64_t> sizes {72};                                 \
+    vector<int64_t> sizes {1, 2, 7, 8, 15, 16, 17, 31, 32, 33, 63, 64, 66, \
+    71, 72, 73, 127, 128, 129, 135, 136, 137, 4096, 4096 + 17}; \
     for (auto sz : sizes) {                                     \
-        TEST_FUZZ(sz, COMP_FUNC, DECOMP_FUNC);                  \
+        TEST_ZEROS(sz, COMP_FUNC, DECOMP_FUNC);                 \
+        TEST_KNOWN_INPUT(sz, COMP_FUNC, DECOMP_FUNC);           \
+        srand(123); TEST_FUZZ(sz, COMP_FUNC, DECOMP_FUNC); \
     }
 
 
 TEST_CASE("just_bitpack_8b_online", "[delta]") {
     // this codec is not designed to handle bytes with MSB of 1, so just
     // test it on input meeting this condition
-    vector<int64_t> sizes {1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 66,
-        71, 72, 73, 127, 128, 129, 4096, 4096 + 17};
+    vector<int64_t> sizes {1, 2, 7, 8, 15, 16, 17, 31, 32, 33, 63, 64, 66,
+        71, 72, 73, 127, 128, 129, 135, 136, 137, 4096, 4096 + 17};
     for (auto sz : sizes) {
         Vec_u8 raw(sz);
         raw.setRandom();
@@ -161,11 +169,12 @@ TEST_CASE("delta_8b", "[delta]") {
 TEST_CASE("delta_8b_online", "[delta]") {
     TEST_COMP_DECOMP_PAIR(compress8b_delta_online, decompress8b_delta_online);
 }
-TEST_CASE("delta2_8b_online", "[delta][dbg]") {
+TEST_CASE("delta2_8b_online", "[delta]") {
     TEST_COMP_DECOMP_PAIR(compress8b_delta2_online, decompress8b_delta2_online);
 }
-TEST_CASE("delta_8b_rle", "[delta]") {
+TEST_CASE("delta_8b_rle", "[delta][dbg]") {
     TEST_COMP_DECOMP_PAIR(compress8b_delta_rle, decompress8b_delta_rle);
+//    DEBUG_COMP_DECOMP_PAIR(compress8b_delta_rle, decompress8b_delta_rle);
 }
 TEST_CASE("doubledelta", "[delta]") {
     TEST_COMP_DECOMP_PAIR(compress8b_doubledelta, decompress8b_doubledelta);

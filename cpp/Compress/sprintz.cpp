@@ -16,7 +16,7 @@
 
 // #define VERBOSE_COMPRESS
 
-//#include "debug_utils.hpp" // TODO rm
+#include "debug_utils.hpp" // TODO rm
 
 // #ifdef USE_X86_INTRINSICS
 // #include "immintrin.h"
@@ -642,6 +642,7 @@ int64_t compress8b_delta_rle(uint8_t* src, size_t len, int8_t* dest,
     }
 
     // printf("input data:\n");
+    // dumpBytes(src, len);
     // for (auto ptr = src; ptr < src + len; ptr++) { printf("%d ", (int)*ptr); } printf("\n");
 
 
@@ -672,13 +673,17 @@ int64_t compress8b_delta_rle(uint8_t* src, size_t len, int8_t* dest,
     // size_t ngroups = len / group_sz;
     uint16_t nconstant_blocks = 0;
     // for (int g = 0; g < ngroups; g++) { // for each group
-    int b;
+    // int b;
     uint32_t ngroups = 0; // counter, not computed total
-    while (src <= (src_end - group_sz)) {
+    uint8_t* last_full_group_start = src_end - group_sz;
+    // while (src <= (src_end - group_sz)) {
+    while (src <= last_full_group_start) {
         int8_t* header_dest = dest;
         dest += group_header_sz;
 
-        for (b = 0; b < group_sz_blocks; b++) { // for each block
+        // for (b = 0; b < group_sz_blocks; b++) { // for each block
+        int b = 0;
+        while (b < group_sz_blocks) { // for each block
             for (int i = block_sz - 1; i >= 0; i--) {
                 delta_buff[i] = src[i] - src[i-1];
             }
@@ -687,33 +692,89 @@ int64_t compress8b_delta_rle(uint8_t* src, size_t len, int8_t* dest,
             // info for header
             uint8_t nbits = needed_nbits_i8x8((int8_t*)delta_buff);
             // uint8_t nbits = 8; // TODO rm
+
             nbits_buff[b] = nbits - (nbits == 8);
 
-            if (nbits > 0 || nconstant_blocks == max_nconstant_blocks) {
-                if (nconstant_blocks) {
+            // read in all the constant blocks in this run
+            // while (nbits > 99 && nconstant_blocks < max_nconstant_blocks) {
+            while (nbits == 0 && nconstant_blocks < max_nconstant_blocks) {
+                nconstant_blocks++;
+
+                // printf("new nconstant_blocks: %d\n", nconstant_blocks);
+
+                if (src < last_full_group_start) {
+                    // still enough data to finish the group
+                    for (int i = block_sz - 1; i >= 0; i--) {
+                        delta_buff[i] = src[i] - src[i-1];
+                    }
+                    src += block_sz;
+                    nbits = needed_nbits_i8x8((int8_t*)delta_buff);
+                } else {
+                    // might not have enough data to finish a normal group
+
+                    // printf("aborting loop with nconstant_blocks=%d\n", nconstant_blocks);
+
+                    // log that we had a const section
+                    // nbits_buff[b] = 0;
+                    // b++;
+
+                    // write out length of the current constant section
                     *dest = nconstant_blocks & 0x7f; // bottom 7 bits
                     dest++;
                     if (nconstant_blocks > 0x7f) { // need another byte
                         *(dest-1) |= 0x80; // set MSB of previous byte
-                        *dest = nconstant_blocks >> 8;
+                        *dest = (uint8_t)(nconstant_blocks >> 7);
                         dest++;
                     }
+
+                    // write out this const section, and use empty const
+                    // sections to fill up rest of block
+                    for (; b < block_sz; b++) {
+                        nbits_buff[b] = 0;
+                        *dest = 0;
+                        dest++;
+                    };
+
+                    // write out final headers and end the loop
+                    uint32_t packed_header = (uint32_t)_pext_u64(
+                        nbits_buff_u64, kHeaderMask8b);
+                    memcpy(header_dest, &packed_header, 3);
+
+                    // printf("wrote header:\n");
+                    // dumpEndianBits(*header_dest);
+
+                    ngroups++;
+                    goto main_loop_end;
                 }
-                // write out packed data
-                uint64_t mask = kBitpackMasks8[nbits];
-                *((uint64_t*)dest) = _pext_u64(delta_buff_u64, mask);
-                dest += nbits + (nbits == 7);
-
-                nconstant_blocks = 0;
-            } else {
-                // nconstant_blocks++;
-                // b--; // this terifies me, but keeps headers at 8 blocks
-
-                // if we still have enough src for a full group, b--
-                // otherwise, set b to the largest value such we don't die
-                //  -or maybe just force main loop to break and handle
-                //  everything in the post-loop check
             }
+
+            // ------------------------ case 0: just finished const section
+            if (nconstant_blocks) { // reached end of constant section
+                nbits_buff[b] = 0;
+                b++;
+
+                *dest = nconstant_blocks & 0x7f; // bottom 7 bits
+                dest++;
+                if (nconstant_blocks > 0x7f) { // need another byte
+                    *(dest-1) |= 0x80; // set MSB of previous byte
+                    *dest = (uint8_t)(nconstant_blocks >> 7);
+                    dest++;
+                }
+
+                // make it read in last block (which was nonzero) again
+                src -= block_sz;
+                nconstant_blocks = 0;
+                continue;
+            }
+
+            // ------------------------ case 1: didn't just finish const section
+            // write out packed data
+            uint64_t mask = kBitpackMasks8[nbits];
+            *((uint64_t*)dest) = _pext_u64(delta_buff_u64, mask);
+            dest += nbits + (nbits == 7);
+
+            nconstant_blocks = 0;
+            b++;
         }
 
         // write out header for whole group; 3b for each nbits
@@ -726,11 +787,7 @@ int64_t compress8b_delta_rle(uint8_t* src, size_t len, int8_t* dest,
         ngroups++;  // increment counter only if we got thru the whole group
     }
 
-    if (nconstant_blocks) {
-        // if data ended in a constant section, write out length of that section
-
-        // do something with b and the delta buff here
-    }
+main_loop_end:
 
     // just memcpy remaining bytes (up to 63 of them)
     // size_t remaining_len = len % group_sz;
@@ -738,8 +795,8 @@ int64_t compress8b_delta_rle(uint8_t* src, size_t len, int8_t* dest,
     // size_t remaining_len = (src_end - src) + 7; // this should break it ...wtf
     memcpy(dest, src, remaining_len);
 
-    // store number of groups and how much larger it is than what we'd expect
-    // given number of groups (can be longer because of RLE)
+    // store number of groups and how much larger it is than what's implied by
+    // group count (can be longer because of RLE)
     if (write_size) {
         len += cpy_len; // undo shrinking from initial forced copy
         // *(uint32_t*)orig_dest = (uint32_t)(len + cpy_len);
@@ -768,6 +825,8 @@ int64_t decompress8b_delta_rle(int8_t* src, uint8_t* dest) {
     uint64_t orig_len = (ngroups * group_sz) + extra_len;
     // uint64_t orig_len = *(uint32_t*)src;
 
+    // printf("read ngroups, extra_len, orig_len: %d, %d, %lld\n", ngroups, extra_len, orig_len);
+
     src += 8;
 
     // copy first 8B to simplify delta computation (for encoder)
@@ -775,37 +834,40 @@ int64_t decompress8b_delta_rle(int8_t* src, uint8_t* dest) {
     memcpy(dest, src, cpy_len);
     dest += cpy_len;
     src += cpy_len;
-    orig_len -= cpy_len;
+    // orig_len -= cpy_len;
 
     // printf("saw compressed data:\n");
     // for (auto ptr = (src - cpy_len); ptr < (src - cpy_len) + (orig_len + cpy_len); ptr++) { printf("%u ", (uint8_t)*ptr); } printf("\n");
 
-
-    // figure out number of blocks and where packed data starts; we add
-    // 1 extra to src so that 4B header writes don't clobber anything
-    // size_t ngroups = orig_len / group_sz;
-    // uint8_t* header_src = (uint8_t*)src;
-    // src += ngroups ? 1 + (ngroups * group_sz_blocks * nbits_sz_bits) / 8 : 0;
-
     // size_t ngroups = orig_len / group_sz; // TODO might need to restore this
 
-    // int8_t prev_val = 0;
-    // int8_t prev_val = header_src[-1]; // use header_src since src got increased
     int8_t prev_val = src[-1];
     for (int g = 0; g < ngroups; g++) {
         // read header to get nbits for each block
         uint32_t header = *(uint32_t*)src;
-        // uint32_t header = (*(uint32_t*)src) & 0x00ffffff;
         src += group_header_sz;
-        // header_src += (group_sz_blocks * nbits_sz_bits) / 8;
-
-        // uint64_t nbits_u64 = _pdep_u64(header, TILE_BYTE(nbits_sz_mask));
 
         // read deltas for each block
         for (int b = 0; b < group_sz_blocks; b++) {
             uint8_t nbits = (header >> (nbits_sz_bits * b)) & nbits_sz_mask;
 
-            // uint8_t nbits = ((uint8_t*)(&nbits_u64))[b];
+            // printf("nbits: %d\n", nbits);
+
+            // if (nbits == 99) {
+            if (nbits == 0) {
+                int8_t low_byte = (int8_t)*src;
+                uint8_t high_byte = (uint8_t)*(src + 1);
+                high_byte = high_byte & (low_byte >> 7); // 0 if low msb == 0
+                uint16_t length = (low_byte & 0x7f) | (((uint16_t)high_byte) << 7);
+
+                // printf("reconstructed nconstant_blocks: %d\n", length);
+
+                memset(dest, prev_val, length * block_sz);
+                src += (low_byte > 0); // encoder can write 0 at end of data
+                src += (high_byte > 0); // if 0, wasn't used for run length
+                dest += length * block_sz;
+                continue;
+            }
 
             uint64_t mask = kBitUnpackMasks8[nbits];
             int64_t deltas = _pdep_u64(*(uint64_t*)src, mask);
@@ -821,13 +883,16 @@ int64_t decompress8b_delta_rle(int8_t* src, uint8_t* dest) {
             }
         }
     }
-    size_t remaining_orig_len = orig_len % group_sz;
+    // size_t remaining_orig_len = orig_len % group_sz;
+    size_t len_so_far = dest - orig_dest;
+    size_t remaining_orig_len = orig_len - len_so_far;
     memcpy(dest, src, remaining_orig_len);
 
     // printf("orig len, remaining_orig_len = %llu, %lu:\n", orig_len, remaining_orig_len);
     // // for (auto ptr = src; ptr < src + 2; ptr++) { printf("%d ", (int)*ptr); } printf("\n");
     // printf("decompressed data:\n");
-    // for (auto ptr = orig_dest; ptr < dest + remaining_orig_len; ptr++) { printf("%d ", (int)*ptr); } printf("\n");
+    // dumpBytes(orig_dest, (dest - orig_dest + remaining_orig_len));
+    // printf("decompressed len: %d", (int)(dest + remaining_orig_len - orig_dest));
 
     // assert(orig_len == (dest + remaining_orig_len - orig_dest));
     return dest + remaining_orig_len - orig_dest;
