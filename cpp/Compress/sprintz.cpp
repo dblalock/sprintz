@@ -1014,12 +1014,13 @@ int64_t compress8b_delta_rle2(uint8_t* src, size_t len, int8_t* dest,
                         dest++;
                     }
 
-                    // // copy next 2 samples
-                    // if (length > 0) { // should always be true
-                    //     memcpy(dest, src, 2);
-                    //     src += 2;
-                    //     dest += 2;
-                    // }
+                    // copy next 2 samples
+                    if (length > 0) { // should always be true
+                        const int copy_nbytes = 2;
+                        memcpy(dest, src, copy_nbytes);
+                        src += copy_nbytes;
+                        dest += copy_nbytes;
+                    }
 
                     // write out this const section, and use empty const
                     // sections to fill up rest of block
@@ -1074,9 +1075,10 @@ int64_t compress8b_delta_rle2(uint8_t* src, size_t len, int8_t* dest,
 
                 // copy next 2 samples
                 if (length > 0) { // should always be true...
-                    memcpy(dest, src, 2);
-                    src += 2;
-                    dest += 2;
+                    const int copy_nbytes = 2;
+                    memcpy(dest, src, copy_nbytes);
+                    src += copy_nbytes;
+                    dest += copy_nbytes;
                 }
 
                 // make it read in last block (which was nonzero) again
@@ -1188,9 +1190,10 @@ int64_t decompress8b_delta_rle2(int8_t* src, uint8_t* dest) {
 
                 if (length) {
                     // printf("memcpy-ing after RLE\n");
-                    memcpy(dest, src, 2);
-                    src += 2;
-                    dest += 2;
+                    const int copy_nbytes = 2;
+                    memcpy(dest, src, copy_nbytes);
+                    src += copy_nbytes;
+                    dest += copy_nbytes;
                     prev_val = *(dest - 1);
                 }
 
