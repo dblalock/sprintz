@@ -16,7 +16,7 @@
 
 // #define VERBOSE_COMPRESS
 
-#include "debug_utils.hpp" // TODO rm
+// #include "debug_utils.hpp" // TODO rm
 
 // #ifdef USE_X86_INTRINSICS
 // #include "immintrin.h"
@@ -221,7 +221,7 @@ int64_t compress8b_online(uint8_t* src, size_t len, int8_t* dest,
     static const int group_sz_blocks = 8;
     static const int group_sz = group_sz_blocks * block_sz;
     static const int nbits_sz_bits = 3;
-    static const int group_header_sz = (group_sz_blocks * nbits_sz_bits) / 8;
+    static const int stripe_header_sz = (group_sz_blocks * nbits_sz_bits) / 8;
     int8_t* orig_dest = dest;
 
     // store how long this is
@@ -230,24 +230,12 @@ int64_t compress8b_online(uint8_t* src, size_t len, int8_t* dest,
         dest += 8;
     }
 
-    // printf("input data:\n");
-    // for (auto ptr = src; ptr < src + len; ptr++) { printf("%d ", (int)*ptr); } printf("\n");
-
-
     // copy first 8B to simplify delta computation
     size_t cpy_len = MIN(8, len);
     memcpy(dest, src, cpy_len);
     dest += cpy_len;
     src += cpy_len;
     len -= cpy_len;
-
-    // compute number of groups
-    // size_t ngroups = len / group_sz;
-    // size_t header_sz = ngroups ? 1 + (ngroups * group_sz_blocks * nbits_sz_bits) / 8 : 0;
-
-    // figure out where header bytes end and packed values begin
-    // uint8_t* header_dest = (uint8_t*)dest;
-    // dest += header_sz;
 
     // uint64_t delta_buff_u64;  // requires block_sz = 8
     uint64_t nbits_buff_u64;  // requires group_sz_blocks = 8
@@ -258,16 +246,9 @@ int64_t compress8b_online(uint8_t* src, size_t len, int8_t* dest,
     size_t ngroups = len / group_sz;
     for (int g = 0; g < ngroups; g++) { // for each group
         int8_t* header_dest = dest;
-        dest += group_header_sz;
-        // *(uint32_t*)header_dest = 0; // zero this so we can OR at the bottom
+        dest += stripe_header_sz;
 
         for (int b = 0; b < group_sz_blocks; b++) { // for each block
-            // for (int i = block_sz - 1; i >= 0; i--) {
-            //     // delta_buff[i] = src[i] - src[i-1];
-            //     delta_buff[i] = src[i];
-            // }
-            // src += block_sz;
-
             // info for header
             uint8_t nbits = needed_nbits_i8x8((int8_t*)src);
             // uint8_t nbits = 8; // TODO rm
@@ -283,9 +264,6 @@ int64_t compress8b_online(uint8_t* src, size_t len, int8_t* dest,
         // write out header for whole group; 3b for each nbits
         uint32_t packed_header = (uint32_t)_pext_u64(nbits_buff_u64, kHeaderMask8b);
         memcpy(header_dest, &packed_header, 3);
-        // uint32_t orig_contents = *header_dest; // writing 4B, but 3B header
-        // *(uint32_t*)header_dest = packed_header | orig_contents;
-        // header_dest += (group_sz_blocks * nbits_sz_bits) / 8;
     }
     // just memcpy remaining bytes (up to 63 of them)
     size_t remaining_len = len % group_sz;
@@ -300,10 +278,8 @@ int64_t decompress8b_online(int8_t* src, uint8_t* dest) {
     static constexpr int group_sz = group_sz_blocks * block_sz;
     static constexpr int nbits_sz_bits = 3;
     // static constexpr int nbits_sz_mask = 0x07;
-    static constexpr int group_header_sz = (group_sz_blocks * nbits_sz_bits) / 8; // 3B
+    static constexpr int stripe_header_sz = (group_sz_blocks * nbits_sz_bits) / 8; // 3B
     uint8_t* orig_dest = dest;
-
-    // int8_t* orig_src = src;  // TODO rm
 
     // read in size of original data
     uint64_t orig_len = *(uint64_t*)src;
@@ -320,7 +296,7 @@ int64_t decompress8b_online(int8_t* src, uint8_t* dest) {
     for (int g = 0; g < ngroups; g++) {
         // read header to get nbits for each block
         uint32_t header = *(uint32_t*)src;
-        src += group_header_sz;
+        src += stripe_header_sz;
 
         uint64_t nbits_u64 = _pdep_u64(header, kBitpackMasks8[nbits_sz_bits]);
 
@@ -355,7 +331,7 @@ int64_t compress8b_delta_online(uint8_t* src, size_t len, int8_t* dest,
     static const int group_sz_blocks = 8;
     static const int group_sz = group_sz_blocks * block_sz;
     static const int nbits_sz_bits = 3;
-    static const int group_header_sz = (group_sz_blocks * nbits_sz_bits) / 8;
+    static const int stripe_header_sz = (group_sz_blocks * nbits_sz_bits) / 8;
     int8_t* orig_dest = dest;
 
     // store how long this is
@@ -392,7 +368,7 @@ int64_t compress8b_delta_online(uint8_t* src, size_t len, int8_t* dest,
     size_t ngroups = len / group_sz;
     for (int g = 0; g < ngroups; g++) { // for each group
         int8_t* header_dest = dest;
-        dest += group_header_sz;
+        dest += stripe_header_sz;
         // *(uint32_t*)header_dest = 0; // zero this so we can OR at the bottom
 
         for (int b = 0; b < group_sz_blocks; b++) { // for each block
@@ -431,7 +407,7 @@ int64_t decompress8b_delta_online(int8_t* src, uint8_t* dest) {
     static constexpr int group_sz = group_sz_blocks * block_sz;
     static constexpr int nbits_sz_bits = 3;
     static constexpr int nbits_sz_mask = 0x07;
-    static constexpr int group_header_sz = (group_sz_blocks * nbits_sz_bits) / 8; // 3B
+    static constexpr int stripe_header_sz = (group_sz_blocks * nbits_sz_bits) / 8; // 3B
     uint8_t* orig_dest = dest;
 
     // int8_t* orig_src = src;  // TODO rm
@@ -465,7 +441,7 @@ int64_t decompress8b_delta_online(int8_t* src, uint8_t* dest) {
         // read header to get nbits for each block
         uint32_t header = *(uint32_t*)src;
         // uint32_t header = (*(uint32_t*)src) & 0x00ffffff;
-        src += group_header_sz;
+        src += stripe_header_sz;
         // header_src += (group_sz_blocks * nbits_sz_bits) / 8;
 
         // uint64_t nbits_u64 = _pdep_u64(header, TILE_BYTE(nbits_sz_mask));
@@ -511,7 +487,7 @@ int64_t compress8b_delta2_online(uint8_t* src, size_t len, int8_t* dest,
     static const int group_sz_blocks = 8;
     static const int group_sz = group_sz_blocks * block_sz;
     static const int nbits_sz_bits = 3;
-    static const int group_header_sz = (group_sz_blocks * nbits_sz_bits) / 8;
+    static const int stripe_header_sz = (group_sz_blocks * nbits_sz_bits) / 8;
     static constexpr int delta_delay = 2;
     int8_t* orig_dest = dest;
 
@@ -537,7 +513,7 @@ int64_t compress8b_delta2_online(uint8_t* src, size_t len, int8_t* dest,
     size_t ngroups = len / group_sz;
     for (int g = 0; g < ngroups; g++) { // for each group
         int8_t* header_dest = dest;
-        dest += group_header_sz;
+        dest += stripe_header_sz;
         // *(uint32_t*)header_dest = 0; // zero this so we can OR at the bottom
 
         for (int b = 0; b < group_sz_blocks; b++) { // for each block
@@ -573,7 +549,7 @@ int64_t decompress8b_delta2_online(int8_t* src, uint8_t* dest) {
     static constexpr int group_sz = group_sz_blocks * block_sz;
     static constexpr int nbits_sz_bits = 3;
     static constexpr int nbits_sz_mask = 0x07;
-    static constexpr int group_header_sz = (group_sz_blocks * nbits_sz_bits) / 8; // 3B
+    static constexpr int stripe_header_sz = (group_sz_blocks * nbits_sz_bits) / 8; // 3B
     static constexpr int delta_delay = 2;
     uint8_t* orig_dest = dest;
 
@@ -593,7 +569,7 @@ int64_t decompress8b_delta2_online(int8_t* src, uint8_t* dest) {
     for (int g = 0; g < ngroups; g++) {
         // read header to get nbits for each block
         uint32_t header = *(uint32_t*)src;
-        src += group_header_sz;
+        src += stripe_header_sz;
 
         // read deltas for each block
         for (int b = 0; b < group_sz_blocks; b++) {
@@ -629,7 +605,7 @@ int64_t compress8b_delta_rle(uint8_t* src, size_t len, int8_t* dest,
     static const int group_sz_blocks = 8;
     static const int group_sz = group_sz_blocks * block_sz;
     static const int nbits_sz_bits = 3;
-    static const int group_header_sz = (group_sz_blocks * nbits_sz_bits) / 8;
+    static const int stripe_header_sz = (group_sz_blocks * nbits_sz_bits) / 8;
     static const uint16_t max_nconstant_blocks = 0x7fff; // 15 bit counter
     int8_t* orig_dest = dest;
     // uint8_t* orig_src = src;
@@ -677,7 +653,7 @@ int64_t compress8b_delta_rle(uint8_t* src, size_t len, int8_t* dest,
     uint8_t* last_full_group_start = src_end - group_sz;
     while (src <= last_full_group_start) {
         int8_t* header_dest = dest;
-        dest += group_header_sz;
+        dest += stripe_header_sz;
 
         // for (b = 0; b < group_sz_blocks; b++) { // for each block
         int b = 0;
@@ -827,7 +803,7 @@ int64_t decompress8b_delta_rle(int8_t* src, uint8_t* dest) {
     static constexpr int group_sz = group_sz_blocks * block_sz;
     static constexpr int nbits_sz_bits = 3;
     static constexpr int nbits_sz_mask = 0x07;
-    static constexpr int group_header_sz = (group_sz_blocks * nbits_sz_bits) / 8; // 3B
+    static constexpr int stripe_header_sz = (group_sz_blocks * nbits_sz_bits) / 8; // 3B
     uint8_t* orig_dest = dest;
 
     // int8_t* orig_src = src;  // TODO rm
@@ -860,7 +836,7 @@ int64_t decompress8b_delta_rle(int8_t* src, uint8_t* dest) {
     for (int g = 0; g < ngroups; g++) {
         // read header to get nbits for each block
         uint32_t header = *(uint32_t*)src;
-        src += group_header_sz;
+        src += stripe_header_sz;
 
         // printf("read header:\t"); dumpEndianBits(header);
 
@@ -931,7 +907,7 @@ int64_t compress8b_delta_rle2(uint8_t* src, size_t len, int8_t* dest,
     static const int group_sz_blocks = 8;
     static const int group_sz = group_sz_blocks * block_sz;
     static const int nbits_sz_bits = 3;
-    static const int group_header_sz = (group_sz_blocks * nbits_sz_bits) / 8;
+    static const int stripe_header_sz = (group_sz_blocks * nbits_sz_bits) / 8;
     static const uint16_t max_nconstant_samples = 0x7fff; // 15 bit counter
     static const uint16_t max_nconstant_blocks = max_nconstant_samples >> 3;
     int8_t* orig_dest = dest;
@@ -965,7 +941,7 @@ int64_t compress8b_delta_rle2(uint8_t* src, size_t len, int8_t* dest,
     uint8_t* last_full_group_start = src_end - group_sz;
     while (src <= last_full_group_start) {
         int8_t* header_dest = dest;
-        dest += group_header_sz;
+        dest += stripe_header_sz;
 
         int b = 0;
         while (b < group_sz_blocks) { // for each block
@@ -1143,7 +1119,7 @@ int64_t decompress8b_delta_rle2(int8_t* src, uint8_t* dest) {
     static constexpr int group_sz = group_sz_blocks * block_sz;
     static constexpr int nbits_sz_bits = 3;
     static constexpr int nbits_sz_mask = 0x07;
-    static constexpr int group_header_sz = (group_sz_blocks * nbits_sz_bits) / 8; // 3B
+    static constexpr int stripe_header_sz = (group_sz_blocks * nbits_sz_bits) / 8; // 3B
     uint8_t* orig_dest = dest;
 
     // read in size of original data
@@ -1165,7 +1141,7 @@ int64_t decompress8b_delta_rle2(int8_t* src, uint8_t* dest) {
     for (int g = 0; g < ngroups; g++) {
         // read header to get nbits for each block
         uint32_t header = *(uint32_t*)src;
-        src += group_header_sz;
+        src += stripe_header_sz;
 
         // read deltas for each block
         for (int b = 0; b < group_sz_blocks; b++) {
@@ -1699,4 +1675,3 @@ int64_t decompress8b_dyndelta(int8_t* src, uint8_t* dest) {
     assert(orig_len == (dest + remaining_orig_len - orig_dest));
     return dest + remaining_orig_len - orig_dest;
 }
-

@@ -2306,7 +2306,7 @@ WRAP_NORMALIZE_FUNC(normalize_zero_one)
 
 // ------------------------ with name
 
-template <class data_t, class len_t, REQUIRE_INT(len_t)>
+template <class data_t, class len_t, class cast_to=data_t, REQUIRE_INT(len_t)>
 static std::string to_string(const data_t *x, len_t len, const char* name="")
 {
 	std::ostringstream os;
@@ -2314,29 +2314,33 @@ static std::string to_string(const data_t *x, len_t len, const char* name="")
 	if (name && name[0] != '\0') {
 		os << name << ": ";
 	}
+	// printf("received length %d\n", len);
+	// printf("cast to is int? %d\n", static_cast<cast_to>(x[0]));
 	os << "[";
 	for (len_t i = 0; i < len; i++) {
-		os << x[i] << " ";
+		os << std::to_string(static_cast<cast_to>(x[i])) << " ";
 	}
 	os << "]";
 	return os.str();
 }
-template <class data_t, class len_t, REQUIRE_INT(len_t)>
+template <class data_t, class len_t, class cast_to=data_t, REQUIRE_INT(len_t)>
 static std::string to_string(const data_t *x, len_t len, std::string name)
 {
-	return to_string(x, len, name.c_str());
+	return to_string<data_t, len_t, cast_to>(x, len, name.c_str());
 }
-template<template <class...> class Container, class data_t>
+template<template <class...> class Container, class data_t, class cast_to=data_t>
 static inline std::string to_string(const Container<data_t>& data,
 	const char* name="")
 {
-	return to_string(data.data(), data.size(), name);
+	return to_string<data_t, decltype(data.size()), cast_to>(
+		data.data(), data.size(), name);
 }
-template<template <class...> class Container, class data_t>
+template<template <class...> class Container, class data_t, class cast_to=data_t>
 static inline std::string to_string(const Container<data_t>& data,
 	std::string name)
 {
-	return to_string(data.data(), data.size(), name);
+	return to_string<data_t, decltype(data.size()), cast_to>(
+		data.data(), data.size(), name);
 }
 
 // ================================ Printing

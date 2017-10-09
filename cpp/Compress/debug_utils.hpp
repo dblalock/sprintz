@@ -142,6 +142,14 @@ inline void dumpBytes(T x, bool newline=true) {
 #ifdef __AVX__
 #include <immintrin.h>
 
+inline void dump_m256i(const __m256i& v, bool newline=true) {
+	for (int i = 0; i < 6; i++) {
+		dumpEndianBits(_mm256_extract_epi64(v, i), false);
+        std::cout << "  ";
+	}
+    if (newline) { std::cout << "\n"; }
+}
+
 inline void dump_m128i(const __m128i& v, bool newline=true) {
 	for (int i = 0; i < 2; i++) {
 		dumpEndianBits(_mm_extract_epi64(v, i), false);

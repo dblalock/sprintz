@@ -32,16 +32,16 @@
 typedef uint8_t bool;
 #endif
 
-#define _TILE_BYTE(byte)                                                    \
-(byte << 0 | byte << 8 | byte << 16 | byte << 24 |                          \
-byte << 32 | byte << 40 | byte << 48 | byte << 56)
+// #define _TILE_BYTE(byte)                                                    \
+// (byte << 0 | byte << 8 | byte << 16 | byte << 24 |                          \
+// byte << 32 | byte << 40 | byte << 48 | byte << 56)
 
-#define TILE_BYTE(byte) _TILE_BYTE(((uint64_t)byte))
+// #define TILE_BYTE(byte) _TILE_BYTE(((uint64_t)byte))
 
-#define _TILE_SHORT(short)                                                  \
-(short << 0 | short << 16 | short << 32 | short << 48)
+// #define _TILE_SHORT(short)                                                  \
+// (short << 0 | short << 16 | short << 32 | short << 48)
 
-#define TILE_SHORT(short) _TILE_SHORT(((uint64_t)short))
+// #define TILE_SHORT(short) _TILE_SHORT(((uint64_t)short))
 
 
 static const uint8_t _NBITS_COST_I8[256] = {
@@ -58,6 +58,20 @@ static const uint8_t _NBITS_COST_I8[256] = {
     8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
     8, 8, 8};
 static const uint8_t* NBITS_COST_I8 = _NBITS_COST_I8 + 128; // so offsets can be signed
+
+static const uint8_t NBITS_COST_U8[256] = {
+    0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5,
+    5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
+    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7,
+    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8};
 
 #define _TILE_BYTE(byte)                                                    \
 (byte << 0 | byte << 8 | byte << 16 | byte << 24 |                          \
