@@ -124,6 +124,7 @@ inline void dumpBytes(const T* x, size_t len=1, bool newline=true) {
 	const uint8_t* ptr = reinterpret_cast<const uint8_t*>(x);
 	size_t len_bytes = len * sizeof(T);
 	for (size_t i = 0; i < len_bytes; i++) {
+		// printf("%03d", (int)ptr[i]);
 		printf("%d", (int)ptr[i]);
 		if ((i+1) % 8) {
 			printf(",");

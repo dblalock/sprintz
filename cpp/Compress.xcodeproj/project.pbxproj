@@ -28,6 +28,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		721C6D6A1F8BE94300DFDE0B /* compress_testing.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = compress_testing.hpp; path = test/compress_testing.hpp; sourceTree = "<group>"; };
 		726D10581F6DCDD200080495 /* bitpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bitpack.h; sourceTree = "<group>"; };
 		726D10631F6E027F00080495 /* sprintz.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz.cpp; sourceTree = "<group>"; };
 		726D10651F6E046800080495 /* array_utils.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = array_utils.hpp; path = test/array_utils.hpp; sourceTree = "<group>"; };
@@ -1043,6 +1044,7 @@
 				726D10671F6E046800080495 /* eigen */,
 				726D11D11F6E046800080495 /* test_sprintz.cpp */,
 				72B1E6391F7D8D4700649F43 /* test_sprintz2.cpp */,
+				721C6D6A1F8BE94300DFDE0B /* compress_testing.hpp */,
 				726D11D61F74404000080495 /* test_bitpack.cpp */,
 				726D11D21F6E046800080495 /* timing_utils.hpp */,
 				726D11D51F743FE000080495 /* test_utils.hpp */,

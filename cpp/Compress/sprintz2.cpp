@@ -131,9 +131,8 @@ int64_t compress8b_rowmajor(uint8_t* src, size_t len, int8_t* dest,
 
             uint8_t nbits = stripe_bitwidths[stripe];
             int total_bits = nbits + offset_bits;
-            uint8_t nbits_lost = MAX((int)0, total_bits - (int)64);
 
-            printf("total bits, nbits lost = %d, %d\n", total_bits, nbits_lost);
+            // printf("total bits, nbits lost = %d, %d\n", total_bits, nbits_lost);
 
             int8_t* outptr = dest + offset_bytes;
             uint8_t* inptr = src + (stripe * stripe_sz);
@@ -191,6 +190,7 @@ int64_t compress8b_rowmajor(uint8_t* src, size_t len, int8_t* dest,
                     inptr += ndims;
                 }
             } else { // XXX can't test this for real with ndims=8
+                uint8_t nbits_lost = MAX((int)0, total_bits - (int)64);
                 // data spans 9 bytes, so we can't rely on single 64b write
                 for (int i = 0; i < block_sz; i++) { // for each sample in block
                     uint64_t data = *(uint64_t*)inptr;
