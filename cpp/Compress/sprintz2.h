@@ -21,7 +21,7 @@
 
 
 int64_t compress8b_rowmajor(uint8_t* src, size_t len, int8_t* dest,
-                            bool write_size=true);
+                            uint16_t ndims=8, bool write_size=true);
 int64_t decompress8b_rowmajor(int8_t* src, uint8_t* dest);
 
 #endif
