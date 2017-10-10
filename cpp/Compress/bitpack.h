@@ -73,7 +73,7 @@ static const uint8_t NBITS_COST_U8[256] = {
     8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
     8, 8, 8};
 
-static const uint8_t NBITS_MASKS_U8[256] = {
+static const uint8_t NBITS_MASKS_U8[256] = { // note: 7b and 8b both map to 255
      0,   1,   3,   3,   7,   7,   7,   7,  15,  15,  15,  15,  15,
     15,  15,  15,  31,  31,  31,  31,  31,  31,  31,  31,  31,  31,
     31,  31,  31,  31,  31,  31,  63,  63,  63,  63,  63,  63,  63,

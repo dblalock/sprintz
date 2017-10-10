@@ -132,7 +132,7 @@ inline void dumpBytes(const T* x, size_t len=1, bool newline=true) {
 			printf("  ");
 		}
 	}
-	printf("\n");
+	if (newline) { printf("\n"); }
 }
 
 template<class T, class _=typename std::enable_if< !std::is_pointer<T>::value >::type >

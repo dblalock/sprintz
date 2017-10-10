@@ -16,17 +16,37 @@
 
 #define TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC)                     \
     Vec_i8 compressed((SZ) * 2 + 16);                                   \
-    Vec_u8 decompressed((SZ));                                          \
+    Vec_u8 decompressed((SZ) * 2 + 32);                                 \
     compressed.setZero();                                               \
     decompressed.setOnes();                                             \
     auto len = COMP_FUNC(raw.data(), (SZ), compressed.data());          \
     len = DECOMP_FUNC(compressed.data(), decompressed.data());          \
     CAPTURE(SZ);                                                        \
-    REQUIRE(decompressed.size() == SZ);                                 \
-    REQUIRE(ar::all_eq(raw, decompressed));
+    REQUIRE(len == (SZ));                                               \
+    auto arrays_eq = ar::all_eq(raw.data(), decompressed.data(), (SZ)); \
+    if ((SZ) < 100 && !arrays_eq) {                                     \
+        printf("**** Test Failed! ****\n");                             \
+        auto input_as_str = ar::to_string(raw.data(), (SZ));            \
+        auto output_as_str = ar::to_string(decompressed.data(), (SZ));  \
+        printf("input:\t%s\n", input_as_str.c_str());                   \
+        printf("output:\t%s\n", output_as_str.c_str());                 \
+    }                                                                   \
+    REQUIRE(arrays_eq);
 
-//    std::cout << "decompressed size: " << decompressed.size() << "\n";  \
-//    std::cout << decompressed.cast<int>() << "\n";  \
+/*
+auto input_bytes_as_str = ar::to_string(raw.data(), (SZ));            \
+auto output_bytes_as_str = ar::to_string(decompressed.data(), (SZ));  \
+CAPTURE(input_bytes_as_str);                                          \
+CAPTURE(output_bytes_as_str);                                         \
+*/
+
+
+    // }
+// printf("%s\n", input_as_str.c_str());
+// printf("%s\n", output_as_str.c_str());
+
+//    std::cout << "decompressed size: " << decompressed.size() << "\n";
+//    std::cout << decompressed.cast<int>() << "\n";
 //    REQUIRE(ar::all_eq(raw, decompressed));
 
 #define TEST_SIMPLE_INPUTS(_SZ, COMP_FUNC, DECOMP_FUNC)                 \
