@@ -120,24 +120,33 @@ inline void dumpEndianBits(T x, bool newline=true) {
 }
 
 template<class T> // dumps the raw bytes in memory order
-inline void dumpBytes(const T* x, size_t len=1, bool newline=true) {
+inline void dumpBytes(const T* x, size_t len=1, size_t newline_every=1)
+{
 	const uint8_t* ptr = reinterpret_cast<const uint8_t*>(x);
 	size_t len_bytes = len * sizeof(T);
+	if (newline_every == 1) {
+		newline_every = len >= 32 ? 32 : len_bytes;
+	}
 	for (size_t i = 0; i < len_bytes; i++) {
-		// printf("%03d", (int)ptr[i]);
-		printf("%d", (int)ptr[i]);
+		printf("%3d", (int)ptr[i]);
+		// printf("%d", (int)ptr[i]);
 		if ((i+1) % 8) {
 			printf(",");
-		} else {
-			printf("  ");
+		} else if (i + 1 < len_bytes) { // write 8B separator unless at very end
+			printf(" | ");
+			// printf("\t");
+		}
+		if (newline_every > 0 && ((i+1) % newline_every) == 0) {
+			printf("\n");
 		}
 	}
-	if (newline) { printf("\n"); }
+	if (newline_every && ((len_bytes % newline_every) != 0)) { printf("\n"); }
 }
 
 template<class T, class _=typename std::enable_if< !std::is_pointer<T>::value >::type >
-inline void dumpBytes(T x, bool newline=true) {
-	dumpBytes(&x, 1, newline);
+inline void dumpBytes(T x, size_t newline_every=1) {
+	// dumpBytes(&x, 1, newline);
+	dumpBytes(&x, 1, newline_every);
 }
 
 #ifdef __AVX__

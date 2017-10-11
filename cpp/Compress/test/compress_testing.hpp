@@ -6,6 +6,8 @@
 //  Copyright © 2017 D Blalock. All rights reserved.
 //
 
+// TODO nothing in this file really has to be a macro anymore...
+
 #ifndef compress_testing_h
 #define compress_testing_h
 
@@ -49,41 +51,44 @@ CAPTURE(output_bytes_as_str);                                         \
 //    std::cout << decompressed.cast<int>() << "\n";
 //    REQUIRE(ar::all_eq(raw, decompressed));
 
+// would be nice to separate tests into Catch sections, but Catch runs the
+// whole enclosing test_case a number of times equal to the number of sections
+// for mysterious reasons
 #define TEST_SIMPLE_INPUTS(_SZ, COMP_FUNC, DECOMP_FUNC)                 \
     do {                                                                \
-    auto SZ = (_SZ);                                                    \
+    size_t SZ = (size_t)(_SZ);                                          \
     Vec_u8 raw(SZ);                                                     \
-    SECTION("<64") {                                                    \
+    {                                                                   \
         for (int i = 0; i < SZ; i++) { raw(i) = i % 64; }               \
         TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);                    \
     }                                                                   \
-    SECTION("<128") {                                                   \
-        for (int i = 0; i < SZ; i++) { raw(i) = ((i + 64) / 1) % 128; } \
+    {                                                                   \
+        for (int i = 0; i < SZ; i++) { raw(i) = (i + 64) % 128; }       \
         TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);                    \
     }                                                                   \
-    SECTION("<256") {                                                   \
+    {                                                                   \
         for (int i = 0; i < SZ; i++) { raw(i) = (i + 96) % 256; }       \
         TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);                    \
     }                                                                   \
-    SECTION("<128, alternating") {                                      \
+    {                                                                   \
         for (int i = 0; i < SZ; i++) {                                  \
-            raw(i) = (i % 2) ? ((i + 64) / 1) % 128 : 0;                \
+            raw(i) = (i % 2) ? (i + 64) % 128 : 0;                      \
         }                                                               \
         TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);                    \
     }                                                                   \
-    SECTION("<128, alternating with 62-65") {                           \
+    {                                                                   \
         for (int i = 0; i < SZ; i++) {                                  \
-            raw(i) = (i % 2) ? (i + 64) % 128 : 62 + (i+1) % 4;         \
+            raw(i) = (i % 2) ? (i + 64) % 128 : 62 + (i + 1) % 4;       \
         }                                                               \
         TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);                    \
     }                                                                   \
-    SECTION("<128, alternating with 126-129") {                         \
+    {                                                                   \
         for (int i = 0; i < SZ; i++) {                                  \
-            raw(i) = (i % 2) ? (i+64) % 128 : 126 + (i+1) % 4;          \
+            raw(i) = (i % 2) ? (i + 64) % 128 : 126 + (i + 1) % 4;      \
         }                                                               \
         TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);                    \
     }                                                                   \
-    SECTION("<128, alternating with 72 (regression test)") {            \
+    {                                                                   \
         for (int i = 0; i < SZ; i++) {                                  \
             raw(i) = (i % 2) ? (i + 64) % 128 : 72;                     \
         }                                                               \
@@ -92,7 +97,7 @@ CAPTURE(output_bytes_as_str);                                         \
     } while(0);
 
 
-#define TEST_SQUARES_INPUT(SZ, COMP_FUNC, DECOMP_FUNC) \
+#define TEST_SQUARES_INPUT(SZ, COMP_FUNC, DECOMP_FUNC)                  \
     do {                                                                \
         Vec_u8 raw((SZ));                                               \
         for (int i = 0; i < (SZ); i++) {                                \
@@ -103,8 +108,9 @@ CAPTURE(output_bytes_as_str);                                         \
 
 
 #define TEST_KNOWN_INPUT(SZ, COMP_FUNC, DECOMP_FUNC)                    \
-    TEST_SQUARES_INPUT(SZ, COMP_FUNC, DECOMP_FUNC)                      \
-    TEST_SIMPLE_INPUTS(SZ, COMP_FUNC, DECOMP_FUNC)
+    TEST_SQUARES_INPUT(SZ, COMP_FUNC, DECOMP_FUNC);                     \
+
+    // TEST_SIMPLE_INPUTS(SZ, COMP_FUNC, DECOMP_FUNC);
 
 
 #define TEST_FUZZ(SZ, COMP_FUNC, DECOMP_FUNC)                               \
