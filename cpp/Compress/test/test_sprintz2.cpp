@@ -44,9 +44,9 @@
 //     }
 // }
 
-//*
- #undef TEST_SIMPLE_INPUTS
- #define TEST_SIMPLE_INPUTS(SZ, COMP_FUNC, DECOMP_FUNC)                 \
+/*
+ #undef TEST_KNOWN_INPUT
+ #define TEST_KNOWN_INPUT(SZ, COMP_FUNC, DECOMP_FUNC)                 \
     {                                                                   \
         Vec_u8 raw(SZ);                                                 \
         for (int i = 0; i < SZ; i++) {                                  \
@@ -54,7 +54,7 @@
         }                                                               \
         TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);                    \
     }                                                                   \
-
+//*/
 /*
      {                                                   \
          Vec_u8 raw(SZ);                                                 \
@@ -69,14 +69,6 @@
 //*/
 
 TEST_CASE("compress8b_rowmajor", "[rowmajor][dbg]") {
-//     TEST_SIMPLE_INPUTS(1, compress8b_rowmajor, decompress8b_rowmajor);
-//     TEST_SIMPLE_INPUTS(63, compress8b_rowmajor, decompress8b_rowmajor);
-//     TEST_SIMPLE_INPUTS(64, compress8b_rowmajor, decompress8b_rowmajor);
-//     TEST_SIMPLE_INPUTS(127, compress8b_rowmajor, decompress8b_rowmajor);
-//     TEST_SIMPLE_INPUTS(128, compress8b_rowmajor, decompress8b_rowmajor);
-//     TEST_SIMPLE_INPUTS(129, compress8b_rowmajor, decompress8b_rowmajor);
-//     TEST_SIMPLE_INPUTS(4096 + 17, compress8b_rowmajor, decompress8b_rowmajor);
-
     printf("executing rowmajor test\n");
 
 //    uint16_t ndims = 8;
@@ -107,20 +99,22 @@ TEST_CASE("compress8b_rowmajor", "[rowmajor][dbg]") {
 
 //        TEST_SQUARES_INPUT(1, comp, decomp);
 //        _test_simple_inputs(1, comp, decomp);
-//       TEST_SIMPLE_INPUTS(1, comp, decomp);
-//       TEST_SIMPLE_INPUTS(63, comp, decomp);
-//       TEST_SIMPLE_INPUTS(64, comp, decomp);
-//       TEST_SIMPLE_INPUTS(65, comp, decomp);
-//       TEST_SIMPLE_INPUTS(ndims * 8 - 1, comp, decomp);
-       TEST_SIMPLE_INPUTS(ndims * 8, comp, decomp);
-//       TEST_SIMPLE_INPUTS(ndims * 8 + 1, comp, decomp);
-//       TEST_SIMPLE_INPUTS(ndims * 16 - 1, comp, decomp);
-//       TEST_SIMPLE_INPUTS(ndims * 16, comp, decomp);
-//       TEST_SIMPLE_INPUTS(ndims * 16 + 1, comp, decomp);
-//       TEST_SIMPLE_INPUTS(127, comp, decomp);
-//       TEST_SIMPLE_INPUTS(128, comp, decomp);
-//       TEST_SIMPLE_INPUTS(129, comp, decomp);
-//       TEST_SIMPLE_INPUTS(4096 + 17, comp, decomp);
+       // TEST_KNOWN_INPUT(1, comp, decomp);
+       // TEST_KNOWN_INPUT(63, comp, decomp);
+       // TEST_KNOWN_INPUT(64, comp, decomp);
+       // TEST_KNOWN_INPUT(65, comp, decomp);
+       // TEST_KNOWN_INPUT(ndims * 8 - 1, comp, decomp);
+       // TEST_KNOWN_INPUT(ndims * 8, comp, decomp);
+       // TEST_KNOWN_INPUT(ndims * 8 + 1, comp, decomp);
+       // TEST_KNOWN_INPUT(ndims * 16 - 1, comp, decomp);
+       // TEST_KNOWN_INPUT(ndims * 16, comp, decomp);
+       // TEST_KNOWN_INPUT(ndims * 16 + 1, comp, decomp);
+       // TEST_KNOWN_INPUT(127, comp, decomp);
+       // TEST_KNOWN_INPUT(128, comp, decomp);
+       // TEST_KNOWN_INPUT(129, comp, decomp);
+       // TEST_KNOWN_INPUT(4096 + 17, comp, decomp);
+
+        TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
     }
 //    REQUIRE(true);
 }

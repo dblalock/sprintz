@@ -109,8 +109,7 @@ CAPTURE(output_bytes_as_str);                                         \
 
 #define TEST_KNOWN_INPUT(SZ, COMP_FUNC, DECOMP_FUNC)                    \
     TEST_SQUARES_INPUT(SZ, COMP_FUNC, DECOMP_FUNC);                     \
-
-    // TEST_SIMPLE_INPUTS(SZ, COMP_FUNC, DECOMP_FUNC);
+    TEST_SIMPLE_INPUTS(SZ, COMP_FUNC, DECOMP_FUNC);
 
 
 #define TEST_FUZZ(SZ, COMP_FUNC, DECOMP_FUNC)                               \
@@ -172,6 +171,31 @@ CAPTURE(output_bytes_as_str);                                         \
             }                                                               \
         }                                                                   \
         SECTION("long fuzz") {                                              \
+            TEST_FUZZ(1024 * 1024 + 7, COMP_FUNC, DECOMP_FUNC);             \
+        }                                                                   \
+    } while (0);
+
+
+#define TEST_COMP_DECOMP_PAIR_NO_SECTIONS(COMP_FUNC, DECOMP_FUNC)           \
+    do {                                                                    \
+        vector<int64_t> sizes {1, 2, 7, 8, 15, 16, 17, 31, 32, 33, 63, 64,  \
+            66, 71, 72, 73, 127, 128, 129, 135, 136, 137, 4096, 4096 + 17}; \
+        {                                                                   \
+            for (auto sz : sizes) {                                         \
+                TEST_KNOWN_INPUT(sz, COMP_FUNC, DECOMP_FUNC);               \
+            }                                                               \
+        }                                                                   \
+        {                                                                   \
+            for (auto sz : sizes) {                                         \
+                TEST_ZEROS(sz, COMP_FUNC, DECOMP_FUNC);                     \
+            }                                                               \
+        }                                                                   \
+        {                                                                   \
+            for (auto sz : sizes) {                                         \
+                TEST_FUZZ(sz, COMP_FUNC, DECOMP_FUNC);                      \
+            }                                                               \
+        }                                                                   \
+        {                                                                   \
             TEST_FUZZ(1024 * 1024 + 7, COMP_FUNC, DECOMP_FUNC);             \
         }                                                                   \
     } while (0);

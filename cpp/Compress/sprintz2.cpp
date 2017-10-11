@@ -204,7 +204,7 @@ int64_t compress8b_rowmajor(uint8_t* src, size_t len, int8_t* dest,
                 }
             } else { // data spans 9 bytes
                 // XXX can't test this for real with ndims=8
-                printf(">>> executing the slow path!\n");
+                // printf(">>> executing the slow path!\n");
                 // uint8_t nbits_lost = MAX((int)0, total_bits - (int)64);
                 uint8_t nbits_lost = total_bits - 64;
                 // printf("nbits_lost = %d\n", nbits_lost);
@@ -401,7 +401,7 @@ int64_t decompress8b_rowmajor(int8_t* src, uint8_t* dest) {
                     outptr += ndims;
                 }
             } else { // input spans 9 bytes
-                printf(">>> executing the slow path!\n");
+                // printf(">>> executing the slow path!\n");
                 uint8_t nbits_lost = total_bits - 64;
                 for (int i = 0; i < block_sz; i++) {
                     uint64_t packed_data = (*(uint64_t*)inptr) >> offset_bits;
