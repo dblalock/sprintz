@@ -77,6 +77,7 @@ TEST_CASE("compress8b_rowmajor", "[rowmajor][dbg]") {
 //    auto ndims_list = ar::range(33, 33 + 1);
 //    auto ndims_list = ar::range(65, 65 + 1);
 //    auto ndims_list = ar::range(1, 2);
+//    auto ndims_list = ar::range(6, 7);
 //    ar::print(ndims_list, "ndims_list");
     for (auto _ndims : ndims_list) {
         auto ndims = (uint16_t)_ndims;
@@ -98,6 +99,7 @@ TEST_CASE("compress8b_rowmajor", "[rowmajor][dbg]") {
 //            TEST_COMPRESSOR(SZ, comp, decomp);
 
 //        TEST_SQUARES_INPUT(1, comp, decomp);
+//        TEST_SQUARES_INPUT(64, comp, decomp);
 //        _test_simple_inputs(1, comp, decomp);
        // TEST_KNOWN_INPUT(1, comp, decomp);
        // TEST_KNOWN_INPUT(63, comp, decomp);
