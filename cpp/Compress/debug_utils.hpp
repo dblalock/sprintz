@@ -91,7 +91,7 @@ static inline void print(const char* str) {
 #endif
 
 template<class T> // dumps the bits in logical order (ie, msb always first)
-inline void dumpBits(T x, bool newline=true) {
+inline void dumpBigEndianBits(T x, bool newline=true) {
 	// for (int i = 0; i < sizeof(x) ; i++) {
 	for (int i = sizeof(x) - 1; i >= 0 ; i--) {
 		std::cout << " ";
@@ -104,8 +104,9 @@ inline void dumpBits(T x, bool newline=true) {
 	if (newline) { std::cout << "\n"; }
 }
 
-template<class T> // dumps the raw bits in memory order
-inline void dumpEndianBits(T x, bool newline=true) {
+// dumps the raw bits in memory order (little endian within bytes)
+template<class T>
+inline void dump_bits(T x, bool newline=true) {
 	const uint8_t* ptr = reinterpret_cast<const uint8_t*>(&x);
 	for (int i = 0; i < sizeof(x); i++) {
 		std::cout << " ";
@@ -119,50 +120,77 @@ inline void dumpEndianBits(T x, bool newline=true) {
 	if (newline) { std::cout << "\n"; }
 }
 
-template<class T> // dumps the raw bytes in memory order
-inline void dumpBytes(const T* x, size_t len=1, size_t newline_every=1)
+template<class T, class CastToT=uint8_t> // dumps the raw bytes in memory order
+inline void dump_elements(const T* x, size_t len=1, size_t newline_every=1)
 {
-	const uint8_t* ptr = reinterpret_cast<const uint8_t*>(x);
-	size_t len_bytes = len * sizeof(T);
+	const CastToT* ptr = reinterpret_cast<const CastToT*>(x);
+	size_t elem_sz = sizeof(CastToT);
+	size_t len_elements = len * sizeof(T) / elem_sz;
 	if (newline_every == 1) {
-		newline_every = len >= 32 ? 32 : len_bytes;
+		newline_every = len >= 32 ? 32 : len_elements;
 	}
-	for (size_t i = 0; i < len_bytes; i++) {
+	for (size_t i = 0; i < len_elements; i++) {
 		printf("%3d", (int)ptr[i]);
 		// printf("%d", (int)ptr[i]);
 		if ((i+1) % 8) {
 			printf(",");
-		} else if (i + 1 < len_bytes) { // write 8B separator unless at very end
+		} else if (i + 1 < len_elements) { // write 8B separator unless at very end
 			printf(" | ");
-			// printf("\t");
 		}
 		if (newline_every > 0 && ((i+1) % newline_every) == 0) {
 			printf("\n");
 		}
 	}
-	if (newline_every && ((len_bytes % newline_every) != 0)) { printf("\n"); }
+	if (newline_every && ((len_elements % newline_every) != 0)) { printf("\n"); }
+}
+template<class T, class CastToT,
+	class _=typename std::enable_if< !std::is_pointer<T>::value >::type >
+inline void dump_elements(T x, size_t newline_every=1) {
+	dump_elements<T, CastToT>(&x, 1, newline_every);
+}
+
+template<class T> // dumps the raw bytes in memory order
+inline void dumpBytes(const T* x, size_t len=1, size_t newline_every=1) {
+	dump_elements(x, len, newline_every);
 }
 
 template<class T, class _=typename std::enable_if< !std::is_pointer<T>::value >::type >
 inline void dumpBytes(T x, size_t newline_every=1) {
-	// dumpBytes(&x, 1, newline);
 	dumpBytes(&x, 1, newline_every);
 }
 
 #ifdef __AVX__
 #include <immintrin.h>
 
+template<class CastToT=uint8_t>
 inline void dump_m256i(const __m256i& v, bool newline=true) {
-	for (int i = 0; i < 6; i++) {
-		dumpEndianBits(_mm256_extract_epi64(v, i), false);
+	for (int i = 0; i < 4; i++) {
+		dump_elements<uint64_t, CastToT>(_mm256_extract_epi64(v, i), false);
         std::cout << "  ";
 	}
     if (newline) { std::cout << "\n"; }
 }
 
+inline void dump_m256i_bits(const __m256i& v, bool newline=true) {
+	for (int i = 0; i < 4; i++) {
+		dump_bits(_mm256_extract_epi64(v, i), false);
+        std::cout << "  ";
+	}
+    if (newline) { std::cout << "\n"; }
+}
+
+template<class CastToT=uint8_t>
 inline void dump_m128i(const __m128i& v, bool newline=true) {
 	for (int i = 0; i < 2; i++) {
-		dumpEndianBits(_mm_extract_epi64(v, i), false);
+		dump_elements<uint64_t, CastToT>(_mm_extract_epi64(v, i), false);
+        std::cout << "  ";
+	}
+    if (newline) { std::cout << "\n"; }
+}
+
+inline void dump_m128i_bits(const __m128i& v, bool newline=true) {
+	for (int i = 0; i < 2; i++) {
+		dump_bits(_mm_extract_epi64(v, i), false);
         std::cout << "  ";
 	}
     if (newline) { std::cout << "\n"; }
