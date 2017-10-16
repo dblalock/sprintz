@@ -71,13 +71,15 @@
 TEST_CASE("compress8b_rowmajor", "[rowmajor][dbg]") {
     printf("executing rowmajor test\n");
 
-//    uint16_t ndims = 8;
-//     auto ndims_list = ar::range(1, 33 + 1);
-    auto ndims_list = ar::range(1, 129 + 1);
+   // uint16_t ndims = 8;
+    // auto ndims_list = ar::range(1, 33 + 1);
+   auto ndims_list = ar::range(1, 129 + 1);
 //    auto ndims_list = ar::range(33, 33 + 1);
 //    auto ndims_list = ar::range(65, 65 + 1);
-//    auto ndims_list = ar::range(1, 2);
-//    auto ndims_list = ar::range(6, 7);
+   // auto ndims_list = ar::range(1, 2);
+   // auto ndims_list = ar::range(5, 6);
+    // auto ndims_list = ar::range(8, 9);
+    // auto ndims_list = ar::range(10, 11);
 //    ar::print(ndims_list, "ndims_list");
     for (auto _ndims : ndims_list) {
         auto ndims = (uint16_t)_ndims;
@@ -90,18 +92,25 @@ TEST_CASE("compress8b_rowmajor", "[rowmajor][dbg]") {
             return decompress8b_rowmajor(src, dest);
         };
 
-        //    size_t SZ = ndims * 8;
-//            size_t SZ = 64;
-//            Vec_u8 raw(SZ);
-//        //    for (int i = 0; i < SZ; i++) { raw(i) = 64 + i % 64; }
-//        //    for (int i = 0; i < SZ; i++) { raw(i) = (i % 2) ? 64 + i % 64 : 72; }
-//            for (int i = 0; i < SZ; i++) { raw(i) = (i % 2) ? (i + 64) % 128 : 0;}
-//            TEST_COMPRESSOR(SZ, comp, decomp);
+        // size_t SZ = ndims * 16;
+        // Vec_u8 raw(SZ);
+        // // for (int i = 0; i < SZ; i++) { raw(i) = i % 64; }
+        // // for (int i = 0; i < SZ; i++) { raw(i) = (i + 64) % 128; }
+        // // for (int i = 0; i < SZ; i++) { raw(i) = 64 + i % 64; }
+        // // for (int i = 0; i < SZ; i++) { raw(i) = (i % 2) ? 64 + i % 64 : 72; }
+        // // for (int i = 0; i < SZ; i++) { raw(i) = (i % 2) ? (i + 64) % 128 : 0;}
+        // // for (int i = 0; i < SZ; i++) { raw(i) = (i + 96) % 256; }
+        // // for (int i = 0; i < SZ; i++) { raw(i) = i % 256; }
+        // // for (int i = 0; i < SZ; i++) { raw(i) = (i % 2) ? (i + 64) % 128 : 62 + (i + 1) % 4;}
+        // for (int i = 0; i < SZ; i++) { raw(i) = (i % 2) ? (i + 64) % 128 : 72; }
+        // TEST_COMPRESSOR(SZ, comp, decomp);
 
-//        TEST_SQUARES_INPUT(1, comp, decomp);
-//        TEST_SQUARES_INPUT(64, comp, decomp);
+       // TEST_SQUARES_INPUT(1, comp, decomp);
+       // TEST_SQUARES_INPUT(128, comp, decomp);
 //        _test_simple_inputs(1, comp, decomp);
+       // TEST_SIMPLE_INPUT(1, comp, decomp);
        // TEST_KNOWN_INPUT(1, comp, decomp);
+       // TEST_KNOWN_INPUT(64, comp, decomp);
        // TEST_KNOWN_INPUT(63, comp, decomp);
        // TEST_KNOWN_INPUT(64, comp, decomp);
        // TEST_KNOWN_INPUT(65, comp, decomp);
@@ -116,7 +125,7 @@ TEST_CASE("compress8b_rowmajor", "[rowmajor][dbg]") {
        // TEST_KNOWN_INPUT(129, comp, decomp);
        // TEST_KNOWN_INPUT(4096 + 17, comp, decomp);
 
-        TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
+       TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
     }
 //    REQUIRE(true);
 }

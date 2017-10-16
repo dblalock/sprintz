@@ -16,8 +16,8 @@
 
 // #define VERBOSE_COMPRESS
 
+#include "array_utils.hpp" // TODO rm
 #include "debug_utils.hpp" // TODO rm
-// #include "array_utils.hpp" // TODO rm
 
 #if __cpp_constexpr >= 201304
     #define CONSTEXPR_FUNC constexpr
@@ -49,7 +49,7 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
                             uint16_t ndims, bool write_size)
 {
     static const int block_sz = 8;
-    static const int group_sz_blocks = 1;
+    static const int group_sz_blocks = 2;
     static const int group_sz_per_dim = block_sz * group_sz_blocks;
     static const int nbits_sz_bits = 3;
     static const int stripe_sz = 8;
@@ -60,13 +60,17 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
     // static const uint16_t ndims = 8;
     int nfullstripes = ndims / stripe_sz;
     int nstripes = nfullstripes + ((ndims % stripe_sz) > 0);
-    int stripe_header_sz = nbits_sz_bits * stripe_sz / 8;
+    // int stripe_header_sz = nbits_sz_bits * stripe_sz / 8;
     uint32_t group_sz = ndims * group_sz_per_dim;
 
     uint32_t total_header_bits = ndims * nbits_sz_bits * group_sz_blocks;
     uint32_t total_header_sz = (total_header_bits / 8) + ((total_header_bits % 8) > 0);
-    uint8_t remaining_header_sz = total_header_sz % stripe_header_sz;
-    uint8_t final_header_sz = remaining_header_sz ? remaining_header_sz : stripe_header_sz;
+    // uint8_t remaining_header_sz = total_header_sz % stripe_header_sz;
+    // uint8_t final_header_sz = remaining_header_sz ? remaining_header_sz : stripe_header_sz;
+
+    // uint32_t nheader_vals = ndims * group_sz_blocks;
+    // uint32_t nheader_stripes = nheader_vals / stripe_sz + \
+    //     ((nheader_vals % stripe_sz) > 0);
 
     // total_header_sz = stripe_header_sz * nstripes;
     // printf("compress: total header sz: %d\n", total_header_sz);
@@ -89,12 +93,13 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
     }
 
     // printf("-------- compression (len = %lld)\n", (int64_t)len);
-    // printf("saw original data:\n"); dumpBytes(src, len, ndims);
+    // printf("saw original data:\n"); dump_bytes(src, len, ndims);
 
     uint8_t*  stripe_bitwidths  = (uint8_t*) malloc(nstripes*sizeof(uint8_t));
     uint32_t* stripe_bitoffsets = (uint32_t*)malloc(nstripes*sizeof(uint32_t));
     uint64_t* stripe_masks      = (uint64_t*)malloc(nstripes*sizeof(uint64_t));
     uint32_t* stripe_headers    = (uint32_t*)malloc(nstripes*sizeof(uint32_t));
+    uint8_t*  header_bytes      = (uint8_t*) calloc(total_header_sz + 4, 1);
 
     // size_t nblocks = len / (block_sz * ndims);
     // printf("nblocks: %lu\n", nblocks);
@@ -107,6 +112,9 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
 
         // printf("reading input at offset %d\n", (uint32_t)(src - orig_src));
 
+        memset(header_bytes, 0, total_header_sz + 4);
+
+        uint32_t header_bit_offset = 0;
         for (int b = 0; b < group_sz_blocks; b++) { // for each block in group
 
             // zero stripe info from previous iter
@@ -125,7 +133,7 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
                     // max_nbits = MAX(max_nbits, NBITS_COST_U8[val]);
                     mask |= NBITS_MASKS_U8[val];
                 }
-                // mask = NBITS_MASKS_U8[255]; // TODO rm
+                mask = NBITS_MASKS_U8[255]; // TODO rm
                 // printf("\t"); printf("(mask = %d)\n", mask);
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
 
@@ -139,8 +147,37 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
                 // accumulate header info for this stripe
                 uint32_t write_nbits = max_nbits - (max_nbits == 8); // map 8 to 7
                 stripe_headers[stripe] |= write_nbits << (idx_in_stripe * 3);
-                // printf("write_nbits = %d, header = ", write_nbits); dumpBytes(stripe_headers[stripe]);
+                // printf("write_nbits = %d, stripe header = ", write_nbits); dump_bytes(stripe_headers[stripe]);
+
+                // uint16_t byte_offset = header_bit_offset >> 3;
+                // uint16_t bit_offset = header_bit_offset & 0x07;
+                // header_bit_offset += nbits_sz_bits;
             }
+            // write out header bits // TODO fuse with loop right below this
+            // for (size_t stripe = 0; stripe < nheader_stripes; stripe++) {
+            // printf("header bit offset: %d\n", header_bit_offset);
+            for (size_t stripe = 0; stripe < nstripes; stripe++) {
+                uint16_t byte_offset = header_bit_offset >> 3;
+                uint16_t bit_offset = header_bit_offset & 0x07;
+                // Note: this write will get more complicated when upper byte
+                // of each stripe_header isn't guaranteed to be 0
+                *(uint32_t*)(header_dest + byte_offset) |= \
+                    stripe_headers[stripe] << bit_offset;
+
+                uint8_t is_final_stripe = stripe == (nstripes - 1);
+                uint8_t has_trailing_dims = (ndims % stripe_sz) > 0;
+                uint8_t add_ndims = is_final_stripe && has_trailing_dims ?
+                    ndims % stripe_sz : stripe_sz;
+                header_bit_offset += nbits_sz_bits * add_ndims;
+            }
+            // TODO write out last stripe such that it doesn't clobber data
+            //  -actually, no, haven't written data yet so we're good
+            //      -wait, yes we have, unless this is first block in group
+            // uint16_t byte_offset = header_bit_offset >> 3;
+            // uint16_t bit_offset = header_bit_offset & 0x07;
+            // memcpy(header_dest + byte_offset, )
+            // printf("total header sz: %d\n", total_header_sz);
+            // printf("wrote group header: "); dump_bytes(header_dest, total_header_sz);
 
             // compute start offsets of each stripe (in bits)
             stripe_bitoffsets[0] = 0;
@@ -171,15 +208,15 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
 
             for (int16_t stripe = 0; stripe < nstripes; stripe++) {
 
-                // write out packed header for this stripe
-                uint32_t packed_header = stripe_headers[stripe];
-                uint8_t is_final_stripe = (b == group_sz_blocks - 1) && \
-                    (stripe == nstripes - 1);
-                uint8_t cpy_sz = is_final_stripe ? final_header_sz : stripe_header_sz;
-                memcpy(header_dest, &packed_header, cpy_sz);
-                header_dest += stripe_header_sz;
-                // printf("wrote out header: "); dumpEndianBits(packed_header);
-                // printf("wrote out header: "); dumpBytes(packed_header);
+                // // write out packed header for this stripe
+                // uint32_t packed_header = stripe_headers[stripe];
+                // uint8_t is_final_stripe = (b == group_sz_blocks - 1) && \
+                //     (stripe == nstripes - 1);
+                // uint8_t cpy_sz = is_final_stripe ? final_header_sz : stripe_header_sz;
+                // memcpy(header_dest, &packed_header, cpy_sz);
+                // header_dest += stripe_header_sz;
+                // // printf("wrote out header: "); dumpEndianBits(packed_header);
+                // // printf("wrote out header: "); dump_bytes(packed_header);
 
                 // load info for this stripe
                 uint8_t offset_bits = (uint8_t)(stripe_bitoffsets[stripe] & 0x07);
@@ -196,7 +233,7 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
                 // printf("offset bytes, offset bits, nbits, total_bits = %u, %u, %u, %d\n",
                 //     offset_bytes, offset_bits, nbits, total_bits);
 
-                // printf("using mask: "); dumpBytes(mask);
+                // printf("using mask: "); dump_bytes(mask);
 
                 // XXX Note that this impl assumes that output buff is zeroed
                 if (total_bits <= 64) { // always fits in one u64
@@ -209,14 +246,14 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
                         uint64_t data = *(uint64_t*)inptr;
                         uint64_t packed_data = _pext_u64(data, mask);
                         // ar::print(inptr, stripe_sz, "stripe");
-                        // printf("packed data: "); dumpBytes(packed_data);
+                        // printf("packed data: "); dump_bytes(packed_data);
                         uint64_t write_data = packed_data << offset_bits;
                         // printf("data"); dumpEndianBits(data);
                         // printf("packed_data"); dumpEndianBits(packed_data);
                         *(uint64_t*)outptr = write_data | (*(uint64_t*)outptr);
 
-                        // printf("packing block: "); dumpBytes(data, false);
-                        // printf("\t-> "); dumpBytes(*(uint64_t*)outptr);
+                        // printf("packing block: "); dump_bytes(data, false);
+                        // printf("\t-> "); dump_bytes(*(uint64_t*)outptr);
 
                         // printf("packing block: "); dumpEndianBits(data, false);
                         // printf("\t-> "); dumpEndianBits(orig_outptr_byte, false); printf(" | "); dumpEndianBits(packed_data, false); printf(" >> %d", offset_bits);
@@ -235,14 +272,14 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
                         // uint8_t orig_outptr_byte = *outptr; // TODO rm after debug
                         uint64_t data = *(uint64_t*)inptr;
                         uint64_t packed_data = _pext_u64(data, mask);
-                        // printf("packed data: "); dumpBytes(packed_data);
+                        // printf("packed data: "); dump_bytes(packed_data);
                         uint8_t extra_byte = (uint8_t)(packed_data >> (nbits - nbits_lost));
                         uint64_t write_data = packed_data << offset_bits;
                         *(uint64_t*)outptr = write_data | (*(uint64_t*)outptr);
                         *(outptr + 8) = extra_byte;
 
-                        // printf("packing block: "); dumpBytes(data, false);
-                        // printf("\t-> "); dumpBytes(*(uint64_t*)outptr);
+                        // printf("packing block: "); dump_bytes(data, false);
+                        // printf("\t-> "); dump_bytes(*(uint64_t*)outptr);
 
                         // printf("extra byte = "); dumpEndianBits(extra_byte);
                         // printf("packing block: "); dumpEndianBits(data, false);
@@ -255,12 +292,12 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
                 }
 
                 // printf("read back header: "); dumpEndianBits(*(uint32_t*)(header_dest - stripe_header_sz));
-            }
+            } // for each stripe
 
-            src += group_sz;
-            dest += block_sz * group_sz_blocks * row_sz_bytes;
-        }
-    }
+            src += block_sz * ndims;
+            dest += block_sz * row_sz_bytes;
+        } // for each block
+    } // for each group
 
     free(stripe_bitwidths);
     free(stripe_bitoffsets);
@@ -281,15 +318,17 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
 }
 
 int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
+    // constants that could, in principle, be changed (but not in this impl)
     static const uint8_t block_sz = 8;
-    static const uint8_t group_sz_blocks = 1;
-    static const int group_sz_per_dim = block_sz * group_sz_blocks;
     static const uint8_t vector_sz = 32;
     static const uint8_t stripe_sz = 8;
-    // static const uint8_t stripes_per_vector = vector_sz / stripe_sz;
+    // constants that could actually be changed in this impl
+    static const uint8_t group_sz_blocks = 2;
     static const uint8_t nbits_sz_bits = 3;
+    // derived constants
+    static const int group_sz_per_dim = block_sz * group_sz_blocks;
     static const uint8_t stripe_header_sz = nbits_sz_bits * stripe_sz / 8;
-    static const uint8_t nbits_sz_mask = 0x07;
+    static const uint8_t nbits_sz_mask = (1 << nbits_sz_bits) - 1;
     static const uint64_t kHeaderUnpackMask = TILE_BYTE(nbits_sz_mask);
     assert(stripe_sz % 8 == 0);
     assert(vector_sz % stripe_sz == 0);
@@ -312,13 +351,13 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
 
     // printf("-------- decompression (orig_len = %lld)\n", (int64_t)orig_len);
     // printf("saw compressed data (with possible extra at end):\n");
-    // // dumpBytes(src, orig_len + 16);
-    // dumpBytes(src, orig_len + 24);
+    // // dump_bytes(src, orig_len + 16);
+    // dump_bytes(src, orig_len + 24);
 
     // compute stats derived from ndims
-    // uint32_t nvars_in_group = ndims * group_sz_blocks;
-    // uint32_t nstripes_group = nvars_in_group / stripe_sz + \
-    //     ((nvars_in_group % stripe_sz) > 0);
+    uint32_t nheader_vals = ndims * group_sz_blocks;
+    uint32_t nheader_stripes = nheader_vals / stripe_sz + \
+        ((nheader_vals % stripe_sz) > 0);
     uint16_t nstripes = ndims / stripe_sz + ((ndims % stripe_sz) > 0);
     // uint16_t nvectors = (ndims / vector_sz) + ((ndims % vector_sz) > 0);
     uint32_t group_sz = ndims * group_sz_per_dim;
@@ -335,7 +374,7 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
     uint32_t final_header_mask = ((uint32_t)0xffffffff) >> shift_bits;
 
     // printf("total header sz, final header sz: %d, %d\n", total_header_sz, final_header_sz);
-    // printf("final header mask: "); dumpEndianBits(final_header_mask);
+    // printf("final header mask: "); dump_bits(final_header_mask);
 
     // printf("nstripes, nvectors = %d, %d\n", nstripes, nvectors);
 
@@ -344,7 +383,7 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
     // that we can store directly after sad_epu8)
     //
     // NOTE: key difference about these sizes is that they're padded based
-    // on vector width, not just stripe width (like nstripes_group, etc)
+    // on vector width, not just stripe width (like nheader_stripes, etc)
     //
     uint32_t nstripes_in_group = nstripes * group_sz_blocks;
     uint32_t group_header_sz = round_up_to_multiple(
@@ -352,14 +391,15 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
     uint32_t nstripes_in_vectors = group_header_sz / stripe_sz;
     uint16_t nvectors_in_group = group_header_sz / vector_sz;
 
-    uint8_t* headers = (uint8_t*)calloc(1, group_header_sz);
-    uint64_t* data_masks = (uint64_t*)calloc(nstripes_in_vectors, 8);
-    uint64_t* stripe_bitwidths = (uint64_t*)calloc(nstripes_in_vectors, 8);
+    uint64_t* headers_tmp       = (uint64_t*)calloc(nheader_stripes, 8);
+    uint8_t*  headers           = (uint8_t*) calloc(1, group_header_sz);
+    uint64_t* data_masks        = (uint64_t*)calloc(nstripes_in_vectors, 8);
+    uint64_t* stripe_bitwidths  = (uint64_t*)calloc(nstripes_in_vectors, 8);
     // uint32_t* stripe_bitoffsets = (uint32_t*)calloc(nstripes_in_vectors, 4);
     uint32_t* stripe_bitoffsets = (uint32_t*)calloc(nstripes, 4);
     // uint32_t ndims_padded = round_up_to_multiple(ndims, vector_sz);
-    // uint16_t nstripes_in_vectors = nvars_in_group_padded / stripe_sz;
-    // uint32_t nvars_in_group_padded = round_up_to_multiple(nvars_in_group, vector_sz);
+    // uint16_t nstripes_in_vectors = nheader_vals_padded / stripe_sz;
+    // uint32_t nheader_vals_padded = round_up_to_multiple(nheader_vals, vector_sz);
 
     // size_t nblocks = orig_len / (block_sz * ndims);
     // printf("decomp nblocks: %lu\n", nblocks);
@@ -376,28 +416,63 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
         // because we need to zero-pad final stripe's headers in each block
         // so that stripe widths don't get messed up (from initial data in
         // next block's header)
-        uint64_t* header_write_ptr = (uint64_t*)headers;
-        for (size_t b = 0; b < group_sz_blocks; b++) {
-            // unpack all headers except the one in the last stripe
-            for (size_t stripe = 0; stripe < nstripes - 1; stripe++) {
-                uint64_t packed_header = *(uint32_t*)header_src;
-                header_src += stripe_header_sz;
-                uint64_t header = _pdep_u64(packed_header, kHeaderUnpackMask);
-                // printf("header mask u64:"); dumpEndianBits(header_unpack_mask);
-                // printf("packed header u64:"); dumpEndianBits(packed_header);
-                // printf("header u64:"); dumpEndianBits(header);
-                // *(uint64_t*)(headers + stripe * stripe_sz) = header;
-                *header_write_ptr = header;
-                header_write_ptr++;
-            }
-            // unpack header for the last stripe (might not use all 3B)
-            uint64_t packed_header = (*(uint32_t*)header_src) & final_header_mask;
+        uint64_t* header_write_ptr = (uint64_t*)headers_tmp;
+        for (size_t stripe = 0; stripe < nheader_stripes - 1; stripe++) {
+            uint64_t packed_header = *(uint32_t*)header_src;
             header_src += stripe_header_sz;
             uint64_t header = _pdep_u64(packed_header, kHeaderUnpackMask);
-            // *(uint64_t*)(headers + (nstripes_group-1) * stripe_sz) = header;
             *header_write_ptr = header;
             header_write_ptr++;
         }
+        // unpack header for the last stripe in the last block
+        uint64_t packed_header = (*(uint32_t*)header_src) & final_header_mask;
+        uint64_t header = _pdep_u64(packed_header, kHeaderUnpackMask);
+        *header_write_ptr = header;
+
+        // insert zeros between the unpacked headers so that the stripe
+        // bitwidths, etc, are easy to compute
+        // printf("ndims: %d\n", ndims);
+        uint8_t* header_in_ptr = (uint8_t*)headers_tmp;
+        for (size_t b = 0; b < group_sz_blocks; b++) {
+            size_t src_offset = b * ndims;
+            size_t dest_offset = b * nstripes * stripe_sz;
+            // printf("src offset, dest offset = %lu, %lu\n", src_offset, dest_offset);
+            memcpy(headers + dest_offset, header_in_ptr + src_offset, ndims);
+            // for (int i = 0; i < ndims; i++) {
+            //     printf("copying val: %d\n", (header_in_ptr + src_offset)[i]);
+            //     (headers + dest_offset)[i] = (header_in_ptr + src_offset)[i];
+            // }
+        }
+
+        // // // ar::print(headers_tmp, nheader_stripes * 8, "header_tmp");
+        // // // ar::print(headers, nstripes_in_vectors, "headers");
+        // printf("header_tmp:    "); dump_bytes(headers_tmp, nheader_stripes * 8);
+        // printf("padded headers:"); dump_bytes(headers, nstripes_in_vectors * 8);
+
+        // for (size_t b = 0; b < group_sz_blocks; b++) {
+        //     // unpack all headers except the one in the last stripe
+        //     for (size_t stripe = 0; stripe < nstripes - 1; stripe++) {
+        //         uint64_t packed_header = *(uint32_t*)header_src;
+        //         header_src += stripe_header_sz;
+        //         uint64_t header = _pdep_u64(packed_header, kHeaderUnpackMask);
+        //         // printf("header mask u64:"); dumpEndianBits(header_unpack_mask);
+        //         // printf("packed header u64:"); dumpEndianBits(packed_header);
+        //         printf("header u64:"); dump_bytes(header);
+        //         // *(uint64_t*)(headers + stripe * stripe_sz) = header;
+        //         *header_write_ptr = header;
+        //         header_write_ptr++;
+        //     }
+        //     // unpack header for the last stripe (might not use all 3B)
+        //     uint64_t packed_header = (*(uint32_t*)header_src) & final_header_mask;
+        //     header_src += stripe_header_sz;
+        //     uint64_t header = _pdep_u64(packed_header, kHeaderUnpackMask);
+        //     printf("final header u64:"); dump_bytes(header);
+        //     // *(uint64_t*)(headers + (nheader_stripes-1) * stripe_sz) = header;
+        //     *header_write_ptr = header;
+        //     header_write_ptr++;
+        // }
+
+        // ar::print(headers, group_header_sz, "padded headers");
 
         // compute masks and bitwidths for all stripes
         for (size_t v = 0; v < nvectors_in_group; v++) {
@@ -424,6 +499,12 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
             _mm256_storeu_si256((__m256i*)store_addr2, masks);
         }
 
+        // // // printf("group_header_sz: %d\n", group_header_sz);
+        // printf("padded masks:     "); dump_bytes(data_masks, group_header_sz);
+        // // printf("padded bitwidths: "); dump_bytes(stripe_bitwidths, group_header_sz);
+        // printf("padded bitwidths: "); dump_elements(stripe_bitwidths, nstripes_in_vectors);
+
+        uint64_t* masks = data_masks;
         uint64_t* bitwidths = stripe_bitwidths;
         for (int b = 0; b < group_sz_blocks; b++) { // for each block in group
             // compute where each stripe begins, as well as width of a row
@@ -436,9 +517,14 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
                 bitwidths[nstripes - 1]);
             uint32_t row_sz_bytes = (row_sz_bits >> 3) + ((row_sz_bits % 8) > 0);
 
+            // printf("---- block %d\n", b);
+            // printf("padded bitwidths again: "); dump_elements(stripe_bitwidths, nstripes_in_vectors);
+            // printf("local bitwidths: "); dump_elements(bitwidths, nstripes);
+
             // ar::print(stripe_bitwidths, nstripes, "stripe_bitwidths");
+            // ar::print(bitwidths, nstripes, "stripe bitwidths for this block");
             // ar::print(stripe_bitoffsets, nstripes, "stripe_bitoffsets");
-            // printf("row sz bits: %d\n", row_sz_bits);
+            // printf("row sz bits, row sz bytes: %d, %d\n", row_sz_bits, row_sz_bytes);
 
             // TODO see if prefetching and/or touching input and output cache
             // lines in order (instead of weird strided order below) helps
@@ -450,8 +536,12 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
                 uint32_t offset_bits = stripe_bitoffsets[stripe] & 0x07;
                 uint32_t offset_bytes = stripe_bitoffsets[stripe] >> 3;
 
+                // uint64_t mask = data_masks[stripe + nstripes * b];
+                // uint8_t nbits = bitwidths[stripe + nstripes * b];
                 uint64_t mask = data_masks[stripe];
                 uint8_t nbits = bitwidths[stripe];
+
+                // printf("nbits at idx %d = %d\n", stripe + nstripes * b, nbits);
 
                 const int8_t* inptr = src + offset_bytes;
                 uint8_t* outptr = dest + (stripe * stripe_sz);
@@ -459,38 +549,41 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
                 uint8_t total_bits = nbits + offset_bits;
                 // printf("total bits: %d\n", total_bits);
 
-                // printf("offset bytes, bits = %u, %u\n", offset_bytes, offset_bits);
+                // printf("total bits, offset bytes, bits = %u, %u, %u\n", total_bits, offset_bytes, offset_bits);
+                // printf("using mask: "); dump_bytes(mask);
 
                 // this is the hot loop
                 if (total_bits <= 64) { // input guaranteed to fit in 8B
                     for (int i = 0; i < block_sz; i++) {
                         uint64_t packed_data = (*(uint64_t*)inptr) >> offset_bits;
-                        // printf("packed_data "); dumpBytes(packed_data);
+                        // printf("packed_data "); dump_bytes(packed_data);
                         *(uint64_t*)outptr = _pdep_u64(packed_data, mask);
                         inptr += row_sz_bytes;
                         outptr += ndims;
                     }
                 } else { // input spans 9 bytes
-                    // printf(">>> executing the slow path!\n");
+                    printf(">>> executing the slow path!\n");
                     uint8_t nbits_lost = total_bits - 64;
                     for (int i = 0; i < block_sz; i++) {
                         uint64_t packed_data = (*(uint64_t*)inptr) >> offset_bits;
-                        // printf("packed_data "); dumpBytes(packed_data);
+                        // printf("packed_data "); dump_bytes(packed_data);
                         packed_data |= (*(uint64_t*)(inptr + 8)) << (nbits - nbits_lost);
-                        // printf("packed_data after OR "); dumpBytes(packed_data);
+                        // printf("packed_data after OR "); dump_bytes(packed_data);
                         *(uint64_t*)outptr = _pdep_u64(packed_data, mask);
                         inptr += row_sz_bytes;
                         outptr += ndims;
                     }
                 }
-                // printf("data we wrote:\n"); dumpBytes(dest, group_sz);
+                // printf("data we wrote:\n"); dump_bytes(dest, block_sz*ndims, ndims);
             } // for each stripe
             src += block_sz * row_sz_bytes;
-            dest += group_sz;
+            dest += block_sz * ndims;
+            masks += nstripes;
             bitwidths += nstripes;
         } // for each block
     } // for each group
 
+    free(headers_tmp);
     free(headers);
     free(data_masks);
     free(stripe_bitwidths);
@@ -502,6 +595,10 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
     // printf("read bytes: %lu\n", remaining_len);
     // printf("remaining data: "); ar::print(src, remaining_len);
     memcpy(dest, src, remaining_len);
+
+    // size_t dest_sz = dest + remaining_len - orig_dest;
+    // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, ndims);
+    // ar::print(orig_dest, dest_sz, "decompressed data");
 
     return dest + remaining_len - orig_dest;
 }

@@ -120,43 +120,49 @@ inline void dump_bits(T x, bool newline=true) {
 	if (newline) { std::cout << "\n"; }
 }
 
-template<class T, class CastToT=uint8_t> // dumps the raw bytes in memory order
+template<class T, class CastToT=T> // dumps the raw bytes in memory order
 inline void dump_elements(const T* x, size_t len=1, size_t newline_every=1)
 {
 	const CastToT* ptr = reinterpret_cast<const CastToT*>(x);
-	size_t elem_sz = sizeof(CastToT);
-	size_t len_elements = len * sizeof(T) / elem_sz;
+	// size_t len_elements = len * sizeof(T) / sizeof(CastToT);
+	size_t len_elements = len;
 	if (newline_every == 1) {
-		newline_every = len >= 32 ? 32 : len_elements;
+		newline_every = len_elements >= 32 ? 32 : len_elements;
 	}
+	// printf("dump_elements: len=%lu, len_elements = %lu\n", len, len_elements);
+	// printf("dump_elements: newline_every=%lu\n", newline_every);
 	for (size_t i = 0; i < len_elements; i++) {
 		printf("%3d", (int)ptr[i]);
 		// printf("%d", (int)ptr[i]);
-		if ((i+1) % 8) {
-			printf(",");
-		} else if (i + 1 < len_elements) { // write 8B separator unless at very end
-			printf(" | ");
-		}
-		if (newline_every > 0 && ((i+1) % newline_every) == 0) {
-			printf("\n");
+		int write_newline = newline_every > 0 && ((i+1) % newline_every) == 0;
+		// } else if (((i+1) % 8 == 0) && i + 1 < len_elements) { // write 8B separator unless at very end
+		if (write_newline) {
+			printf(",\n");
+		} else {
+			size_t idx_in_row = i % newline_every;
+			if ((idx_in_row + 1) % 8) {
+				printf(",");
+			} else if (i + 1 < len_elements) { // write separator unless at end
+				printf(" | ");
+			}
 		}
 	}
 	if (newline_every && ((len_elements % newline_every) != 0)) { printf("\n"); }
 }
-template<class T, class CastToT,
+template<class T, class CastToT=T,
 	class _=typename std::enable_if< !std::is_pointer<T>::value >::type >
 inline void dump_elements(T x, size_t newline_every=1) {
 	dump_elements<T, CastToT>(&x, 1, newline_every);
 }
 
 template<class T> // dumps the raw bytes in memory order
-inline void dumpBytes(const T* x, size_t len=1, size_t newline_every=1) {
-	dump_elements(x, len, newline_every);
+inline void dump_bytes(const T* x, size_t len=1, size_t newline_every=1) {
+	dump_elements<T, uint8_t>(x, len, newline_every);
 }
 
 template<class T, class _=typename std::enable_if< !std::is_pointer<T>::value >::type >
-inline void dumpBytes(T x, size_t newline_every=1) {
-	dumpBytes(&x, 1, newline_every);
+inline void dump_bytes(T x, size_t newline_every=1) {
+	dump_bytes(&x, sizeof(T), newline_every);
 }
 
 #ifdef __AVX__
