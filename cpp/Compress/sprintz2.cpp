@@ -49,7 +49,7 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
                             uint16_t ndims, bool write_size)
 {
     static const int block_sz = 8;
-    static const int group_sz_blocks = 2;
+    static const int group_sz_blocks = 8;
     static const int group_sz_per_dim = block_sz * group_sz_blocks;
     static const int nbits_sz_bits = 3;
     static const int stripe_sz = 8;
@@ -323,7 +323,7 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
     static const uint8_t vector_sz = 32;
     static const uint8_t stripe_sz = 8;
     // constants that could actually be changed in this impl
-    static const uint8_t group_sz_blocks = 2;
+    static const uint8_t group_sz_blocks = 8;
     static const uint8_t nbits_sz_bits = 3;
     // derived constants
     static const int group_sz_per_dim = block_sz * group_sz_blocks;
