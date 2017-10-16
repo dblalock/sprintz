@@ -77,7 +77,7 @@ TEST_CASE("compress8b_rowmajor", "[rowmajor][dbg]") {
 //    auto ndims_list = ar::range(33, 33 + 1);
 //    auto ndims_list = ar::range(65, 65 + 1);
    // auto ndims_list = ar::range(1, 2);
-   // auto ndims_list = ar::range(5, 6);
+   // auto ndims_list = ar::range(4, 5);
     // auto ndims_list = ar::range(8, 9);
     // auto ndims_list = ar::range(10, 11);
 //    ar::print(ndims_list, "ndims_list");
@@ -94,21 +94,23 @@ TEST_CASE("compress8b_rowmajor", "[rowmajor][dbg]") {
 
         // size_t SZ = ndims * 16;
         // Vec_u8 raw(SZ);
-        // // for (int i = 0; i < SZ; i++) { raw(i) = i % 64; }
-        // // for (int i = 0; i < SZ; i++) { raw(i) = (i + 64) % 128; }
-        // // for (int i = 0; i < SZ; i++) { raw(i) = 64 + i % 64; }
-        // // for (int i = 0; i < SZ; i++) { raw(i) = (i % 2) ? 64 + i % 64 : 72; }
-        // // for (int i = 0; i < SZ; i++) { raw(i) = (i % 2) ? (i + 64) % 128 : 0;}
-        // // for (int i = 0; i < SZ; i++) { raw(i) = (i + 96) % 256; }
-        // // for (int i = 0; i < SZ; i++) { raw(i) = i % 256; }
-        // // for (int i = 0; i < SZ; i++) { raw(i) = (i % 2) ? (i + 64) % 128 : 62 + (i + 1) % 4;}
-        // for (int i = 0; i < SZ; i++) { raw(i) = (i % 2) ? (i + 64) % 128 : 72; }
+        // for (int i = 0; i < SZ; i++) { raw(i) = i % 64; }
+        // for (int i = 0; i < SZ; i++) { raw(i) = (i + 64) % 128; }
+        // for (int i = 0; i < SZ; i++) { raw(i) = 64 + i % 64; }
+        // for (int i = 0; i < SZ; i++) { raw(i) = (i % 2) ? 64 + i % 64 : 72; }
+        // for (int i = 0; i < SZ; i++) { raw(i) = (i % 2) ? (i + 64) % 128 : 0;}
+        // for (int i = 0; i < SZ; i++) { raw(i) = (i + 96) % 256; }
+        // for (int i = 0; i < SZ; i++) { raw(i) = i % 256; }
+        // for (int i = 0; i < SZ; i++) { raw(i) = (i % 2) ? (i + 64) % 128 : 62 + (i + 1) % 4;}
+        // for (int i = 0; i < SZ; i++) { raw(i) = (i % 2) ? (i + 64) % 128 : 30 + (i + 1) % 4;}
         // TEST_COMPRESSOR(SZ, comp, decomp);
 
        // TEST_SQUARES_INPUT(1, comp, decomp);
+       // TEST_SQUARES_INPUT(ndims * 16, comp, decomp);
        // TEST_SQUARES_INPUT(128, comp, decomp);
 //        _test_simple_inputs(1, comp, decomp);
-       // TEST_SIMPLE_INPUT(1, comp, decomp);
+       // TEST_SIMPLE_INPUTS(1, comp, decomp);
+       // TEST_SIMPLE_INPUTS(ndims * 16, comp, decomp);
        // TEST_KNOWN_INPUT(1, comp, decomp);
        // TEST_KNOWN_INPUT(64, comp, decomp);
        // TEST_KNOWN_INPUT(63, comp, decomp);
