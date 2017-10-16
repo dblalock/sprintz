@@ -320,7 +320,7 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
     // uint32_t nstripes_group = nvars_in_group / stripe_sz + \
     //     ((nvars_in_group % stripe_sz) > 0);
     uint16_t nstripes = ndims / stripe_sz + ((ndims % stripe_sz) > 0);
-    uint16_t nvectors = (ndims / vector_sz) + ((ndims % vector_sz) > 0);
+    // uint16_t nvectors = (ndims / vector_sz) + ((ndims % vector_sz) > 0);
     uint32_t group_sz = ndims * group_sz_per_dim;
 
     uint32_t total_header_bits = ndims * nbits_sz_bits * group_sz_blocks;
@@ -350,10 +350,13 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
     uint32_t group_header_sz = round_up_to_multiple(
         nstripes_in_group * stripe_sz, vector_sz);
     uint32_t nstripes_in_vectors = group_header_sz / stripe_sz;
+    uint16_t nvectors_in_group = group_header_sz / vector_sz;
+
     uint8_t* headers = (uint8_t*)calloc(1, group_header_sz);
     uint64_t* data_masks = (uint64_t*)calloc(nstripes_in_vectors, 8);
     uint64_t* stripe_bitwidths = (uint64_t*)calloc(nstripes_in_vectors, 8);
-    uint32_t* stripe_bitoffsets = (uint32_t*)calloc(nstripes_in_vectors, 4);
+    // uint32_t* stripe_bitoffsets = (uint32_t*)calloc(nstripes_in_vectors, 4);
+    uint32_t* stripe_bitoffsets = (uint32_t*)calloc(nstripes, 4);
     // uint32_t ndims_padded = round_up_to_multiple(ndims, vector_sz);
     // uint16_t nstripes_in_vectors = nvars_in_group_padded / stripe_sz;
     // uint32_t nvars_in_group_padded = round_up_to_multiple(nvars_in_group, vector_sz);
@@ -397,7 +400,7 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
         }
 
         // compute masks and bitwidths for all stripes
-        for (size_t v = 0; v < nvectors; v++) {
+        for (size_t v = 0; v < nvectors_in_group; v++) {
             __m256i raw_header = _mm256_loadu_si256(
                 (const __m256i*)(headers + v * vector_sz));
             // map nbits of 7 to 8
@@ -421,15 +424,16 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
             _mm256_storeu_si256((__m256i*)store_addr2, masks);
         }
 
+        uint64_t* bitwidths = stripe_bitwidths;
         for (int b = 0; b < group_sz_blocks; b++) { // for each block in group
             // compute where each stripe begins, as well as width of a row
             stripe_bitoffsets[0] = 0;
             for (size_t stripe = 1; stripe < nstripes; stripe++) {
                 stripe_bitoffsets[stripe] = (uint32_t)(stripe_bitoffsets[stripe - 1]
-                    + stripe_bitwidths[stripe - 1]);
+                    + bitwidths[stripe - 1]);
             }
             uint32_t row_sz_bits = (uint32_t)(stripe_bitoffsets[nstripes - 1] +
-                stripe_bitwidths[nstripes - 1]);
+                bitwidths[nstripes - 1]);
             uint32_t row_sz_bytes = (row_sz_bits >> 3) + ((row_sz_bits % 8) > 0);
 
             // ar::print(stripe_bitwidths, nstripes, "stripe_bitwidths");
@@ -447,7 +451,7 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
                 uint32_t offset_bytes = stripe_bitoffsets[stripe] >> 3;
 
                 uint64_t mask = data_masks[stripe];
-                uint8_t nbits = stripe_bitwidths[stripe];
+                uint8_t nbits = bitwidths[stripe];
 
                 const int8_t* inptr = src + offset_bytes;
                 uint8_t* outptr = dest + (stripe * stripe_sz);
@@ -480,19 +484,17 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
                     }
                 }
                 // printf("data we wrote:\n"); dumpBytes(dest, group_sz);
-            }
-            src += block_sz * group_sz_blocks * row_sz_bytes;
+            } // for each stripe
+            src += block_sz * row_sz_bytes;
             dest += group_sz;
-
-        }
-    }
+            bitwidths += nstripes;
+        } // for each block
+    } // for each group
 
     free(headers);
     free(data_masks);
     free(stripe_bitwidths);
     free(stripe_bitoffsets);
-
-// memcpy_remainder:
 
     // copy over trailing data
     size_t remaining_len = orig_len % group_sz;
