@@ -17,8 +17,8 @@
 #include "array_utils.hpp"
 
 #define TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC)                     \
-    Vec_i8 compressed((SZ) * 2 + 16);                                   \
-    Vec_u8 decompressed((SZ) * 2 + 32);                                 \
+    Vec_i8 compressed((SZ) * 3/2 + 64);                                 \
+    Vec_u8 decompressed((SZ)+ 64);                                      \
     compressed.setZero();                                               \
     decompressed.setOnes();                                             \
     auto len = COMP_FUNC(raw.data(), (SZ), compressed.data());          \

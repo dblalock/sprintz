@@ -73,11 +73,11 @@ TEST_CASE("compress8b_rowmajor", "[rowmajor][dbg]") {
 
    // uint16_t ndims = 8;
     // auto ndims_list = ar::range(1, 33 + 1);
-   auto ndims_list = ar::range(1, 129 + 1);
+   // auto ndims_list = ar::range(1, 129 + 1);
 //    auto ndims_list = ar::range(33, 33 + 1);
 //    auto ndims_list = ar::range(65, 65 + 1);
    // auto ndims_list = ar::range(1, 2);
-   // auto ndims_list = ar::range(4, 5);
+   auto ndims_list = ar::range(4, 5);
     // auto ndims_list = ar::range(8, 9);
     // auto ndims_list = ar::range(10, 11);
 //    ar::print(ndims_list, "ndims_list");
@@ -130,4 +130,40 @@ TEST_CASE("compress8b_rowmajor", "[rowmajor][dbg]") {
        TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
     }
 //    REQUIRE(true);
+}
+
+
+void test_dset(DatasetName name, uint16_t ndims, int64_t limit_bytes=-1) {
+    Dataset raw = read_dataset(name, limit_bytes);
+    // ar::print(data.get(), 100, "msrc");
+    auto comp = [ndims](uint8_t* src, size_t len, int8_t* dest) {
+        return compress8b_rowmajor(src, len, dest, ndims);
+    };
+    auto decomp = [](int8_t* src, uint8_t* dest) {
+        return decompress8b_rowmajor(src, dest);
+    };
+    printf("compressing %lld bytes of %d-dimensional data\n", raw.size(), ndims);
+    TEST_COMPRESSOR(raw.size(), comp, decomp);
+}
+
+TEST_CASE("real datasets", "[rowmajor][dsets]") {
+
+    SECTION("msrc") { test_dset(DatasetName::MSRC, 80); }
+    SECTION("pamap") { test_dset(DatasetName::PAMAP, 31); }
+    SECTION("uci_gas") { test_dset(DatasetName::UCI_GAS, 18); }
+    SECTION("rand_0-63") {
+        // auto ndims_list = ar::range(4, 5);
+        auto ndims_list = ar::range(1, 65);
+        for (auto _ndims : ndims_list) {
+            auto ndims = (uint16_t)_ndims;
+            printf("---- using ndims = %d\n", ndims);
+            CAPTURE(ndims);
+            test_dset(DatasetName::RAND_1M_0_63, 1);
+        }
+    }
+
+    // auto pamap = read_dataset(DatasetName::PAMAP, 1000);
+    // ar::print(pamap.data(), 100, "pamap 1k");
+    // auto uci_gas = read_dataset(DatasetName::PAMAP, 100);
+    // ar::print(uci_gas.data(), 100, "uci_gas 100B");
 }
