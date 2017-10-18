@@ -105,19 +105,26 @@ inline void dumpBigEndianBits(T x, bool newline=true) {
 }
 
 // dumps the raw bits in memory order (little endian within bytes)
-template<class T>
-inline void dump_bits(T x, bool newline=true) {
-	const uint8_t* ptr = reinterpret_cast<const uint8_t*>(&x);
-	for (int i = 0; i < sizeof(x); i++) {
+// template<class T, class _=typename std::enable_if< !std::is_pointer<T>::value >::type>
+inline void dump_bits(const void* x, size_t size, bool newline=true) {
+	const uint8_t* ptr = reinterpret_cast<const uint8_t*>(x);
+	for (int i = 0; i < size; i++) {
 		std::cout << " ";
-		const uint8_t byte = *(ptr + i);
 		for (int j = 0; j < 8; j++) {
 			uint64_t mask = ((uint8_t)1) << j;
-			uint64_t masked = mask & byte;
+			uint64_t masked = mask & ptr[i];
 			std::cout << (bool)masked;
 		}
 	}
 	if (newline) { std::cout << "\n"; }
+}
+
+// dumps the raw bits in memory order (little endian within bytes)
+template<class T, class _=typename std::enable_if< !std::is_pointer<T>::value >::type>
+inline void dump_bits(T x, bool newline=true) {
+	// printf("wtf, why is this getting called...");
+	const uint8_t* ptr = reinterpret_cast<const uint8_t*>(&x);
+	dump_bits(ptr, sizeof(x), newline);
 }
 
 template<class T, class CastToT=T> // dumps the raw bytes in memory order

@@ -97,7 +97,8 @@ enum class DatasetName {
     MSRC,
     PAMAP,
     UCI_GAS,
-    RAND_1M_0_63
+    RAND_1M_0_63,
+    CHLORINE
 };
 
 typedef struct {
@@ -126,6 +127,8 @@ static inline Dataset read_dataset(DatasetName name,
         d.ptr = read_file(DATA_DIR "uci_gas/uci_gas.dat", nbytes);
     } else if (name == DatasetName::RAND_1M_0_63) {
         d.ptr = read_file(SYNTH_DATA_DIR "1M_randint_0_63.dat", nbytes);
+    } else if (name == DatasetName::CHLORINE) {
+        d.ptr = read_file(DATA_DIR "ucr/ChlorineConcentration.dat", nbytes);
     }
     d.size_bytes = nbytes; // written to by read_file
     return d;

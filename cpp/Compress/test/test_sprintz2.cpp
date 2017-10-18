@@ -148,19 +148,20 @@ void test_dset(DatasetName name, uint16_t ndims, int64_t limit_bytes=-1) {
 
 TEST_CASE("real datasets", "[rowmajor][dsets]") {
 
-    SECTION("msrc") { test_dset(DatasetName::MSRC, 80); }
-    SECTION("pamap") { test_dset(DatasetName::PAMAP, 31); }
-    SECTION("uci_gas") { test_dset(DatasetName::UCI_GAS, 18); }
-    SECTION("rand_0-63") {
-        // auto ndims_list = ar::range(4, 5);
-        auto ndims_list = ar::range(1, 65);
-        for (auto _ndims : ndims_list) {
-            auto ndims = (uint16_t)_ndims;
-            printf("---- using ndims = %d\n", ndims);
-            CAPTURE(ndims);
-            test_dset(DatasetName::RAND_1M_0_63, 1);
-        }
-    }
+    SECTION("chlorine") { test_dset(DatasetName::CHLORINE, 1); }
+    // SECTION("msrc") { test_dset(DatasetName::MSRC, 80); }
+    // SECTION("pamap") { test_dset(DatasetName::PAMAP, 31); }
+    // SECTION("uci_gas") { test_dset(DatasetName::UCI_GAS, 18); }
+    // SECTION("rand_0-63") {
+    //     // auto ndims_list = ar::range(4, 5);
+    //     auto ndims_list = ar::range(1, 65);
+    //     for (auto _ndims : ndims_list) {
+    //         auto ndims = (uint16_t)_ndims;
+    //         printf("---- using ndims = %d\n", ndims);
+    //         CAPTURE(ndims);
+    //         test_dset(DatasetName::RAND_1M_0_63, 1);
+    //     }
+    // }
 
     // auto pamap = read_dataset(DatasetName::PAMAP, 1000);
     // ar::print(pamap.data(), 100, "pamap 1k");

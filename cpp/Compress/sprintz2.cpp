@@ -36,7 +36,7 @@ static const __m256i nbits_to_mask = _mm256_setr_epi8(
     0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00); // unused
 
 
-static const int kDefaultGroupSzBlocks = 8;
+static const int kDefaultGroupSzBlocks = 2;
 
 // ------------------------------------------------ row-major, no delta or RLE
 
@@ -57,7 +57,7 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
     static const int group_sz_blocks = kDefaultGroupSzBlocks;
 
     const uint8_t* orig_src = src;
-    const int8_t* orig_dest = dest;
+    int8_t* orig_dest = dest;
 
     // ================================ one-time initialization
 
@@ -82,6 +82,14 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
         return dest + remaining_len - orig_dest;
     }
 
+    // {
+    //     printf("------ input length, ndims = %lu, %d\n", len, ndims);
+    //     uint64_t written = *(uint64_t*)orig_dest;
+    //     int64_t written_length = written & (((uint64_t)1 << 48) - 1);
+    //     uint16_t written_ndims = (uint16_t)(written >> 48);
+    //     printf("just wrote out length %lld, ndims %d\n", written_length, written_ndims);
+    // }
+
     // printf("-------- compression (len = %lld)\n", (int64_t)len);
     // printf("saw original data:\n"); dump_bytes(src, len, ndims);
 
@@ -94,12 +102,27 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
 
     // ================================ main loop
 
-    size_t ngroups = len / group_sz;
-    // if (ngroups > 1) { ngroups--; } // TODO rm hack
-    for (size_t g = 0; g < ngroups; g++) {
+    uint64_t ngroups = len / group_sz;
+    // printf("ngroups = %lld\n", ngroups);
+    // size_t leftover_len = len % group_sz;
+    // if (ngroups > 1 && leftover_len < 32) { ngroups--; } // TODO rm hack
+    // if (ngroups > 100) { ngroups -= 100; } // TODO rm hack
+    // ngroups = MIN(ngroups, 100);
+    for (uint64_t g = 0; g < ngroups; g++) {
         int8_t* header_dest = dest;
         dest += total_header_bytes;
-        // printf("reading input at offset %d\n", (uint32_t)(src - orig_src));
+
+        // if (g % 10000 == 0 || g == ngroups - 1) {
+        // if ((g > 44*1000 && g % 1000 == 0) || g == ngroups - 1) {
+        // bool dump_group = false;
+        // if ((44330 < g && g < 44340 && g % 1 == 0) || g == ngroups - 1) {
+        //     dump_group = true;
+        // }
+        // bool dump_group = 44337 <= g && g <= 44338;
+        // if (dump_group) {
+        //     printf("comp: group %lld; reading from offset %lld; writing to offset %lld\n",
+        //         g, (uint64_t)(src - orig_src), (uint64_t)(dest - orig_dest));
+        // }
 
         memset(header_bytes, 0, total_header_bytes + 4);
         memset(header_dest, 0, total_header_bytes);
@@ -170,10 +193,6 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
                 header_bit_offset += nbits_sz_bits * add_ndims;
             }
 
-            // printf("stripe headers: "); dump_bytes(stripe_headers, nstripes * 4);
-            // printf("header dest bytes: "); dump_bytes(header_dest, total_header_bytes);
-            // printf("header dest bits:  "); dump_bits(header_dest, total_header_bytes);
-
             // ar::print(stripe_bitwidths, nstripes, "stripe_bitwidths");
             // printf("row width bits: %d\n", row_width_bits);
 
@@ -225,7 +244,7 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
                         inptr += ndims;
                     }
                 } else { // data spans 9 bytes
-                    // printf(">>> executing the slow path!\n");
+                    printf(">>> executing the slow path!\n");
                     uint8_t nbits_lost = total_bits - 64;
                     for (int i = 0; i < block_sz; i++) { // for each sample in block
                         // uint8_t orig_outptr_byte = *outptr; // TODO rm after debug
@@ -253,6 +272,15 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
             src += block_sz * ndims;
             dest += block_sz * row_sz_bytes;
         } // for each block
+
+        // if (dump_group) {
+        //     // printf("stripe headers: "); dump_bytes(stripe_headers, nstripes * 4);
+        //     printf("> hit end of group; header start = %lld <\n",
+        //         (uint64_t)(header_dest - orig_dest));
+        //     printf("header dest bytes: "); dump_bytes(header_dest, total_header_bytes);
+        //     printf("header dest bits:  "); dump_bits(header_dest, total_header_bytes);
+        // }
+
     } // for each group
 
     free(stripe_bitwidths);
@@ -266,8 +294,27 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
     // printf("remaining data: "); ar::print(src, remaining_len);
     memcpy(dest, src, remaining_len);
 
+    // {
+    //     uint64_t written = *(uint64_t*)orig_dest;
+    //     int64_t written_length = written & (((uint64_t)1 << 48) - 1);
+    //     uint16_t written_ndims = (uint16_t)(written >> 48);
+    //     printf("final written length %lld, ndims %d\n", written_length, written_ndims);
+    // }
+
+    // printf("mysterious header values at end of compression:\n");
+    // printf("mystery header bytes: "); dump_bytes(orig_dest + 753737, 1);
+    // printf("mystery header bits:  "); dump_bits(orig_dest + 753737, 1);
+
     // size_t dest_sz = dest + remaining_len - orig_dest;
     // printf("wrote compressed data:\n"); dump_bytes(orig_dest, dest_sz);
+
+    // size_t dest_sz = dest + remaining_len - orig_dest;
+    // if (dest_sz >= len) { // if made things larger, just mempcpy
+    //     memcpy(orig_dest + 8, orig_src, len);
+    //     *(uint64_t*)orig_dest |= ((uint64_t)1) << 47;
+    //     return len + 8;
+    // }
+
     return dest + remaining_len - orig_dest;
 }
 
@@ -289,6 +336,7 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
     assert(vector_sz >= stripe_sz);
 
     uint8_t* orig_dest = dest;
+    const int8_t* orig_src = src;
 
     // ================================ one-time initialization
 
@@ -300,9 +348,19 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
     uint16_t ndims = (*(uint16_t*)(src + len_nbytes));
     src += 8;
 
-    if (orig_len < 8 * block_sz) { // if data was too small, just memcpy
-        memcpy(dest, src, orig_len);
-        return dest + orig_len - orig_dest;
+    // uint64_t just_cpy = orig_len & (((uint64_t)1) << 47);
+    // just_cpy = just_cpy || orig_len < 8 * block_sz;
+    // if (just_cpy) { // if data was too small or failed to compress
+    //     memcpy(dest, src, (size_t)orig_len);
+    //     return orig_len;
+    // }
+
+    // printf("------ decomp: saw original length, ndims = %llu, %d\n", orig_len, ndims);
+    // printf("decomp: src addr, dest addr = %p, %p\n", (void*)src, (void*)dest);
+
+    if (ndims == 0) {
+        perror("ERROR: Received ndims of 0!");
+        return 0;
     }
 
     // printf("-------- decompression (orig_len = %lld)\n", (int64_t)orig_len);
@@ -352,11 +410,56 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
 
     // ================================ main loop
 
-    size_t ngroups = orig_len / group_sz;
-    // if (ngroups > 1) { ngroups--; } // TODO rm hack
-    for (size_t g = 0; g < ngroups; g++) {
-        uint8_t* header_src = (uint8_t*)src;
+    // printf("about to compute ngroups; orig_len, group_sz = %lld, %d...\n", orig_len, group_sz);
+    uint64_t ngroups = orig_len / group_sz; // if we get an fp error, it's this
+    // printf("ngroups = %lld\n", ngroups);
+    // if (ngroups > 100) { ngroups -= 100; } // TODO rm hack
+    // size_t leftover_len = orig_len % group_sz;
+    // if (ngroups > 1 && leftover_len < 32) { ngroups--; } // TODO rm hack
+    // ngroups = MIN(ngroups, 100);
+    // if (ngroups < )
+
+    // printf("mysterious header values at start of decompression:\n");
+    // printf("mystery header bytes: "); dump_bytes(orig_src + 753737, 1);
+    // printf("mystery header bits:  "); dump_bits(orig_src + 753737, 1);
+
+    // bool already_failed = false;
+
+    for (uint64_t g = 0; g < ngroups; g++) {
+        const uint8_t* header_src = (uint8_t*)src;
         src += total_header_bytes;
+
+        // if ((44330 < g && g < 44340 && g % 1 == 0) || g == ngroups - 1) {
+        //     printf("decomp: group %lld; reading from offset %lld; writing to offset %lld\n",
+        //         g, (uint64_t)(src - orig_src), (uint64_t)(dest - orig_dest));
+        // }
+        // bool dump_group = false;
+        // if ((44330 < g && g < 44340 && g % 1 == 0) || g == ngroups - 1) {
+        //     dump_group = true;
+        // }
+
+        // if (orig_src[753737] != 63 && !already_failed) {
+        //     printf("==== first fails at g = %lld!\n", g);
+        //     printf("new bytes: "); dump_bytes(orig_src[753737]);
+        //     printf("new bits:  "); dump_bits(orig_src[753737]);
+        //     printf("====\n");
+        //     already_failed = true;
+        // }
+
+        // if (g == 44336 || g == 1 || g == 44000) {
+        //     printf("mysterious header values at g=%lld:\n", g);
+        //     printf("mystery header bytes: "); dump_bytes(orig_src + 753737, 1);
+        //     printf("mystery header bits:  "); dump_bits(orig_src + 753737, 1);
+        // }
+
+        // bool dump_group = 44337 <= g && g <= 44338;
+        // if (dump_group) {
+        //     printf("decomp: group %lld; reading from offset %lld; writing to offset %lld\n",
+        //         g, (uint64_t)(src - orig_src), (uint64_t)(dest - orig_dest));
+
+        //     printf("header bits (at offset %lld): ", (uint64_t)(header_src - (const uint8_t*)orig_src));
+        //     dump_bits(header_src, total_header_bytes);
+        // }
 
         // ------------------------ create unpacked headers array
         // unpack headers for all the blocks; note that this is tricky
@@ -386,7 +489,7 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
         }
 
         // // printf("header_tmp:    "); dump_bytes(headers_tmp, nheader_stripes * 8);
-        // printf("padded headers:"); dump_bytes(headers, nstripes_in_vectors * 8);
+        // if (dump_group) { printf("padded headers:"); dump_bytes(headers, nstripes_in_vectors * 8); }
 
         // ------------------------ masks and bitwidths for all stripes
         for (size_t v = 0; v < nvectors_in_group; v++) {
@@ -481,11 +584,13 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
                 }
                 // printf("data we wrote:\n"); dump_bytes(dest, block_sz*ndims, ndims);
             } // for each stripe
+
             src += block_sz * row_sz_bytes;
             dest += block_sz * ndims;
             masks += nstripes;
             bitwidths += nstripes;
         } // for each block
+        // printf("will now write to dest at offset %lld\n", (uint64_t)(dest - orig_dest));
     } // for each group
 
     free(headers_tmp);
@@ -494,8 +599,12 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
     free(stripe_bitwidths);
     free(stripe_bitoffsets);
 
+    // printf("bytes read: %lld\n", (uint64_t)(src - orig_src));
+
     // copy over trailing data
-    size_t remaining_len = orig_len % group_sz;
+    // size_t remaining_len = orig_len % group_sz;
+    // size_t remaining_len = orig_len - (src - orig_src);
+    size_t remaining_len = orig_len - (dest - orig_dest);
     // printf("remaining len: %lu\n", remaining_len);
     // printf("read bytes: %lu\n", remaining_len);
     // printf("remaining data: "); ar::print(src, remaining_len);
@@ -505,5 +614,6 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
     // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, ndims);
     // ar::print(orig_dest, dest_sz, "decompressed data");
 
+    // printf("reached end of decomp\n");
     return dest + remaining_len - orig_dest;
 }

@@ -15,12 +15,16 @@
 #include "eigen/Eigen"
 
 #include "array_utils.hpp"
+/*
+    compressed.setZero();                                               \
+    decompressed.setOnes();                                             \
+    */
 
 #define TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC)                     \
     Vec_i8 compressed((SZ) * 3/2 + 64);                                 \
     Vec_u8 decompressed((SZ)+ 64);                                      \
-    compressed.setZero();                                               \
-    decompressed.setOnes();                                             \
+    compressed += 0x55; /* poison memory */                             \
+    decompressed += 0xaa;                                               \
     auto len = COMP_FUNC(raw.data(), (SZ), compressed.data());          \
     len = DECOMP_FUNC(compressed.data(), decompressed.data());          \
     CAPTURE(SZ);                                                        \
