@@ -16,7 +16,7 @@
 
 // #define VERBOSE_COMPRESS
 
-// #include "array_utils.hpp" // TODO rm
+#include "array_utils.hpp" // TODO rm
 #include "debug_utils.hpp" // TODO rm
 
 #if __cpp_constexpr >= 201304
@@ -76,7 +76,7 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
     }
     // handle low dims and low length; we'd read way past the end of the
     // input in this case
-    if (len < 8 * block_sz) {
+    if (len < 8 * block_sz * group_sz_blocks) {
         size_t remaining_len = len - (src - orig_src);
         memcpy(dest, src, remaining_len);
         return dest + remaining_len - orig_dest;
@@ -244,7 +244,7 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
                         inptr += ndims;
                     }
                 } else { // data spans 9 bytes
-                    printf(">>> executing the slow path!\n");
+                    // printf(">>> executing the slow path!\n");
                     uint8_t nbits_lost = total_bits - 64;
                     for (int i = 0; i < block_sz; i++) { // for each sample in block
                         // uint8_t orig_outptr_byte = *outptr; // TODO rm after debug
@@ -336,7 +336,7 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
     assert(vector_sz >= stripe_sz);
 
     uint8_t* orig_dest = dest;
-    const int8_t* orig_src = src;
+    // const int8_t* orig_src = src;
 
     // ================================ one-time initialization
 
@@ -348,12 +348,12 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
     uint16_t ndims = (*(uint16_t*)(src + len_nbytes));
     src += 8;
 
-    // uint64_t just_cpy = orig_len & (((uint64_t)1) << 47);
-    // just_cpy = just_cpy || orig_len < 8 * block_sz;
-    // if (just_cpy) { // if data was too small or failed to compress
-    //     memcpy(dest, src, (size_t)orig_len);
-    //     return orig_len;
-    // }
+    bool just_cpy = orig_len < 8 * block_sz * group_sz_blocks;
+    // just_cpy = just_cpy || orig_len & (((uint64_t)1) << 47);
+    if (just_cpy) { // if data was too small or failed to compress
+        memcpy(dest, src, (size_t)orig_len);
+        return orig_len;
+    }
 
     // printf("------ decomp: saw original length, ndims = %llu, %d\n", orig_len, ndims);
     // printf("decomp: src addr, dest addr = %p, %p\n", (void*)src, (void*)dest);
@@ -617,3 +617,5 @@ int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest) {
     // printf("reached end of decomp\n");
     return dest + remaining_len - orig_dest;
 }
+
+// ========================================================== rowmajor delta
