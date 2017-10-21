@@ -135,6 +135,8 @@ inline void dump_elements(const T* x, size_t len=1, size_t newline_every=1)
 	size_t len_elements = len;
 	if (newline_every == 1) {
 		newline_every = len_elements >= 32 ? 32 : len_elements;
+	} else if (newline_every == 0) {
+		newline_every = len + 1;
 	}
 	// printf("dump_elements: len=%lu, len_elements = %lu\n", len, len_elements);
 	// printf("dump_elements: newline_every=%lu\n", newline_every);
@@ -154,12 +156,12 @@ inline void dump_elements(const T* x, size_t len=1, size_t newline_every=1)
 			}
 		}
 	}
-	if (newline_every && ((len_elements % newline_every) != 0)) { printf("\n"); }
+	if (newline_every <= len && ((len_elements % newline_every) != 0)) { printf("\n"); }
 }
 template<class T, class CastToT=T,
 	class _=typename std::enable_if< !std::is_pointer<T>::value >::type >
 inline void dump_elements(T x, size_t newline_every=1) {
-	dump_elements<T, CastToT>(&x, 1, newline_every);
+	dump_elements<T, CastToT>(&x, sizeof(x), newline_every);
 }
 
 template<class T> // dumps the raw bytes in memory order
@@ -178,7 +180,7 @@ inline void dump_bytes(T x, size_t newline_every=1) {
 template<class CastToT=uint8_t>
 inline void dump_m256i(const __m256i& v, bool newline=true) {
 	for (int i = 0; i < 4; i++) {
-		dump_elements<uint64_t, CastToT>(_mm256_extract_epi64(v, i), false);
+		dump_elements<uint64_t, CastToT>(_mm256_extract_epi64(v, i), -1);
         std::cout << "  ";
 	}
     if (newline) { std::cout << "\n"; }

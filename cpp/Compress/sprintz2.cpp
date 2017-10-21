@@ -615,9 +615,11 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
     uint32_t* stripe_headers    = (uint32_t*)malloc(nstripes*sizeof(uint32_t));
 
     uint32_t total_header_bytes_padded = total_header_bytes + 4;
-    uint8_t*  header_bytes = (uint8_t*)calloc(total_header_bytes_padded, 1);
+    uint8_t* header_bytes = (uint8_t*)calloc(total_header_bytes_padded, 1);
 
-    uint8_t* deltas = (uint8_t*)calloc(1, block_sz * ndims);
+    // extra row is for storing previous values
+    // TODO just look at src and special case first row
+    uint8_t* deltas = (uint8_t*)calloc(1, (block_sz + 1) * ndims);
 
     // ================================ main loop
 
@@ -640,21 +642,47 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
             memset(stripe_headers,   0, nstripes * sizeof(stripe_headers[0]));
 
             // ------------------------ compute info for each stripe
+            // printf("comp: starting deltas:\n"); dump_bytes(deltas, (block_sz + 1) * ndims, ndims);
+
             for (uint16_t dim = 0; dim < ndims; dim++) {
                 // compute maximum number of bits used by any value of this dim,
                 // while simultaneously computing deltas
                 uint8_t mask = 0;
-                uint8_t prev_val = deltas[(block_sz-1) * ndims + dim];
-                for (int i = 0; i < block_sz; i++) {
+                uint32_t prev_val_offset = block_sz * ndims + dim;
+                uint8_t prev_val = deltas[prev_val_offset];
+                // uint8_t val = 0;
+                for (uint8_t i = 0; i < block_sz; i++) {
                     // uint8_t val = src[(i * ndims) + dim];
                     // mask |= NBITS_MASKS_U8[val];
-                    uint8_t val = src[(i * ndims) + dim];
-                    // uint8_t delta = val - prev_val;
-                    uint8_t delta = val; // TODO rm
+                    uint32_t offset = (i * ndims) + dim;
+                    // val = src[offset];
+                    uint8_t val = src[offset];
+                    uint8_t delta = val - prev_val;
+                    // uint8_t delta = val; // TODO rm
                     mask |= NBITS_MASKS_U8[delta];
-                    deltas[(i * ndims) + dim] = delta;
+                    deltas[offset] = delta;
+                    // if (dim == 25) {
+                    //     printf("writing delta %d at offset %d\n", delta, offset);
+                    // }
                     prev_val = val;
                 }
+                // write out value for delta encoding of next block
+                // deltas[prev_val_offset] = val;
+                deltas[prev_val_offset] = src[((block_sz - 1) * ndims) + dim];
+
+                // if (dim == 7) {
+                //     printf("comp deltas after writing dim7:\n"); dump_bytes(deltas, (block_sz + 1) * ndims, ndims);
+                // }
+                // if (dim == 24) {
+                //     printf("comp deltas after writing dim23:\n"); dump_bytes(deltas, (block_sz + 1) * ndims, ndims);
+                // }
+                // if (dim == 25) {
+                //     printf("comp deltas after writing dim %d:\n", dim); dump_bytes(deltas, (block_sz + 1) * ndims, ndims);
+                // }
+                // if (dim == 31) {
+                //     printf("comp deltas after writing dim31:\n"); dump_bytes(deltas, (block_sz + 1) * ndims, ndims);
+                // }
+
                 // mask = NBITS_MASKS_U8[255]; // TODO rm
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
 
@@ -671,6 +699,8 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
                 // printf("write_nbits = %d, stripe header = ", write_nbits);
                 // dump_bytes(stripe_headers[stripe], false); dump_bits(stripe_headers[stripe]);
             }
+            // printf("comp: deltas:\n"); dump_bytes(deltas, (block_sz + 1) * ndims, ndims);
+
             // compute start offsets of each stripe (in bits)
             stripe_bitoffsets[0] = 0;
             for (size_t stripe = 1; stripe < nstripes; stripe++) {
@@ -982,8 +1012,9 @@ int64_t decompress8b_rowmajor_delta(const int8_t* src, uint8_t* dest) {
                         outptr += out_row_nbytes;
                     }
                 }
-                // printf("data we wrote:\n"); dump_bytes(dest, block_sz*ndims, ndims);
             } // for each stripe
+            // printf("data we wrote:\n"); dump_bytes(dest, block_sz*ndims, ndims);
+            // printf("all deltas:\n"); dump_bytes(deltas, block_sz*padded_ndims, MIN(32, padded_ndims));
 
             // undo delta coding; we copy from deltas buff to dest
             // note that we go in reverse order again so that writes past the
@@ -1002,6 +1033,7 @@ int64_t decompress8b_rowmajor_delta(const int8_t* src, uint8_t* dest) {
                     + vstripe_start;
                 __m256i prev_vals = _mm256_loadu_si256((const __m256i*)
                     (deltas + prev_vals_offset));
+                // printf("========\ninitial prev vals: "); dump_m256i(prev_vals);
                 __m256i vals = _mm256_setzero_si256();
                 for (uint8_t i = 0; i < block_sz; i++) {
                     uint32_t in_offset = i * padded_ndims + vstripe_start;
@@ -1014,9 +1046,12 @@ int64_t decompress8b_rowmajor_delta(const int8_t* src, uint8_t* dest) {
                     vals = _mm256_add_epi8(prev_vals, vdeltas);
                     // vals = vdeltas;
                     _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
-                    // prev_vals = vals;
+                    // printf("---- %d\n", i);
+                    // printf("deltas: "); dump_m256i(vdeltas);
+                    // printf("vals:   "); dump_m256i(vals);
+                    prev_vals = vals;
                 }
-                // _mm256_storeu_si256((__m256i*)(deltas+prev_vals_offset), vals);
+                _mm256_storeu_si256((__m256i*)(deltas+prev_vals_offset), vals);
             }
 
             src += block_sz * in_row_nbytes;
