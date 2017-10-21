@@ -998,15 +998,25 @@ int64_t decompress8b_rowmajor_delta(const int8_t* src, uint8_t* dest) {
             // also works when we don't actually delta code
             for (int32_t v = nvectors - 1; v >= 0; v--) {
                 uint32_t vstripe_start = v * vector_sz;
+                uint32_t prev_vals_offset = block_sz * padded_ndims
+                    + vstripe_start;
+                __m256i prev_vals = _mm256_loadu_si256((const __m256i*)
+                    (deltas + prev_vals_offset));
+                __m256i vals = _mm256_setzero_si256();
                 for (uint8_t i = 0; i < block_sz; i++) {
-                    uint32_t in_row_start = i * padded_ndims;
-                    uint32_t out_row_start = i * ndims;
-                    uint32_t row_start = i * padded_ndims;
-                    uint32_t in_offset = in_row_start + vstripe_start;
-                    uint32_t out_offset = out_row_start + vstripe_start;
+                    uint32_t in_offset = i * padded_ndims + vstripe_start;
+                    uint32_t out_offset = i * ndims + vstripe_start;
                     // TODO actual delta coding
-                    memcpy(dest + out_offset, deltas + in_offset, vector_sz);
+                    // memcpy(dest + out_offset, deltas + in_offset, vector_sz);
+
+                    __m256i vdeltas = _mm256_loadu_si256(
+                        (const __m256i*)(deltas + in_offset));
+                    vals = _mm256_add_epi8(prev_vals, vdeltas);
+                    // vals = vdeltas;
+                    _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
+                    // prev_vals = vals;
                 }
+                // _mm256_storeu_si256((__m256i*)(deltas+prev_vals_offset), vals);
             }
 
             src += block_sz * in_row_nbytes;
