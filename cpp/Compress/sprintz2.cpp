@@ -674,7 +674,7 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
                 // write out value for delta encoding of next block
                 deltas[prev_val_offset] = (int8_t)src[((block_sz - 1) * ndims) + dim];
 
-                mask = NBITS_MASKS_U8[255]; // TODO rm
+                // mask = NBITS_MASKS_U8[255]; // TODO rm
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
 
                 uint16_t stripe = dim / stripe_sz;
