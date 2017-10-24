@@ -654,18 +654,22 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
                 for (uint8_t i = 0; i < block_sz; i++) {
                     // uint8_t val = src[(i * ndims) + dim];
                     // mask |= NBITS_MASKS_U8[val];
+
                     uint32_t offset = (i * ndims) + dim;
-                    // val = src[offset];
-                    uint8_t val = src[offset];
-                    uint8_t delta = val - prev_val;
-                    // uint8_t delta = val; // TODO rm
-                    // mask |= NBITS_MASKS_U8[delta];
-                    // int8_t delta = val - prev_val;
-                    mask |= NBITS_MASKS_I8[delta];
-                    deltas[offset] = delta;
-                    // if (dim == 25) {
-                    //     printf("writing delta %d at offset %d\n", delta, offset);
-                    // }
+
+                    // TODO uncomment
+                    // uint8_t val = src[offset];
+                    // uint8_t delta = val - prev_val;
+                    // // uint8_t delta = val; // TODO rm
+                    // uint8_t bits = zigzag_encode_i8(delta);
+                    // mask |= NBITS_MASKS_U8[bits]; // just OR raw vals; no LUT
+                    // // deltas[offset] = bits;
+
+                    // TODO rm after debug
+                    uint8_t val = src[(i * ndims) + dim];
+                    mask |= NBITS_MASKS_U8[val];
+                    deltas[offset] = val;
+
                     prev_val = val;
                 }
                 // write out value for delta encoding of next block
@@ -1032,8 +1036,8 @@ int64_t decompress8b_rowmajor_delta(const int8_t* src, uint8_t* dest) {
 
                     __m256i vdeltas = _mm256_loadu_si256(
                         (const __m256i*)(deltas + in_offset));
-                    vals = _mm256_add_epi8(prev_vals, vdeltas);
-                    // vals = vdeltas;
+                    // vals = _mm256_add_epi8(prev_vals, vdeltas);
+                    vals = vdeltas;
                     _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
                     // printf("---- %d\n", i);
                     // printf("deltas: "); dump_m256i(vdeltas);
