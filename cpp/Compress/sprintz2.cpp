@@ -658,8 +658,8 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
                     uint32_t offset = (i * ndims) + dim;
 
                     uint8_t val = src[offset];
-                    // uint8_t delta = val - prev_val;
-                    int8_t delta = (int8_t)val; // TODO rm
+                    int8_t delta = (int8_t)(val - prev_val);
+                    // int8_t delta = (int8_t)val; // TODO rm
                     uint8_t bits = zigzag_encode_i8(delta);
                     mask |= NBITS_MASKS_U8[bits]; // just OR raw vals; no LUT
                     deltas[offset] = bits;
@@ -1033,11 +1033,11 @@ int64_t decompress8b_rowmajor_delta(const int8_t* src, uint8_t* dest) {
                     // TODO actual delta coding
                     // memcpy(dest + out_offset, deltas + in_offset, vector_sz);
 
-                    __m256i vdeltas = _mm256_loadu_si256(
+                    __m256i raw_vdeltas = _mm256_loadu_si256(
                         (const __m256i*)(deltas + in_offset));
-                    // vals = _mm256_add_epi8(prev_vals, vdeltas);
+                    __m256i vdeltas = mm256_zigzag_decode_epi8(raw_vdeltas);
+                    vals = _mm256_add_epi8(prev_vals, vdeltas);
                     // vals = vdeltas;
-                    vals = mm256_zigzag_decode_epi8(vdeltas); // TODO actually delta decode
                     _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
                     // printf("---- row %d\n", i);
                     // printf("deltas: "); dump_m256i(vdeltas);
