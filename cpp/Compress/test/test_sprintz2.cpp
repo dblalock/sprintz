@@ -175,7 +175,7 @@ TEST_CASE("real datasets", "[rowmajor][dsets]") {
 TEST_CASE("compress8b_rowmajor_delta", "[rowmajor][delta]") {
     printf("executing rowmajor delta test\n");
 
-    // int ndims = 33;
+    // int ndims = 1;
     // auto ndims_list = ar::range(ndims, ndims + 1);
     auto ndims_list = ar::range(1, 129 + 1);
     for (auto _ndims : ndims_list) {
@@ -189,7 +189,11 @@ TEST_CASE("compress8b_rowmajor_delta", "[rowmajor][delta]") {
             return decompress8b_rowmajor_delta(src, dest);
         };
 
+        // TEST_SQUARES_INPUT(128, comp, decomp);
         // TEST_SQUARES_INPUT(ndims * 16, comp, decomp);
+        // TEST_SIMPLE_INPUTS(ndims * 16, comp, decomp);
+        // TEST_KNOWN_INPUT(ndims * 16, comp, decomp);
+        // TEST_KNOWN_INPUT(ndims * 32, comp, decomp);
        TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
     }
 }

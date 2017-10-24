@@ -657,25 +657,24 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
 
                     uint32_t offset = (i * ndims) + dim;
 
-                    // TODO uncomment
-                    // uint8_t val = src[offset];
+                    uint8_t val = src[offset];
                     // uint8_t delta = val - prev_val;
-                    // // uint8_t delta = val; // TODO rm
-                    // uint8_t bits = zigzag_encode_i8(delta);
-                    // mask |= NBITS_MASKS_U8[bits]; // just OR raw vals; no LUT
-                    // // deltas[offset] = bits;
+                    int8_t delta = (int8_t)val; // TODO rm
+                    uint8_t bits = zigzag_encode_i8(delta);
+                    mask |= NBITS_MASKS_U8[bits]; // just OR raw vals; no LUT
+                    deltas[offset] = bits;
 
-                    // TODO rm after debug
-                    uint8_t val = src[(i * ndims) + dim];
-                    mask |= NBITS_MASKS_U8[val];
-                    deltas[offset] = val;
+                    // // TODO rm after debug
+                    // uint8_t val = src[(i * ndims) + dim];
+                    // mask |= NBITS_MASKS_U8[val];
+                    // deltas[offset] = val;
 
                     prev_val = val;
                 }
                 // write out value for delta encoding of next block
                 deltas[prev_val_offset] = (int8_t)src[((block_sz - 1) * ndims) + dim];
 
-                // mask = NBITS_MASKS_U8[255]; // TODO rm
+                mask = NBITS_MASKS_U8[255]; // TODO rm
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
 
                 uint16_t stripe = dim / stripe_sz;
@@ -1037,9 +1036,10 @@ int64_t decompress8b_rowmajor_delta(const int8_t* src, uint8_t* dest) {
                     __m256i vdeltas = _mm256_loadu_si256(
                         (const __m256i*)(deltas + in_offset));
                     // vals = _mm256_add_epi8(prev_vals, vdeltas);
-                    vals = vdeltas;
+                    // vals = vdeltas;
+                    vals = mm256_zigzag_decode_epi8(vdeltas); // TODO actually delta decode
                     _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
-                    // printf("---- %d\n", i);
+                    // printf("---- row %d\n", i);
                     // printf("deltas: "); dump_m256i(vdeltas);
                     // printf("vals:   "); dump_m256i(vals);
                     prev_vals = vals;
