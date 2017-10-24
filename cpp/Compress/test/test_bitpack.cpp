@@ -6,15 +6,16 @@
 //  Copyright © 2017 D Blalock. All rights reserved.
 //
 
-#include <stdio.h>
+#include "bitpack.h"
 
+#include <stdio.h>
 #include "catch.hpp"
 #include "eigen/Eigen"
 
 #include "array_utils.hpp"
-#include "bitpack.h"
-#include "timing_utils.hpp"
+#include "debug_utils.hpp"
 #include "test_utils.hpp"
+#include "timing_utils.hpp"
 
 
 TEST_CASE("building blocks", "[bitpack]") {
@@ -131,8 +132,123 @@ TEST_CASE("max_nbits_i8", "[bitpack]") {
    }
 }
 
+TEST_CASE("zigzag_8b", "[bitpack][zigzag]") {
+    SECTION("scalar") {
+        for (int val = -128; val <= 127; val++) {
+            REQUIRE(val == zigzag_decode_i8(zigzag_encode_i8((int8_t)val)));
+        }
+    }
+    SECTION("mm256_epi8 constant vectors") {
+        static const int n = 32; // number of elements in a SIMD vector
+        uint8_t buff[n];
+        __m256i* store_ptr = (__m256i*)buff;
+         for (int val = -128; val <= 127; val++) {
+            __m256i v = _mm256_set1_epi8((int8_t)val);
+            auto encoded = mm256_zigzag_encode_epi8(v);
+//            printf("encoded: "); dump_m256i(encoded);
+            auto decoded = mm256_zigzag_decode_epi8(encoded);
+//            printf("decoded: "); dump_m256i(decoded);
+            auto same = _mm256_cmpeq_epi8(v, decoded);
+            _mm256_storeu_si256(store_ptr, same);
+            CAPTURE(val);
+            for (int i = 0; i < n; i++) {
+                REQUIRE(buff[i] == 0xff);
+            }
+        }
+    }
+    SECTION("mm256_epi8 random vectors") {
+        static const int n = 32; // number of elements in a SIMD vector
+        static const size_t sz = 256 * 1024;
+
+        using ByteMat = Eigen::Matrix<uint8_t, Eigen::Dynamic,
+            Eigen::Dynamic, Eigen::RowMajor>;
+        ByteMat X(sz, n);
+        ByteMat X_out(sz, n);
+        X.setRandom(); // random vals in [0, 255]
+
+        // NOTE: 8x faster to use pointers directly than to use X.row(i).data()
+        for (size_t i = 0; i < sz; i++) {
+            auto inptr = X.data() + n * i;
+            auto v = _mm256_loadu_si256((const __m256i*)inptr);
+            auto encoded = mm256_zigzag_encode_epi8(v);
+            auto decoded = mm256_zigzag_decode_epi8(encoded);
+
+            auto same = _mm256_cmpeq_epi8(v, decoded);
+            __m256i* store_ptr = (__m256i*)(X_out.data() + n * i);
+            _mm256_storeu_si256(store_ptr, same);
+        }
+
+        REQUIRE(X_out.minCoeff() == 255); // all comparisons true (ones byte)
+    }
+}
+
+TEST_CASE("profile zigzag_8b", "[bitpack][zigzag][profile]") {
+    using ByteMat = Eigen::Matrix<uint8_t, Eigen::Dynamic,
+        Eigen::Dynamic, Eigen::RowMajor>;
+    static const int n = 32; // number of elements in a SIMD vector
+    static const size_t sz = 256 * 1024;
+
+    SECTION("mm256_epi8 random vectors, not explicitly inlined") {
+        ByteMat X(sz, n);
+        ByteMat X_out(sz, n);
+        X.setRandom(); // random vals in [0, 255]
+        {
+            volatile PrintTimer t("zigzag");
+            for (size_t i = 0; i < sz; i++) {
+                // auto inptr = X.row(i).data();
+                auto inptr = X.data() + n * i; // 10x faster than prev line...
+                auto v = _mm256_loadu_si256((const __m256i*)inptr);
+                auto encoded = mm256_zigzag_encode_epi8(v);
+                auto decoded = mm256_zigzag_decode_epi8(encoded);
+
+                auto same = _mm256_cmpeq_epi8(v, decoded);
+                // __m256i* store_ptr = (__m256i*)X_out.row(i).data();
+                __m256i* store_ptr = (__m256i*)(X_out.data() + n * i);
+                _mm256_storeu_si256(store_ptr, same);
+            }
+        }
+        REQUIRE(X_out.minCoeff() == 255); // all comparisons true (ones byte)
+    }
+
+    SECTION("mm256_epi8 random vectors, explicitly inlined") {
+        ByteMat X(sz, n);
+        ByteMat X_out(sz, n);
+        X.setRandom(); // random vals in [0, 255]
+        {
+            volatile PrintTimer t("zigzag inlined");
+            static __m256i zeros = _mm256_setzero_si256();
+            static __m256i ones = _mm256_set1_epi8(1);
+            static __m256i high_bits_one = _mm256_set1_epi8(-128);
+
+            for (size_t i = 0; i < sz; i++) {
+                // auto inptr = X.row(i).data();
+                auto inptr = X.data() + n * i;
+                auto x = _mm256_loadu_si256((const __m256i*)inptr);
+
+                // encode
+                __m256i invert_mask = _mm256_cmpgt_epi8(zeros, x);
+                __m256i shifted = _mm256_andnot_si256(ones, _mm256_slli_epi64(x, 1));
+                __m256i encoded = _mm256_xor_si256(invert_mask, shifted);
+
+                // decode
+                __m256i shifted2 = _mm256_andnot_si256(
+                    high_bits_one, _mm256_srli_epi64(encoded, 1));
+                __m256i invert_mask2 = _mm256_cmpgt_epi8(
+                    zeros, _mm256_slli_epi64(encoded, 7));
+                __m256i decoded = _mm256_xor_si256(invert_mask2, shifted2);
+
+                auto same = _mm256_cmpeq_epi8(x, decoded);
+                // __m256i* store_ptr = (__m256i*)X_out.row(i).data();
+                __m256i* store_ptr = (__m256i*)(X_out.data() + n * i);
+                _mm256_storeu_si256(store_ptr, same);
+            }
+        }
+        REQUIRE(X_out.minCoeff() == 255); // all comparisons true (ones byte)
+    }
+}
+
 TEST_CASE("profile_bitpack_u8", "[profile][bitpack]") {
-    uint64_t sz = 256 * 1024 * 1024;
+    uint64_t sz = 16 * 1024 * 1024;
     Vec_u8 raw_orig(sz);
     Vec_u8 raw(sz);
     raw.setRandom(); // random vals in [0, 255]

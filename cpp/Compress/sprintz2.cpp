@@ -16,8 +16,8 @@
 
 // #define VERBOSE_COMPRESS
 
-#include "array_utils.hpp" // TODO rm
-#include "debug_utils.hpp" // TODO rm
+// #include "array_utils.hpp" // TODO rm
+// #include "debug_utils.hpp" // TODO rm
 
 #if __cpp_constexpr >= 201304
     #define CONSTEXPR_FUNC constexpr
@@ -619,7 +619,8 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
 
     // extra row is for storing previous values
     // TODO just look at src and special case first row
-    uint8_t* deltas = (uint8_t*)calloc(1, (block_sz + 1) * ndims);
+    // uint8_t* deltas = (uint8_t*)calloc(1, (block_sz + 1) * ndims);
+    int8_t* deltas = (int8_t*)calloc(1, (block_sz + 1) * ndims);
 
     // ================================ main loop
 
@@ -650,7 +651,6 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
                 uint8_t mask = 0;
                 uint32_t prev_val_offset = block_sz * ndims + dim;
                 uint8_t prev_val = deltas[prev_val_offset];
-                // uint8_t val = 0;
                 for (uint8_t i = 0; i < block_sz; i++) {
                     // uint8_t val = src[(i * ndims) + dim];
                     // mask |= NBITS_MASKS_U8[val];
@@ -659,7 +659,9 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
                     uint8_t val = src[offset];
                     uint8_t delta = val - prev_val;
                     // uint8_t delta = val; // TODO rm
-                    mask |= NBITS_MASKS_U8[delta];
+                    // mask |= NBITS_MASKS_U8[delta];
+                    // int8_t delta = val - prev_val;
+                    mask |= NBITS_MASKS_I8[delta];
                     deltas[offset] = delta;
                     // if (dim == 25) {
                     //     printf("writing delta %d at offset %d\n", delta, offset);
@@ -667,21 +669,7 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
                     prev_val = val;
                 }
                 // write out value for delta encoding of next block
-                // deltas[prev_val_offset] = val;
-                deltas[prev_val_offset] = src[((block_sz - 1) * ndims) + dim];
-
-                // if (dim == 7) {
-                //     printf("comp deltas after writing dim7:\n"); dump_bytes(deltas, (block_sz + 1) * ndims, ndims);
-                // }
-                // if (dim == 24) {
-                //     printf("comp deltas after writing dim23:\n"); dump_bytes(deltas, (block_sz + 1) * ndims, ndims);
-                // }
-                // if (dim == 25) {
-                //     printf("comp deltas after writing dim %d:\n", dim); dump_bytes(deltas, (block_sz + 1) * ndims, ndims);
-                // }
-                // if (dim == 31) {
-                //     printf("comp deltas after writing dim31:\n"); dump_bytes(deltas, (block_sz + 1) * ndims, ndims);
-                // }
+                deltas[prev_val_offset] = (int8_t)src[((block_sz - 1) * ndims) + dim];
 
                 // mask = NBITS_MASKS_U8[255]; // TODO rm
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
@@ -695,7 +683,7 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
 
                 // accumulate header info for this stripe
                 uint32_t write_nbits = max_nbits - (max_nbits == 8); // map 8 to 7
-                stripe_headers[stripe] |= write_nbits << (idx_in_stripe * 3);
+                stripe_headers[stripe] |= write_nbits << (idx_in_stripe * nbits_sz_bits);
                 // printf("write_nbits = %d, stripe header = ", write_nbits);
                 // dump_bytes(stripe_headers[stripe], false); dump_bits(stripe_headers[stripe]);
             }
@@ -751,7 +739,8 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
 
                 int8_t* outptr = dest + offset_bytes;
                 // const uint8_t* inptr = src + (stripe * stripe_sz);
-                const uint8_t* inptr = deltas + (stripe * stripe_sz);
+                const uint8_t* inptr = (const uint8_t*)(deltas +
+                    (stripe * stripe_sz));
 
                 // printf("total bits, nbits lost = %d, %d\n", total_bits, nbits_lost);
                 // printf("offset bytes, offset bits, nbits, total_bits = %u, %u, %u, %d\n",

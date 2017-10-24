@@ -22,6 +22,8 @@
 #include "immintrin.h" // for pext, pdep
 #include "smmintrin.h"  // for _mm_minpos_epu16
 
+#include "debug_utils.hpp" // TODO rm
+
 #include <assert.h>
 
 #define MAX(x, y) ( ((x) > (y)) ? (x) : (y) )
@@ -96,14 +98,39 @@ static const uint8_t NBITS_MASKS_U8[256] = { // note: 7b and 8b both map to 255
    255, 255, 255, 255, 255, 255, 255, 255, 255
 };
 
+static const uint8_t _NBITS_MASKS_I8[256] = { // note: 7b and 8b both map to 255
+   255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+   255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+   255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+   255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+   255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+   255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+   255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+   255, 255, 255, 255, 255,  63,  63,  63,  63,  63,  63,  63,  63,
+    63,  63,  63,  63,  63,  63,  63,  63,  31,  31,  31,  31,  31,
+    31,  31,  31,  15,  15,  15,  15,   7,   7,   3,   1,   0,   3,
+     7,   7,  15,  15,  15,  15,  31,  31,  31,  31,  31,  31,  31,
+    31,  63,  63,  63,  63,  63,  63,  63,  63,  63,  63,  63,  63,
+    63,  63,  63,  63, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+   255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+   255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+   255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+   255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+   255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+   255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+   255, 255, 255, 255, 255, 255, 255, 255, 255
+};
+// so offsets can be signed
+static const uint8_t* NBITS_MASKS_I8 = _NBITS_MASKS_I8 + 128;
+
 #define _TILE_BYTE(byte)                                                    \
-(byte << 0 | byte << 8 | byte << 16 | byte << 24 |                          \
-byte << 32 | byte << 40 | byte << 48 | byte << 56)
+    (byte << 0 | byte << 8 | byte << 16 | byte << 24 |                      \
+    byte << 32 | byte << 40 | byte << 48 | byte << 56)
 
 #define TILE_BYTE(byte) _TILE_BYTE(((uint64_t)byte))
 
 #define _TILE_SHORT(short)                                                  \
-(short << 0 | short << 16 | short << 32 | short << 48)
+    (short << 0 | short << 16 | short << 32 | short << 48)
 
 #define TILE_SHORT(short) _TILE_SHORT(((uint64_t)short))
 
@@ -230,6 +257,33 @@ static inline uint8_t needed_nbits_i16x8_simple(int16_t* x) {
         min_nlz = MIN(min_nlz, __builtin_clz(val));
     }
     return all_zeros ? 0: 33 - min_nlz;
+}
+
+// ------------------------------------------------ zigzag
+
+static inline uint8_t zigzag_encode_i8(int8_t x) {
+    return (x << 1) ^ (x >> 7);
+}
+
+static inline int8_t zigzag_decode_i8(uint8_t x) {
+    return (x >> 1) ^ -(x & 0x01);
+}
+
+static inline __m256i mm256_zigzag_encode_epi8(const __m256i& x) {
+    const __m256i zeros = _mm256_setzero_si256();
+    const __m256i ones = _mm256_set1_epi8(1);
+    __m256i invert_mask = _mm256_cmpgt_epi8(zeros, x);
+    __m256i shifted = _mm256_andnot_si256(ones, _mm256_slli_epi64(x, 1));
+    return _mm256_xor_si256(invert_mask, shifted);
+}
+
+static inline __m256i mm256_zigzag_decode_epi8(const __m256i& x) {
+    const __m256i zeros = _mm256_setzero_si256();
+    const __m256i high_bits_one = _mm256_set1_epi8(-128);
+    __m256i shifted = _mm256_andnot_si256(
+        high_bits_one, _mm256_srli_epi64(x, 1));
+    __m256i invert_mask = _mm256_cmpgt_epi8(zeros, _mm256_slli_epi64(x, 7));
+    return _mm256_xor_si256(invert_mask, shifted);
 }
 
 // ------------------------------------------------ horz bit packing
