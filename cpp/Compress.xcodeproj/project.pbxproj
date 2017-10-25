@@ -13,6 +13,7 @@
 		726D11D71F74404000080495 /* test_bitpack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 726D11D61F74404000080495 /* test_bitpack.cpp */; };
 		72B1E6381F7D405F00649F43 /* sprintz2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72B1E6371F7D405F00649F43 /* sprintz2.cpp */; };
 		72B1E63A1F7D8D4700649F43 /* test_sprintz2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72B1E6391F7D8D4700649F43 /* test_sprintz2.cpp */; };
+		72CD9A851F9FFDD600736C6A /* entropy.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72CD9A831F9FFDD600736C6A /* entropy.cpp */; };
 		72E01C691EB554200038A2B9 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72E01C681EB554200038A2B9 /* main.cpp */; };
 /* End PBXBuildFile section */
 
@@ -365,6 +366,8 @@
 		72B1E6371F7D405F00649F43 /* sprintz2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz2.cpp; sourceTree = "<group>"; };
 		72B1E6391F7D8D4700649F43 /* test_sprintz2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = test_sprintz2.cpp; path = test/test_sprintz2.cpp; sourceTree = "<group>"; };
 		72B1E63B1F7DA2B000649F43 /* sprintz2.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = sprintz2.h; sourceTree = "<group>"; };
+		72CD9A831F9FFDD600736C6A /* entropy.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = entropy.cpp; sourceTree = "<group>"; };
+		72CD9A841F9FFDD600736C6A /* entropy.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = entropy.hpp; sourceTree = "<group>"; };
 		72E01C651EB554200038A2B9 /* Compress */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Compress; sourceTree = BUILT_PRODUCTS_DIR; };
 		72E01C681EB554200038A2B9 /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
 		72E980591F0AB132006E1F9B /* sprintz.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = sprintz.h; sourceTree = "<group>"; };
@@ -1049,6 +1052,8 @@
 				726D10671F6E046800080495 /* eigen */,
 				726D11D11F6E046800080495 /* test_sprintz.cpp */,
 				72B1E6391F7D8D4700649F43 /* test_sprintz2.cpp */,
+				72CD9A831F9FFDD600736C6A /* entropy.cpp */,
+				72CD9A841F9FFDD600736C6A /* entropy.hpp */,
 				721C6D6A1F8BE94300DFDE0B /* compress_testing.hpp */,
 				726D11D61F74404000080495 /* test_bitpack.cpp */,
 				726D11D21F6E046800080495 /* timing_utils.hpp */,
@@ -1120,6 +1125,7 @@
 				72B1E63A1F7D8D4700649F43 /* test_sprintz2.cpp in Sources */,
 				726D10641F6E027F00080495 /* sprintz.cpp in Sources */,
 				726D11D71F74404000080495 /* test_bitpack.cpp in Sources */,
+				72CD9A851F9FFDD600736C6A /* entropy.cpp in Sources */,
 				72B1E6381F7D405F00649F43 /* sprintz2.cpp in Sources */,
 				72E01C691EB554200038A2B9 /* main.cpp in Sources */,
 			);
@@ -1175,7 +1181,7 @@
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_FUNCTION = NO;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				MTL_ENABLE_DEBUG_INFO = YES;
@@ -1227,7 +1233,7 @@
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_FUNCTION = NO;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				MTL_ENABLE_DEBUG_INFO = NO;

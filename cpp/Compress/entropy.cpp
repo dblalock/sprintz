@@ -19,31 +19,57 @@
 #endif
 
 
-typedef struct _DistanceInfo {
+typedef struct _EncodeInfo {
     uint16_t code;
     uint8_t nbits;
-} DistanceInfo;
+} EncodeInfo;
 
-static const DistanceInfo kDistanceLut_128_10b[128] {
+typedef struct _DecodeInfo {
+    uint8_t distance;
+    uint8_t nbits;
+} DecodeInfo;
+
+static const EncodeInfo kDistanceEncode_128_10b[128] {
 
 };
-static const DistanceInfo kDistanceLut_256_10b[256] {
+static const DecodeInfo kDistanceDecode_128_10b[1024] {
 
 };
+
+static const EncodeInfo kDistanceEncode_256_10b[256] {
+
+};
+// static const DecodeInfo kDistanceDecode_256_10b[1024] {  // TODO uncomment
+
+// };
 
 template<int NumCodes, int MaxBits>
-static inline constexpr DistanceInfo lookup(uint16_t index) {
-    return DistanceInfo{};
+static inline constexpr EncodeInfo lookup_encode(uint16_t index) {
+    return EncodeInfo{};
 }
 
 template<>
-inline constexpr DistanceInfo lookup<128, 10>(uint16_t index) {
-    return kDistanceLut_128_10b[index];
+inline constexpr EncodeInfo lookup_encode<128, 10>(uint16_t index) {
+    return kDistanceEncode_128_10b[index];
 }
 template<>
-inline constexpr DistanceInfo lookup<256, 10>(uint16_t index) {
-    return kDistanceLut_256_10b[index];
+inline constexpr EncodeInfo lookup_encode<256, 10>(uint16_t index) {
+    return kDistanceEncode_256_10b[index];
 }
+
+// template<int NumCodes, int MaxBits>
+// static inline constexpr EncodeInfo lookup_decode(uint16_t index) {
+//     return EncodeInfo{};
+// }
+
+// template<>
+// inline constexpr EncodeInfo lookup_decode<128, 10>(uint16_t index) {
+//     return kDistanceDecode_128_10b[index];
+// }
+// template<>
+// inline constexpr EncodeInfo lookup_decode<256, 10>(uint16_t index) {
+//     return kDistanceDecode_256_10b[index];
+// }
 
 // TODO determine max input length such that nothing can overflow here
 // TODO func to give you max dest buffer size you could possibly need (should
@@ -67,7 +93,8 @@ uint32_t kayak_encode(const uint8_t* src, int32_t len, uint8_t* dest,
         dest += 4;
         *(uint16_t*)dest = HistoryLen;
         dest += 2;
-        *(uint8_t*)dest = PrefixNumBits;
+        *(uint8_t*)dest = (PrefixNumBits - 1); // XXX must be between 1 and 16
+        *(uint8_t*)dest |= ((uint8_t)do_copy) << 7;
         dest += 1;
     }
 
@@ -92,8 +119,8 @@ uint32_t kayak_encode(const uint8_t* src, int32_t len, uint8_t* dest,
         for (idx_t idx = k ; idx < i; idx++) {
             if (src[idx] == val) {
                 idx_t distance = idx - k;
-                // DistanceInfo info = kDistanceLut_128_10b[distance]; // TODO don't hardcode
-                DistanceInfo info = lookup<HistoryLen, PrefixNumBits + 8>(distance);
+                // EncodeInfo info = kDistanceLut_128_10b[distance]; // TODO don't hardcode
+                EncodeInfo info = lookup_encode<HistoryLen, PrefixNumBits + 8>(distance);
                 code = info.code;
                 code_nbits = info.nbits;
                 goto found_val;
@@ -102,8 +129,8 @@ uint32_t kayak_encode(const uint8_t* src, int32_t len, uint8_t* dest,
         for (idx_t idx = i - M; idx < k; idx++) {
             if (src[idx] == val) {
                 idx_t distance = (i - k) + (idx - (i - M));
-                // DistanceInfo info = kDistanceLut_128_10b[distance];
-                DistanceInfo info = lookup<HistoryLen, PrefixNumBits + 8>(distance);
+                // EncodeInfo info = kDistanceLut_128_10b[distance];
+                EncodeInfo info = lookup_encode<HistoryLen, PrefixNumBits + 8>(distance);
                 code = info.code;
                 code_nbits = info.nbits;
                 goto found_val;
@@ -126,16 +153,49 @@ uint32_t kayak_encode(const uint8_t* src, int32_t len, uint8_t* dest,
 }
 
 uint32_t kayak_decode(const uint8_t* src, int32_t len, uint8_t* dest,
-    uint16_t history_len, uint8_t max_nbits)
+    uint16_t history_len, uint8_t max_nbits, bool do_copy=true)
 {
     typedef int32_t idx_t;
 
-    uint16_t M = history_len; // abbreviate + match the math
-    uint8_t* orig_dest = dest;
+    const uint16_t M = history_len; // abbreviate + match the math
+    const uint16_t min_literal = M;
+    const uint32_t code_mask = ((uint32_t)1 << max_nbits) - 1;
 
-    printf("received M = %d\n", M); // TODO rm
+    // printf("received M = %d\n", M); // TODO rm
 
-    return (uint32_t)(orig_dest - dest);
+    // TODO separate loop for i < M so we don't have to do this memcpy (and
+    // can therefore encode really short stuff)
+    idx_t copy_len = 0;
+    if (do_copy) {
+        idx_t copy_len = MIN(M, len);
+        memcpy(dest, src, copy_len);
+        src += copy_len;
+        dest += copy_len;
+    }
+
+    const DecodeInfo* decode_lut = kDistanceDecode_128_10b; // TODO don't hardcode this
+
+    idx_t remaining_len = len - copy_len;
+    idx_t lag = M;
+    uint32_t offset_nbits = 0;
+    for (idx_t i = 0; i < remaining_len; i++) {
+        uint16_t code = ((*(uint32_t*)src) >> offset_nbits) & code_mask;
+        DecodeInfo info = decode_lut[code];
+        uint8_t distance = info.distance;
+
+        if (distance >= min_literal) {
+            dest[i] = distance & 0xff; // just strip off prefix bits
+        } else {
+            lag -= distance;
+            if (lag < 0) { lag += M; }
+            dest[i] = dest[i - lag];
+        }
+        offset_nbits += info.nbits;
+        src += offset_nbits / 8;
+        offset_nbits = offset_nbits % 8;
+    }
+
+    return len;
 }
 
 uint32_t kayak_decode(const uint8_t* src, uint8_t* dest) {
@@ -144,9 +204,10 @@ uint32_t kayak_decode(const uint8_t* src, uint8_t* dest) {
     src += 4;
     uint16_t history_len = *(uint16_t*)src;
     src += 2;
-    uint8_t prefix_nbits = *(uint8_t*)src;
+    uint8_t prefix_nbits = (*(uint8_t*)src & 0x0f) + 1;
+    bool did_copy = (*(uint8_t*)src & 0x80) >> 7;
     src += 1;
 
     uint8_t max_nbits = prefix_nbits + 8;
-    return kayak_decode(src, len, dest, history_len, max_nbits);
+    return kayak_decode(src, len, dest, history_len, max_nbits, did_copy);
 }
