@@ -1018,6 +1018,9 @@ int64_t decompress8b_rowmajor_delta(const int8_t* src, uint8_t* dest) {
             //     memcpy(dest + ndims * i, deltas + padded_ndims * i, ndims);
             // }
 
+            // const __m256i zeros = _mm256_setzero_si256();
+            // const __m256i high_bits_one = _mm256_set1_epi8(-128);
+
             // also works when we don't actually delta code
             for (int32_t v = nvectors - 1; v >= 0; v--) {
                 uint32_t vstripe_start = v * vector_sz;
@@ -1033,10 +1036,21 @@ int64_t decompress8b_rowmajor_delta(const int8_t* src, uint8_t* dest) {
                     // TODO actual delta coding
                     // memcpy(dest + out_offset, deltas + in_offset, vector_sz);
 
+                    // __m256i x = _mm256_loadu_si256(
                     __m256i raw_vdeltas = _mm256_loadu_si256(
                         (const __m256i*)(deltas + in_offset));
+
+                    // zigzag decode
                     __m256i vdeltas = mm256_zigzag_decode_epi8(raw_vdeltas);
+
+                    // __m256i shifted = _mm256_andnot_si256(
+                    //     high_bits_one, _mm256_srli_epi64(x, 1));
+                    // __m256i invert_mask = _mm256_cmpgt_epi8(zeros, _mm256_slli_epi64(x, 7));
+                    // __m256i vdeltas = _mm256_xor_si256(invert_mask, shifted);
+
+                    // delta decode
                     vals = _mm256_add_epi8(prev_vals, vdeltas);
+
                     // vals = vdeltas;
                     _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
                     // printf("---- row %d\n", i);

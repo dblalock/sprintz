@@ -26,9 +26,12 @@
 
 #include <assert.h>
 
-#define MAX(x, y) ( ((x) > (y)) ? (x) : (y) )
-#define MIN(x, y) ( ((x) < (y)) ? (x) : (y) )
-
+#ifndef MAX
+    #define MAX(x, y) ( ((x) > (y)) ? (x) : (y) )
+#endif
+#ifndef MIN
+    #define MIN(x, y) ( ((x) < (y)) ? (x) : (y) )
+#endif
 
 #ifndef __cplusplus
 typedef uint8_t bool;
