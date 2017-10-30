@@ -720,11 +720,14 @@ def dyn_filt(blocks, filters=None, **learn_kwargs):
         # filters = learning.greedy_brute_filters(blocks, nfilters=2)
         learn_kwargs.setdefault('block_sz', blocks.shape[1])
         # learn_kwargs.setdefault('nfilters', 16)
-        learn_kwargs.setdefault('nfilters', 4)
+        # learn_kwargs.setdefault('nfilters', 4)
+        learn_kwargs.setdefault('nfilters', 1)
         learn_kwargs.setdefault('nbits', 3)
-        learn_kwargs.setdefault('verbose', 2)  # TODO change
+        learn_kwargs.setdefault('ntaps', 3)
+        learn_kwargs.setdefault('verbose', 2)
         learn_kwargs.setdefault('step_sz', .5)
-        learn_kwargs.setdefault('loss', 'linf')
+        # learn_kwargs.setdefault('loss', 'linf')
+        learn_kwargs.setdefault('loss', 'l2')
         filters = learning.greedy_brute_filters(blocks, **learn_kwargs)
 
         # filters = filters[:2]  # TODO rm after debug
@@ -1072,12 +1075,12 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     #                 hist_kws={'normed': True, 'range': [0, clip_max],
     #                           'color': 'grey'})
 
-    # plot best fit laplace distro
-    rate = 1. / np.mean(np.abs(errs_right))
-    xvals = np.arange(clip_min, clip_max + 1)
-    yvals = .5 * rate * np.exp(-rate * np.abs(xvals))
-    axes[-4].plot(xvals, yvals, 'k--', lw=1)
-    # axes[-4].plot(xvals, np.log(yvals), 'k--') # TODO rm
+    # # plot best fit laplace distro
+    # rate = 1. / np.mean(np.abs(errs_right))
+    # xvals = np.arange(clip_min, clip_max + 1)
+    # yvals = .5 * rate * np.exp(-rate * np.abs(xvals))
+    # axes[-4].plot(xvals, yvals, 'k--', lw=1)
+    # # axes[-4].plot(xvals, np.log(yvals), 'k--') # TODO rm
 
     # xvals = np.arange(clip_min + 1, clip_max)
     # counts = np.bincount(clipped_resids - clip_min)[1:-1]  # final bins have whole tails
@@ -1259,9 +1262,11 @@ def main():
 
     # left_transforms = None
     # left_transforms = 'sub_mean'
-    # left_transforms = 'delta'
+    left_transforms = 'delta'
+    # left_transforms = 'dyn_filt'
+    # left_transforms = 'VAR'
     # left_transforms = ['delta', 'blocklen=4']
-    left_transforms = 'dyn_delta'
+    # left_transforms = 'dyn_delta'
     # left_transforms = ['dyn_delta', 'blocklen=4']
     # left_transforms = ['blocklen=2', 'dyn_delta', 'blocklen=8']
     # left_transforms = ['blocklen=4', 'dyn_delta', 'blocklen=8']
@@ -1280,6 +1285,7 @@ def main():
     # right_transforms = 'hash'
     # right_transforms = ['delta', 'blocklen=32']
     # right_transforms = ['delta', 'blocklen=16']
+    # right_transforms = ['VAR', 'blocklen=16']
     # right_transforms = ['delta', 'blocklen=4']
     # right_transforms = ['delta', 'autocoracle']
     # right_transforms = ['delta', 'blocklen=2', 'kmeans']
@@ -1294,6 +1300,7 @@ def main():
     # right_transforms = ['blocklen=1', 'dyn_delta']
     # right_transforms = ['blocklen=2', 'dyn_delta', 'blocklen=8']
     # right_transforms = ['blocklen=4', 'dyn_delta', 'blocklen=8']
+    # right_transforms = ['blocklen=16', 'dyn_delta', 'blocklen=8']
     # right_transforms = ['blocklen=16', 'dyn_delta', 'blocklen=8']
     # right_transforms = ['blocklen=8', 'dyn_filt', 'blocklen=8']
     # right_transforms = ['autocoracle', 'delta']
@@ -1377,7 +1384,9 @@ def main():
     # n = 32
     n = 100
 
-    chunk_sz = -1
+    # chunk_sz = -1
+    # chunk_sz = 8
+    chunk_sz = 16
     # chunk_sz = 64
     # chunk_sz = 256
 
@@ -1505,7 +1514,11 @@ def main():
     # for d in list(dsets)[1:2]:  # adiac
     # for d in list(dsets)[4:5]:  # ChlorineConcentration
     # for d in list(dsets)[23:24]:  # MALLAT
-    for d in list(dsets)[:23]:
+    # for d in list(dsets)[:23]:
+    # for d in list(dsets)[6:23]:
+    # for d in list(dsets)[:5]:
+    # for d in dsets:
+    for d in list(dsets)[31:]:
         print "------------------------ {}".format(d.name)
         plot_dset(d, numbits=numbits, n=n,
                   left_transforms=left_transforms,

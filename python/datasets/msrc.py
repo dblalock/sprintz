@@ -223,7 +223,8 @@ def main():
     # recs = all_recordings(idxs=np.arange(5, 15, 2))
     recs = all_recordings(idxs=np.arange(11, 550, 40))
     # recs = all_recordings(idxs=np.arange(2))
-    viz.plot_recordings(recs, interval_len=600, savedir=SAVE_DIR_DELTA)
+    print "recording 0 shape: ", recs[0].data.shape
+    # viz.plot_recordings(recs, interval_len=600, savedir=SAVE_DIR_DELTA)
 
 
 if __name__ == "__main__":

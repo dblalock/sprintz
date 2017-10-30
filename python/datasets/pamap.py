@@ -126,6 +126,8 @@ def main():
 
     recs = all_recordings()
 
+    print "recording 0 shape: ", recs[0].data.shape
+
     # for i, r in enumerate(recs):
     #     print('plotting recording: ' + str(r))
 
@@ -142,7 +144,7 @@ def main():
 
     # plt.show()
 
-    viz.plot_recordings(recs, interval_len=10000, savedir=SAVE_DIR_DELTA)
+    # viz.plot_recordings(recs, interval_len=10000, savedir=SAVE_DIR_DELTA)
 
 
 if __name__ == '__main__':

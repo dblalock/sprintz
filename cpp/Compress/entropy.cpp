@@ -119,6 +119,7 @@ uint32_t kayak_encode(const uint8_t* src, int32_t len, uint8_t* dest,
         for (idx_t idx = k ; idx < i; idx++) {
             if (src[idx] == val) {
                 idx_t distance = idx - k;
+                lag = i - idx;
                 // EncodeInfo info = kDistanceLut_128_10b[distance]; // TODO don't hardcode
                 EncodeInfo info = lookup_encode<HistoryLen, PrefixNumBits + 8>(distance);
                 code = info.code;
@@ -129,6 +130,7 @@ uint32_t kayak_encode(const uint8_t* src, int32_t len, uint8_t* dest,
         for (idx_t idx = i - M; idx < k; idx++) {
             if (src[idx] == val) {
                 idx_t distance = (i - k) + (idx - (i - M));
+                lag = i - idx;
                 // EncodeInfo info = kDistanceLut_128_10b[distance];
                 EncodeInfo info = lookup_encode<HistoryLen, PrefixNumBits + 8>(distance);
                 code = info.code;
@@ -183,12 +185,12 @@ uint32_t kayak_decode(const uint8_t* src, int32_t len, uint8_t* dest,
         DecodeInfo info = decode_lut[code];
         uint8_t distance = info.distance;
 
-        if (distance >= min_literal) {
-            dest[i] = distance & 0xff; // just strip off prefix bits
-        } else {
+        if (distance < min_literal) {
             lag -= distance;
             if (lag < 0) { lag += M; }
             dest[i] = dest[i - lag];
+        } else {
+            dest[i] = distance & 0xff; // just strip off prefix bits
         }
         offset_nbits += info.nbits;
         src += offset_nbits / 8;
