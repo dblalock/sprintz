@@ -16,6 +16,7 @@ from .utils import sliding_window as window
 from . import compress
 from . import hashing
 from . import learning
+from . import learning2
 
 from .scratch2 import sort_transform, mixfix_encode, mixfix_cost, zigzag_encode
 from .scratch2 import prefix_lut_transform
@@ -907,6 +908,9 @@ def apply_transforms(X, blocks, transform_names, k=-1, side=None,
         if name == 'sort_transform':
             offsetBlocks = sort_transform(offsetBlocks)
 
+        if name == 'online_regress':
+            offsetBlocks = learning2.sub_online_regress(offsetBlocks)
+
         transform_names = transform_names[1:]  # pop first transform
 
     # "examples" stitched together from blocks with vals subbed off
@@ -1280,7 +1284,8 @@ def main():
     # right_transforms = 'double_delta'  # delta encode deltas
     # right_transforms = '1.5_delta'  # sub half of prev delta from each delta
     # right_transforms = 'dyn_delta'  # pick single or double delta for each block
-    right_transforms = 'dyn_filt'
+    # right_transforms = 'dyn_filt'
+    right_transforms = 'online_regress'
     # right_transforms = 'VAR'
     # right_transforms = 'hash'
     # right_transforms = ['delta', 'blocklen=32']
@@ -1335,9 +1340,9 @@ def main():
     # right_transforms = ['delta', 'dyn_filt']
     # right_transforms = ['delta', 'split_dyn_filt']
 
-    # numbits = 16
+    numbits = 16
     # numbits = 12
-    numbits = 8
+    # numbits = 8
 
     # num_neighbors = 256
     num_neighbors = 1024
@@ -1518,7 +1523,8 @@ def main():
     # for d in list(dsets)[6:23]:
     # for d in list(dsets)[:5]:
     # for d in dsets:
-    for d in list(dsets)[31:]:
+    # for d in list(dsets)[31:]:
+    for d in list(dsets)[:31]:
         print "------------------------ {}".format(d.name)
         plot_dset(d, numbits=numbits, n=n,
                   left_transforms=left_transforms,

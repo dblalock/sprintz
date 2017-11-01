@@ -476,7 +476,6 @@ class KmeansCompressor(object):
 
             # SELF: pick up here
 
-
         return out_block, idx * block_sz + rotation if self.maxpool_phase else idx
 
 
