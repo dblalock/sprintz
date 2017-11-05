@@ -40,11 +40,11 @@ static const int kDefaultGroupSzBlocks = 2;
 
 // ------------------------------------------------ row-major, no delta or RLE
 
-template<typename T, typename T2>
-CONSTEXPR_FUNC inline T round_up_to_multiple(T x, T2 multipleof) {
-    T remainder = x % multipleof;
-    return remainder ? (x + multipleof - remainder) : x;
-}
+//template<typename T, typename T2>
+//CONSTEXPR_FUNC inline T round_up_to_multiple(T x, T2 multipleof) {
+//    T remainder = x % multipleof;
+//    return remainder ? (x + multipleof - remainder) : x;
+//}
 
 int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
                             uint16_t ndims, bool write_size)

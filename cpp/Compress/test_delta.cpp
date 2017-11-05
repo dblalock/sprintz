@@ -24,7 +24,7 @@
 
 // ============================================================ rowmajor delta
 
-TEST_CASE("delta_rowmajor_8b (no compression)", "[rowmajor][delta][dbg]") {
+TEST_CASE("delta_rowmajor_8b (no compression)", "[rowmajor][delta]") {
     printf("executing rowmajor delta test\n");
     
 //     int ndims = 33;

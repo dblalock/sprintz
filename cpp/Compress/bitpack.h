@@ -23,19 +23,9 @@
 #include "smmintrin.h"  // for _mm_minpos_epu16
 
 #include "debug_utils.hpp" // TODO rm
+#include "util.h"
 
 #include <assert.h>
-
-#ifndef MAX
-    #define MAX(x, y) ( ((x) > (y)) ? (x) : (y) )
-#endif
-#ifndef MIN
-    #define MIN(x, y) ( ((x) < (y)) ? (x) : (y) )
-#endif
-
-#ifndef __cplusplus
-typedef uint8_t bool;
-#endif
 
 // #define _TILE_BYTE(byte)                                                    \
 // (byte << 0 | byte << 8 | byte << 16 | byte << 24 |                          \

@@ -15,24 +15,7 @@
 #include "immintrin.h"
 
 #include "debug_utils.hpp" // TODO rm
-
-// TODO eliminate dup code
-#ifndef MAX
-    #define MAX(x, y) ( ((x) > (y)) ? (x) : (y) )
-#endif
-#ifndef MIN
-    #define MIN(x, y) ( ((x) < (y)) ? (x) : (y) )
-#endif
-#if __cpp_constexpr >= 201304
-    #define CONSTEXPR constexpr
-#else
-    #define CONSTEXPR
-#endif
-template<typename T, typename T2>
-CONSTEXPR inline T round_up_to_multiple(T x, T2 multipleof) {
-    T remainder = x % multipleof;
-    return remainder ? (x + multipleof - remainder) : x;
-}
+#include "util.h"
 
 uint32_t encode_delta_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
                                uint16_t ndims, bool write_size)
@@ -121,21 +104,6 @@ uint32_t encode_delta_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
     return len;
 }
 
-uint32_t decode_delta_rowmajor_any_small_ndims(const int8_t* src, uint32_t len,
-    uint8_t* dest, uint16_t ndims)
-{
-    uint8_t* orig_dest = dest;
-
-    uint32_t cpy_len = MIN(ndims, len);
-    memcpy(dest, src, cpy_len);
-    dest += ndims;
-    src += ndims;
-    for (; dest < (orig_dest + len); ++dest) {
-        *dest = *src + *(dest - ndims);
-        src++;
-    }
-    return len;
-}
 template<int ndims>
 uint32_t decode_delta_rowmajor_small_ndims(const int8_t* src, uint32_t len,
     uint8_t* dest)
@@ -152,17 +120,6 @@ uint32_t decode_delta_rowmajor_small_ndims(const int8_t* src, uint32_t len,
     }
     return len;
 }
-uint32_t decode_delta_rowmajor_small_ndims(const int8_t* src, uint32_t len,
-    uint8_t* dest, uint16_t ndims)
-{
-    switch (ndims) {
-    case 0: return decode_delta_rowmajor_small_ndims<0>(src, len, dest); break;
-    case 1: return decode_delta_rowmajor_small_ndims<1>(src, len, dest); break;
-    case 2: return decode_delta_rowmajor_small_ndims<2>(src, len, dest); break;
-    case 3: return decode_delta_rowmajor_small_ndims<3>(src, len, dest); break;
-    default: return decode_delta_rowmajor_any_small_ndims(src, len, dest, ndims);
-    }
-}
 
 uint32_t decode_delta_rowmajor_large_ndims(const int8_t* src, uint32_t len,
     uint8_t* dest, uint16_t ndims)
@@ -171,6 +128,8 @@ uint32_t decode_delta_rowmajor_large_ndims(const int8_t* src, uint32_t len,
     static const uint8_t block_sz = 8;
     uint8_t* orig_dest = dest;
     // const int8_t* orig_src = src;
+
+    if (ndims == 0) { return 0; }
 
     uint32_t block_sz_elems = block_sz * ndims;
     uint32_t nrows = len / ndims;
@@ -223,7 +182,7 @@ uint32_t decode_delta_rowmajor_large_ndims(const int8_t* src, uint32_t len,
     return len;
 }
 
-template<int ndims>
+template<int ndims> // TODO same body as prev func; maybe put in macro?
 uint32_t decode_delta_rowmajor(const int8_t* src, uint32_t len, uint8_t* dest) {
     static const uint8_t vector_sz = 32;
     static const uint8_t block_sz = 8;
@@ -306,15 +265,6 @@ uint32_t decode_delta_rowmajor(const int8_t* src, uint32_t len, uint8_t* dest) {
 uint32_t decode_delta_rowmajor(const int8_t* src, uint32_t len, uint8_t* dest,
     uint16_t ndims)
 {
-    // printf("decomp using nd printf("decomp using ndzzims: %d\n", ndims);
-    if (ndims == 0) { return 0; }
-    if (ndims <= 3) {
-        return decode_delta_rowmajor_small_ndims(src, len, dest, ndims);
-    }
-    if (ndims > 64) {
-        return decode_delta_rowmajor_large_ndims(src, len, dest, ndims);
-    }
-
     #define CASE(NDIMS) \
         case NDIMS: return decode_delta_rowmajor<NDIMS>(src, len, dest); break;
 
@@ -324,13 +274,22 @@ uint32_t decode_delta_rowmajor(const int8_t* src, uint32_t len, uint8_t* dest,
     #define SIXTEEN_CASES(START)                        \
         FOUR_CASES(START); FOUR_CASES(START + 4);       \
         FOUR_CASES(START + 8); FOUR_CASES(START + 12);
+
     switch (ndims) {
-        SIXTEEN_CASES(0 + 1); SIXTEEN_CASES(16 + 1);
-        SIXTEEN_CASES(32 + 1); SIXTEEN_CASES(48 + 1);
-        // SIXTEEN_CASES(64 + 1); SIXTEEN_CASES(80 + 1);
-        // SIXTEEN_CASES(96 + 1); SIXTEEN_CASES(112 + 1);
+        case 0: return decode_delta_rowmajor_small_ndims<0>(src, len, dest); break;
+        case 1: return decode_delta_rowmajor_small_ndims<1>(src, len, dest); break;
+        case 2: return decode_delta_rowmajor_small_ndims<2>(src, len, dest); break;
+        CASE(3); CASE(4);
+        FOUR_CASES(5); FOUR_CASES(9); FOUR_CASES(13); // cases 5-16
+        SIXTEEN_CASES(16 + 1); SIXTEEN_CASES(32 + 1); SIXTEEN_CASES(48 + 1);
+        default:
+            return decode_delta_rowmajor_large_ndims(src, len, dest, ndims);
     }
     return 0; // This can never happen
+
+    #undef CASE
+    #undef FOUR_CASES
+    #undef SIXTEEN_CASES
 }
 
 uint32_t decode_delta_rowmajor_inplace(uint8_t* buff, uint32_t len,
@@ -361,9 +320,7 @@ uint32_t decode_delta_rowmajor(const int8_t* src, uint8_t* dest) {
     src += 4;
     uint16_t ndims = *(uint16_t*)src;
     src += 2;
-    // printf("decode_delta_rowmajor; calling other version with ndims = %d\n", ndims);
     return decode_delta_rowmajor(src, len, dest, ndims);
-    // return decode_delta_rowmajor_large_ndims(src, len, dest, ndims);
 }
 
 #undef MIN
