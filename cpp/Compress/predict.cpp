@@ -78,6 +78,7 @@ uint32_t encode_xff_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
         src++;
     }
 
+    free(prev_vals_ar);
     if (write_size) { return len + 6; }
     return len;
 }
@@ -138,15 +139,18 @@ uint32_t decode_xff_rowmajor(const int8_t* src, uint32_t len, uint8_t* dest,
         *dest = *src + *(dest - ndims);
         src++;
     }
+    free(prev_vals_ar);
     return len;
 }
 
+// TODO actually operate in-place
 uint32_t decode_xff_rowmajor_inplace(uint8_t* buff, uint32_t len,
                                       uint16_t ndims)
 {
     uint8_t* tmp = (uint8_t*)malloc(len);
     uint32_t sz = decode_xff_rowmajor((int8_t*)buff, len, tmp, ndims);
     memcpy(buff, tmp, sz);
+    free(tmp);
     return sz;
 }
 
