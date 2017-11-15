@@ -510,8 +510,8 @@ uint32_t encode_doubledelta_rowmajor(const uint8_t* src, uint32_t len,
                 __m256i verrs = _mm256_sub_epi8(vdeltas, prev_deltas);
 
                 _mm256_storeu_si256((__m256i*)out_ptr, verrs);
-                prev_vals = vals;
                 prev_deltas = vdeltas;
+                prev_vals = vals;
             }
             // TODO could replicate this loop for 0th iter and avoid storing
             // prev_vals here (just read from input)
@@ -590,6 +590,7 @@ uint32_t decode_doubledelta_rowmajor(const int8_t* src, uint32_t len,
                 __m256i vals = _mm256_add_epi8(vdeltas, prev_vals);
 
                 _mm256_storeu_si256((__m256i*)out_ptr, vals);
+                prev_deltas = vdeltas;
                 prev_vals = vals;
             }
             // TODO could replicate this loop for 0th iter and avoid storing
