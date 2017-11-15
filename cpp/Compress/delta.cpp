@@ -126,7 +126,8 @@ inline int64_t decode_delta_serial(const int8_t* src, uint8_t* dest,
     const uint8_t* dest_end, uint16_t lag, bool needs_initial_cpy)
 {
     int64_t len = (int64_t)(dest_end - dest);
-    if (len < 1) { return - 1; }
+    if (len < 1) { return -1; }
+    if (lag < 1) { return -2; }
 
     if (needs_initial_cpy) {
         int64_t cpy_len = MIN(lag, len);
@@ -147,7 +148,6 @@ uint32_t decode_delta_rowmajor_large_ndims(const int8_t* src, uint32_t len,
     static const uint8_t vector_sz = 32;
     static const uint8_t block_sz = 8;
     uint8_t* orig_dest = dest;
-    // const int8_t* orig_src = src;
 
     if (ndims == 0) { return 0; }
 
@@ -190,16 +190,7 @@ uint32_t decode_delta_rowmajor_large_ndims(const int8_t* src, uint32_t len,
 
     // undo delta coding for trailing elements serially
     decode_delta_serial(src, dest, orig_dest + len, ndims, nblocks == 0);
-    // if (nblocks == 0) {
-    //     uint32_t cpy_len = MIN(ndims, len);
-    //     memcpy(dest, src, cpy_len);
-    //     dest += ndims;
-    //     src += ndims;
-    // }
-    // for (; dest < (orig_dest + len); ++dest) {
-    //     *dest = *src + *(dest - ndims);
-    //     src++;
-    // }
+
     free(prev_vals_ar);
     return len;
 }
@@ -267,17 +258,6 @@ uint32_t decode_delta_rowmajor(const int8_t* src, uint32_t len, uint8_t* dest) {
 
     // undo delta coding for trailing elements serially
     decode_delta_serial(src, dest, orig_dest + len, ndims, nblocks == 0);
-    // if (nblocks == 0) {
-    //     uint32_t cpy_len = MIN(ndims, len);
-    //     memcpy(dest, src, cpy_len);
-    //     dest += ndims;
-    //     src += ndims;
-    // }
-    // // printf("copying trailing %d bytes\n", (int)((orig_dest + len) - dest));
-    // for (; dest < (orig_dest + len); ++dest) {
-    //     *dest = *src + *(dest - ndims);
-    //     src++;
-    // }
 
     // printf("reconstructed input:\n");
     // dump_bytes(orig_dest, ndims * 8, ndims);
@@ -350,6 +330,137 @@ uint32_t decode_delta_rowmajor(const int8_t* src, uint8_t* dest) {
 
 // ================================================================ double delta
 
+// ------------------------------------------------ serial version
+
+inline int64_t encode_doubledelta_serial(const uint8_t* src, uint32_t len,
+    int8_t* dest, uint16_t lag, const uint8_t* prev_vals,
+    int8_t* prev_deltas)
+{
+    if (len < 1) { return -1; }
+    if (lag < 1) { return -2; }
+
+    // if no array of previous deltas (or values) is supplied, allocate
+    // a new one and initialize it to 0
+    bool own_prev_vals = prev_vals == NULL;
+    bool own_prev_deltas = prev_deltas == NULL;
+    if (own_prev_vals) {
+        prev_vals = (uint8_t*)calloc(lag, 1);
+    }
+    if (own_prev_deltas) {
+        prev_deltas = (int8_t*)calloc(lag, 1);
+    }
+
+    // enccode first row using prev_vals array passed in (or initialized to 0)
+    uint32_t initial_len = MIN(lag, len);
+    for (uint16_t j = 0; j < initial_len; j++) {
+        int8_t delta = *src - prev_vals[j];
+        int8_t err = delta - prev_deltas[j];
+        *dest = err;
+        prev_deltas[j] = delta;
+        src++;
+        dest++;
+    }
+    uint32_t remaining_len = len - initial_len;
+
+    // printf("remaining_len: ")
+
+    // main loop
+    uint32_t nrows = remaining_len / lag;
+    for (int32_t i = 0; i < nrows; i++) {
+        for (uint16_t j = 0; j < lag; j++) {
+            int8_t delta = *src - *(src - lag);
+            int8_t err = delta - prev_deltas[j];
+            *dest = err;
+            prev_deltas[j] = delta;
+            src++;
+            dest++;
+        }
+    }
+    // handle trailing incomplete row if present
+    remaining_len -= nrows * lag;
+    for (uint16_t j = 0; j < remaining_len; j++) {
+        int8_t delta = *src - *(src - lag);
+        int8_t err = delta - prev_deltas[j];
+        *dest = err;
+        prev_deltas[j] = delta;
+        src++;
+        dest++;
+    }
+
+    if (own_prev_vals) { free((uint8_t*)prev_vals); }
+    if (own_prev_deltas) { free(prev_deltas); }
+    return len;
+}
+
+inline int32_t decode_doubledelta_serial(const int8_t* src, uint32_t len,
+    uint8_t* dest, uint16_t lag, const uint8_t* prev_vals,
+    int8_t* prev_deltas)
+{
+    if (len < 1) { return -1; }
+    if (lag < 1) { return -2; }
+
+    // if no array of previous deltas (or values) is supplied, allocate
+    // a new one and initialize it to 0
+    bool own_prev_vals = prev_vals == NULL;
+    bool own_prev_deltas = prev_deltas == NULL;
+    if (own_prev_vals) {
+        prev_vals = (uint8_t*)calloc(lag, 1);
+    }
+    if (own_prev_deltas) {
+        prev_deltas = (int8_t*)calloc(lag, 1);
+    }
+
+    // decode first row using prev_vals array passed in (or initialized to 0)
+    uint32_t initial_len = MIN(lag, len);
+    for (uint16_t j = 0; j < initial_len; j++) {
+        int8_t err = *src;
+        int8_t delta = err + prev_deltas[j];
+        *dest = delta + prev_vals[j];
+        prev_deltas[j] = delta;
+        src++;
+        dest++;
+    }
+    uint32_t remaining_len = len - initial_len;
+
+    // main loop
+    uint32_t nrows = remaining_len / lag;
+    for (int32_t i = 0; i < nrows; i++) {
+        for (uint16_t j = 0; j < lag; j++) {
+            int8_t err = *src;
+            int8_t delta = err + prev_deltas[j];
+            uint8_t prev_val = *(dest - lag);
+            *dest = prev_val + delta;
+            prev_deltas[j] = delta;
+            src++;
+            dest++;
+        }
+    }
+    // handle possible trailing elements in the last row
+    remaining_len -= nrows * lag;
+    for (uint16_t j = 0; j < remaining_len; j++) {
+        int8_t err = *src;
+        int8_t delta = err + prev_deltas[j];
+        uint8_t prev_val = *(dest - lag);
+        *dest = prev_val + delta;
+        prev_deltas[j] = delta;
+        src++;
+        dest++;
+    }
+
+    if (own_prev_vals) { free((uint8_t*)prev_vals); }
+    if (own_prev_deltas) { free(prev_deltas); }
+    return len;
+}
+
+// inline int32_t decode_doubledelta_serial(const int8_t* src, uint32_t len,
+//     uint8_t* dest, uint8_t* prev_vals, int8_t* prev_deltas)
+
+// inline int32_t decode_doubledelta_serial(const int8_t* src, uint8_t* dest) {
+
+// }
+
+// ------------------------------------------------ vectorized version
+
 uint32_t encode_doubledelta_rowmajor(const uint8_t* src, uint32_t len,
     int8_t* dest, uint16_t ndims, bool write_size)
 {
@@ -364,7 +475,8 @@ uint32_t encode_doubledelta_rowmajor(const uint8_t* src, uint32_t len,
     uint32_t padded_ndims = round_up_to_multiple(ndims, vector_sz);
     uint16_t nvectors = padded_ndims / vector_sz + ((padded_ndims % vector_sz) > 0);
 
-    uint8_t* prev_vals_ar = (uint8_t*)calloc(vector_sz, nvectors);
+    uint8_t* prev_vals_ar = (uint8_t*)calloc(2 * vector_sz, nvectors);
+    int8_t* prev_deltas_ar = (int8_t*)prev_vals_ar + vector_sz * nvectors;
 
     if (write_size) {
         *(uint32_t*)dest = len;
@@ -386,36 +498,54 @@ uint32_t encode_doubledelta_rowmajor(const uint8_t* src, uint32_t len,
     for (int32_t b = 0; b < nblocks; b++) { // for each block
         for (int32_t v = nvectors - 1; v >= 0; v--) { // for each stripe
             __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar + v * vector_sz);
+            __m256i* prev_deltas_ptr = (__m256i*)(prev_deltas_ar + v * vector_sz);
             __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
+            __m256i prev_deltas = _mm256_loadu_si256(prev_deltas_ptr);
             for (uint8_t i = 0; i < block_sz; i++) {
                 const uint8_t* in_ptr = src + i * ndims + v * vector_sz;
                 int8_t* out_ptr = dest + i * ndims + v * vector_sz;
                 __m256i vals = _mm256_loadu_si256((__m256i*)in_ptr);
+
                 __m256i vdeltas = _mm256_sub_epi8(vals, prev_vals);
-                _mm256_storeu_si256((__m256i*)out_ptr, vdeltas);
-                // hacky move instruction
-                // prev_vals = _mm256_xor_si256(vals, _mm256_setzero_si256());
+                __m256i verrs = _mm256_sub_epi8(vdeltas, prev_deltas);
+
+                _mm256_storeu_si256((__m256i*)out_ptr, verrs);
                 prev_vals = vals;
+                prev_deltas = vdeltas;
             }
-            _mm256_storeu_si256((__m256i*)(prev_vals_ptr), prev_vals);
+            // TODO could replicate this loop for 0th iter and avoid storing
+            // prev_vals here (just read from input)
+            _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
+            _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
         } // for each vector
         src += block_sz_elems;
         dest += block_sz_elems;
     } // for each block
 
-    // delta code trailing elements serially; note that if we jump straight
-    // to this section, we need to not read past the beginning of the input
-    if (nblocks == 0) {
-        uint32_t cpy_len = MIN(ndims, len);
-        memcpy(dest, src, cpy_len);
-        dest += ndims;
-        src += ndims;
+    uint32_t remaining_len = len - (uint32_t)(dest - orig_dest);
+    int8_t* use_prev_deltas = nullptr;
+    const uint8_t* use_prev_vals = nullptr;
+    if (nblocks > 0) {
+        use_prev_vals = src - ndims;
+        use_prev_deltas = prev_deltas_ar;
     }
-    // printf("copying trailing %d bytes\n", (int)((orig_dest + len) - dest));
-    for (; dest < (orig_dest + len); ++dest) {
-        *dest = *(src) - *(src - ndims);
-        src++;
-    }
+    encode_doubledelta_serial(src, remaining_len, dest, ndims,
+                              use_prev_vals, use_prev_deltas);
+
+
+    // // delta code trailing elements serially; note that if we jump straight
+    // // to this section, we need to not read past the beginning of the input
+    // if (nblocks == 0) {
+    //     uint32_t cpy_len = MIN(ndims, len);
+    //     memcpy(dest, src, cpy_len);
+    //     dest += ndims;
+    //     src += ndims;
+    // }
+    // // printf("copying trailing %d bytes\n", (int)((orig_dest + len) - dest));
+    // for (; dest < (orig_dest + len); ++dest) {
+    //     *dest = *(src) - *(src - ndims);
+    //     src++;
+    // }
 
     free(prev_vals_ar);
     if (write_size) { return len + 6; }
@@ -428,7 +558,6 @@ uint32_t decode_doubledelta_rowmajor(const int8_t* src, uint32_t len,
     static const uint8_t vector_sz = 32;
     static const uint8_t block_sz = 8;
     uint8_t* orig_dest = dest;
-    // const int8_t* orig_src = src;
 
     if (ndims == 0) { return 0; }
 
@@ -438,7 +567,8 @@ uint32_t decode_doubledelta_rowmajor(const int8_t* src, uint32_t len,
     uint32_t padded_ndims = round_up_to_multiple(ndims, vector_sz);
     uint16_t nvectors = padded_ndims / vector_sz + ((padded_ndims % vector_sz) > 0);
 
-    uint8_t* prev_vals_ar = (uint8_t*)calloc(vector_sz, nvectors);
+    uint8_t* prev_vals_ar = (uint8_t*)calloc(2 * vector_sz, nvectors);
+    int8_t* prev_deltas_ar = (int8_t*)prev_vals_ar + vector_sz * nvectors;
 
     // ensure we don't write past the end of the output
     uint16_t overrun_ndims = vector_sz - (ndims % vector_sz);
@@ -448,33 +578,41 @@ uint32_t decode_doubledelta_rowmajor(const int8_t* src, uint32_t len,
     for (uint32_t b = 0; b < nblocks; b++) { // for each block
         for (int32_t v = nvectors - 1; v >= 0; v--) { // for each stripe
             __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar + v * vector_sz);
+            __m256i* prev_deltas_ptr = (__m256i*)(prev_deltas_ar + v * vector_sz);
             __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
+            __m256i prev_deltas = _mm256_loadu_si256(prev_deltas_ptr);
             for (uint8_t i = 0; i < block_sz; i++) {
                 const int8_t* in_ptr = src + i * ndims + v * vector_sz;
                 uint8_t* out_ptr = dest + i * ndims + v * vector_sz;
-                __m256i errs = _mm256_loadu_si256((__m256i*)in_ptr);
-                __m256i vals = _mm256_add_epi8(errs, prev_vals);
+                __m256i verrs = _mm256_loadu_si256((__m256i*)in_ptr);
+
+                __m256i vdeltas = _mm256_add_epi8(verrs, prev_deltas);
+                __m256i vals = _mm256_add_epi8(vdeltas, prev_vals);
+
                 _mm256_storeu_si256((__m256i*)out_ptr, vals);
                 prev_vals = vals;
             }
-            _mm256_storeu_si256((__m256i*)(prev_vals_ptr), prev_vals);
+            // TODO could replicate this loop for 0th iter and avoid storing
+            // prev_vals here (just read from output)
+            _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
+            _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
         } // for each vector
         src += block_sz_elems;
         dest += block_sz_elems;
     } // for each block
 
     // undo delta coding for trailing elements serially
-    decode_delta_serial(src, dest, orig_dest + len, ndims, nblocks == 0);
-    // if (nblocks == 0) {
-    //     uint32_t cpy_len = MIN(ndims, len);
-    //     memcpy(dest, src, cpy_len);
-    //     dest += ndims;
-    //     src += ndims;
-    // }
-    // for (; dest < (orig_dest + len); ++dest) {
-    //     *dest = *src + *(dest - ndims);
-    //     src++;
-    // }
+    // decode_delta_serial(src, dest, orig_dest + len, ndims, nblocks == 0);
+    uint32_t remaining_len = len - (uint32_t)(dest - orig_dest);
+    int8_t* use_prev_deltas = nullptr;
+    uint8_t* use_prev_vals = nullptr;
+    if (nblocks > 0) {
+        use_prev_vals = dest - ndims;
+        use_prev_deltas = prev_deltas_ar;
+    }
+    decode_doubledelta_serial(src, remaining_len, dest, ndims,
+                              use_prev_vals, use_prev_deltas);
+
     free(prev_vals_ar);
     return len;
 }

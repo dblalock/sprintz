@@ -29,4 +29,10 @@ uint32_t decode_doubledelta_rowmajor_inplace(uint8_t* buff, uint32_t len,
     uint16_t ndims);
 uint32_t decode_doubledelta_rowmajor(const int8_t* src, uint8_t* dest);
 
+// inline int64_t encode_doubledelta_serial(const uint8_t* src, uint32_t len,
+//     int8_t* dest, uint16_t lag, bool needs_initial_cpy=true,
+//     int8_t* prev_deltas=nullptr);
+// inline int32_t decode_doubledelta_serial(const int8_t* src, uint32_t len,
+//     uint8_t* dest, uint16_t lag, int8_t* prev_deltas=nullptr);
+
 #endif /* delta_hpp */
