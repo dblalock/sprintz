@@ -362,8 +362,6 @@ inline int64_t encode_doubledelta_serial(const uint8_t* src, uint32_t len,
     }
     uint32_t remaining_len = len - initial_len;
 
-    // printf("remaining_len: ")
-
     // main loop
     uint32_t nrows = remaining_len / lag;
     for (int32_t i = 0; i < nrows; i++) {
@@ -532,7 +530,6 @@ uint32_t encode_doubledelta_rowmajor(const uint8_t* src, uint32_t len,
     encode_doubledelta_serial(src, remaining_len, dest, ndims,
                               use_prev_vals, use_prev_deltas);
 
-
     // // delta code trailing elements serially; note that if we jump straight
     // // to this section, we need to not read past the beginning of the input
     // if (nblocks == 0) {
@@ -574,6 +571,7 @@ uint32_t decode_doubledelta_rowmajor(const int8_t* src, uint32_t len,
     uint16_t overrun_ndims = vector_sz - (ndims % vector_sz);
     uint32_t trailing_nelements = len % block_sz_elems;
     if (nblocks > 1 && overrun_ndims > trailing_nelements) { nblocks -= 1; }
+
 
     for (uint32_t b = 0; b < nblocks; b++) { // for each block
         for (int32_t v = nvectors - 1; v >= 0; v--) { // for each stripe

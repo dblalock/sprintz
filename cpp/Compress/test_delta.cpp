@@ -81,7 +81,7 @@ TEST_CASE("delta_rowmajor_8b (no compression)", "[rowmajor][delta]") {
 //    }
 //}
 
-TEST_CASE("doubledelta_rowmajor_8b (no compression)", "[rowmajor][delta][dbg]") {
+TEST_CASE("doubledelta_rowmajor_8b (no compression)", "[rowmajor][delta]") {
     printf("executing rowmajor double delta test\n");
     
     //     int ndims = 33;
