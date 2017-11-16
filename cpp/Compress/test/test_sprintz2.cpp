@@ -197,3 +197,31 @@ TEST_CASE("compress8b_rowmajor_delta", "[rowmajor][delta]") {
        TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
     }
 }
+
+// ============================================================ rowmajor delta rle
+
+TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][dbg]") {
+    printf("executing rowmajor delta rle test\n");
+    
+    // int ndims = 1;
+    // auto ndims_list = ar::range(ndims, ndims + 1);
+    auto ndims_list = ar::range(1, 129 + 1);
+    for (auto _ndims : ndims_list) {
+        auto ndims = (uint16_t)_ndims;
+        printf("---- ndims = %d\n", ndims);
+        CAPTURE(ndims);
+        auto comp = [ndims](uint8_t* src, size_t len, int8_t* dest) {
+            return compress8b_rowmajor_delta(src, len, dest, ndims);
+        };
+        auto decomp = [](int8_t* src, uint8_t* dest) {
+            return decompress8b_rowmajor_delta(src, dest);
+        };
+        
+        // TEST_SQUARES_INPUT(128, comp, decomp);
+        // TEST_SQUARES_INPUT(ndims * 16, comp, decomp);
+        // TEST_SIMPLE_INPUTS(ndims * 16, comp, decomp);
+        // TEST_KNOWN_INPUT(ndims * 16, comp, decomp);
+        // TEST_KNOWN_INPUT(ndims * 32, comp, decomp);
+        TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
+    }
+}
