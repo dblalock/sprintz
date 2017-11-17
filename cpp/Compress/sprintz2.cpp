@@ -1107,6 +1107,7 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
     // constants that could actually be changed in this impl
     static const int group_sz_blocks = kDefaultGroupSzBlocks;
     static const int length_header_nbytes = 8;
+    static const uint16_t max_run_nblocks = 0x7fff; // 15 bit counter
     // derived consts
     static const size_t min_data_size = 8 * block_sz * group_sz_blocks;
 
@@ -1157,14 +1158,13 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
 
     // extra row is for storing previous values
     // TODO just look at src and special case first row
-    // uint8_t* deltas = (uint8_t*)calloc(1, (block_sz + 1) * ndims);
     int8_t* deltas = (int8_t*)calloc(1, (block_sz + 1) * ndims);
 
     // ================================ main loop
 
-    // uint64_t ngroups = len / group_sz;
+    uint16_t run_length_nblocks = 0;
+
     const uint8_t* last_full_group_start = src_end - group_sz;
-    // for (uint64_t g = 0; g < ngroups; g++) {
     uint32_t ngroups = 0;
     while (src <= last_full_group_start) {
         ngroups++;  // invariant: groups we start are always finished
@@ -1176,7 +1176,9 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
         memset(header_dest, 0, total_header_bytes);
 
         uint32_t header_bit_offset = 0;
-        for (int b = 0; b < group_sz_blocks; b++) { // for each block in group
+        // for (int b = 0; b < group_sz_blocks; b++) { // for each block in group
+        int b = 0;
+        while (b < group_sz_blocks) { // for each block
 
             // printf("---- block %d\n", b);
 
@@ -1186,8 +1188,6 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
             memset(stripe_headers,   0, nstripes * sizeof(stripe_headers[0]));
 
             // ------------------------ compute info for each stripe
-            // printf("comp: starting deltas:\n"); dump_bytes(deltas, (block_sz + 1) * ndims, ndims);
-
             for (uint16_t dim = 0; dim < ndims; dim++) {
                 // compute maximum number of bits used by any value of this dim,
                 // while simultaneously computing deltas
@@ -1195,23 +1195,12 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
                 uint32_t prev_val_offset = block_sz * ndims + dim;
                 uint8_t prev_val = deltas[prev_val_offset];
                 for (uint8_t i = 0; i < block_sz; i++) {
-                    // uint8_t val = src[(i * ndims) + dim];
-                    // mask |= NBITS_MASKS_U8[val];
-
                     uint32_t offset = (i * ndims) + dim;
-
                     uint8_t val = src[offset];
                     int8_t delta = (int8_t)(val - prev_val);
-                    // int8_t delta = (int8_t)val; // TODO rm
                     uint8_t bits = zigzag_encode_i8(delta);
-                    mask |= NBITS_MASKS_U8[bits]; // just OR raw vals; no LUT
+                    mask |= NBITS_MASKS_U8[bits]; // TODO just OR raw vals; no LUT
                     deltas[offset] = bits;
-
-                    // // TODO rm after debug
-                    // uint8_t val = src[(i * ndims) + dim];
-                    // mask |= NBITS_MASKS_U8[val];
-                    // deltas[offset] = val;
-
                     prev_val = val;
                 }
                 // write out value for delta encoding of next block
@@ -1230,10 +1219,7 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
                 // accumulate header info for this stripe
                 uint32_t write_nbits = max_nbits - (max_nbits == 8); // map 8 to 7
                 stripe_headers[stripe] |= write_nbits << (idx_in_stripe * nbits_sz_bits);
-                // printf("write_nbits = %d, stripe header = ", write_nbits);
-                // dump_bytes(stripe_headers[stripe], false); dump_bits(stripe_headers[stripe]);
             }
-            // printf("comp: deltas:\n"); dump_bytes(deltas, (block_sz + 1) * ndims, ndims);
 
             // compute start offsets of each stripe (in bits)
             stripe_bitoffsets[0] = 0;
@@ -1244,8 +1230,68 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
             // compute width of each row (in bytes); note that we byte align
             uint32_t row_width_bits = stripe_bitoffsets[nstripes - 1] +
                 stripe_bitwidths[nstripes-1];
-            uint32_t in_row_nbytes =
+            uint32_t out_row_nbytes =
                 (row_width_bits >> 3) + ((row_width_bits % 8) > 0);
+
+
+            // ------------------------ handle runs of zeros
+            bool do_rle = row_width_bits == 0 && run_length_nblocks < max_run_nblocks;
+            if (do_rle) {
+                run_length_nblocks++; // TODO uncomment
+
+
+                // invariants:
+                //  -run_length_nblocks fits in our 2B format
+                if (src < last_full_group_start) {
+                    continue; // still enough data to finish group
+                } else { // not enough data to finish group
+                    // write out headers for this block; they're all zero, so
+                    // just increment addr at which to write next time
+                    header_bit_offset += ndims;
+
+                    b++; // we're finishing off this block
+
+                    // write out length of the current constant section
+                    *dest = run_length_nblocks & 0x7f; // bottom 7 bits
+                    dest++;
+                    if (run_length_nblocks > 0x7f) { // need another byte
+                        *(dest-1) |= 0x80; // set MSB of previous byte
+                        *dest = (uint8_t)(run_length_nblocks >> 7);
+                        dest++;
+                    }
+
+                    // write out this const section, and use empty const
+                    // sections to fill up rest of block
+                    for (; b < group_sz_blocks; b++) {
+                        *dest = 0;
+                        dest++;
+                    };
+
+                    // we shouldn't need this write, but makes our invariants
+                    // consistent
+                    run_length_nblocks = 0;
+
+                    goto main_loop_end; // just memcpy remaining data
+                }
+            }
+
+            if (run_length_nblocks > 0) { // just finished a run
+                header_bit_offset += ndims;
+                b++;
+
+                *dest = run_length_nblocks & 0x7f; // bottom 7 bits
+                dest++;
+                if (run_length_nblocks > 0x7f) { // need another byte
+                    *(dest-1) |= 0x80; // set MSB of previous byte
+                    *dest = (uint8_t)(run_length_nblocks >> 7);
+                    dest++;
+                }
+
+                // make it read in last block (which was nonzero) again
+                src += block_sz * ndims;
+                run_length_nblocks = 0;
+                continue;
+            }
 
             // ------------------------ write out header bits for this block
             for (size_t stripe = 0; stripe < nstripes; stripe++) {
@@ -1263,14 +1309,13 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
                 header_bit_offset += nbits_sz_bits * add_ndims;
             }
 
-            // ar::print(stripe_bitwidths, nstripes, "stripe_bitwidths");
-            // printf("row width bits: %d\n", row_width_bits);
+            // ------------------------ write out block data
 
             // zero output so that we can just OR in bits (and also touch each
             // cache line in order to ensure that we prefetch, despite our
             // weird pattern of writes)
             // memset(dest, 0, nstripes * stripe_sz * block_sz);
-            memset(dest, 0, in_row_nbytes * block_sz); // above line can overrun dest buff
+            memset(dest, 0, out_row_nbytes * block_sz); // above line can overrun dest buff
 
             // write out packed data; we iterate thru stripes in reverse order
             // since (nbits % stripe_sz) != 0 will make the last stripe in each
@@ -1284,29 +1329,20 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
                 uint16_t total_bits = nbits + offset_bits;
 
                 int8_t* outptr = dest + offset_bytes;
-                // const uint8_t* inptr = src + (stripe * stripe_sz);
                 const uint8_t* inptr = (const uint8_t*)(deltas +
                     (stripe * stripe_sz));
 
-                // printf("total bits, nbits lost = %d, %d\n", total_bits, nbits_lost);
-                // printf("offset bytes, offset bits, nbits, total_bits = %u, %u, %u, %d\n",
-                //     offset_bytes, offset_bits, nbits, total_bits);
-                // printf("using mask: "); dump_bytes(mask);
-
-                // XXX Note that this impl assumes that output buff is zeroed
                 if (total_bits <= 64) { // always fits in one u64
                     for (int i = 0; i < block_sz; i++) { // for each sample in block
-                        // 8B write to store (at least most of) the data
                         uint64_t data = *(uint64_t*)inptr;
                         uint64_t packed_data = _pext_u64(data, mask);
                         uint64_t write_data = packed_data << offset_bits;
                         *(uint64_t*)outptr = write_data | (*(uint64_t*)outptr);
 
-                        outptr += in_row_nbytes;
+                        outptr += out_row_nbytes;
                         inptr += ndims;
                     }
                 } else { // data spans 9 bytes
-                    // printf(">>> executing the slow path!\n");
                     uint8_t nbits_lost = total_bits - 64;
                     for (int i = 0; i < block_sz; i++) { // for each sample in block
                         uint64_t data = *(uint64_t*)inptr;
@@ -1316,16 +1352,21 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
                         *(uint64_t*)outptr = write_data | (*(uint64_t*)outptr);
                         *(outptr + 8) = extra_byte;
 
-                        outptr += in_row_nbytes;
+                        outptr += out_row_nbytes;
                         inptr += ndims;
                     }
                 }
                 // printf("read back header: "); dumpEndianBits(*(uint32_t*)(header_dest - stripe_header_sz));
             } // for each stripe
             src += block_sz * ndims;
-            dest += block_sz * in_row_nbytes;
+            dest += block_sz * out_row_nbytes;
+
+            run_length_nblocks = 0;
+            b++;
         } // for each block
     } // for each group
+
+main_loop_end:
 
     free(stripe_bitwidths);
     free(stripe_bitoffsets);
@@ -1516,6 +1557,30 @@ int64_t decompress8b_rowmajor_delta_rle(const int8_t* src, uint8_t* dest) {
             uint32_t in_row_nbits = (uint32_t)(stripe_bitoffsets[nstripes - 1] +
                 bitwidths[nstripes - 1]);
             uint32_t in_row_nbytes = (in_row_nbits >> 3) + ((in_row_nbits % 8) > 0);
+
+            // if (in_row_nbits == 0) {
+            //     int8_t low_byte = (int8_t)*src;
+            //     uint8_t high_byte = (uint8_t)*(src + 1);
+            //     high_byte = high_byte & (low_byte >> 7); // 0 if low msb == 0
+            //     uint16_t length = (low_byte & 0x7f) | (((uint16_t)high_byte) << 7);
+
+
+
+
+            //     // SELF: pick up here by porting this pasted code to work with new func
+
+
+
+
+
+            //     memset(dest, prev_val, length * block_sz);
+            //     // src += (low_byte > 0); // encoder can write 0 at end of data
+            //     src++;
+            //     src += (high_byte > 0); // if 0, wasn't used for run length
+            //     dest += length * block_sz;
+            //     continue;
+            // }
+
 
             // ------------------------ unpack data for each stripe
             // for (size_t stripe = 0; stripe < nstripes; stripe++) {

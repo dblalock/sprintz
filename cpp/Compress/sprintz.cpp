@@ -707,7 +707,7 @@ int64_t compress8b_delta_rle(uint8_t* src, size_t len, int8_t* dest,
 
                     // write out this const section, and use empty const
                     // sections to fill up rest of block
-                    for (; b < block_sz; b++) {
+                    for (; b < group_sz_blocks; b++) {
                         nbits_buff[b] = 0;
                         *dest = 0;
                         dest++;
