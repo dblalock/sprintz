@@ -812,7 +812,7 @@ int64_t decompress8b_delta_rle(int8_t* src, uint8_t* dest) {
     // uint64_t orig_len = *(uint64_t*)src;
     uint32_t ngroups = *(uint32_t*)src;
     uint32_t extra_len = *(uint32_t*)(src + 4);
-    uint64_t orig_len = (ngroups * group_sz) + extra_len;
+    uint64_t orig_len = (ngroups * group_sz) + extra_len; // XXX: wat? groups can be of variable length...
     // uint64_t orig_len = *(uint32_t*)src;
 
     // printf("read ngroups, extra_len, orig_len: %d, %d, %lld\n", ngroups, extra_len, orig_len);

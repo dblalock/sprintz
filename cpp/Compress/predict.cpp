@@ -50,6 +50,7 @@ inline int64_t decode_delta_serial(const int8_t* src, uint8_t* dest,
     return len;
 }
 
+// see https://godbolt.org/g/1Q31mK for assembly
 uint32_t encode_xff_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
                              uint16_t ndims, bool write_size)
 {
