@@ -211,10 +211,10 @@ TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][dbg]") {
         printf("---- ndims = %d\n", ndims);
         CAPTURE(ndims);
         auto comp = [ndims](uint8_t* src, size_t len, int8_t* dest) {
-            return compress8b_rowmajor_delta(src, len, dest, ndims);
+            return compress8b_rowmajor_delta_rle(src, len, dest, ndims);
         };
         auto decomp = [](int8_t* src, uint8_t* dest) {
-            return decompress8b_rowmajor_delta(src, dest);
+            return decompress8b_rowmajor_delta_rle(src, dest);
         };
         
         // TEST_SQUARES_INPUT(128, comp, decomp);
@@ -223,5 +223,6 @@ TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][dbg]") {
         // TEST_KNOWN_INPUT(ndims * 16, comp, decomp);
         // TEST_KNOWN_INPUT(ndims * 32, comp, decomp);
         TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
+        // TEST_ZEROS((ndims * 64), comp, decomp);
     }
 }

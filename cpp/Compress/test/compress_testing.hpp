@@ -149,7 +149,7 @@ CAPTURE(output_bytes_as_str);                                         \
 
 #define TEST_ZEROS(SZ, COMP_FUNC, DECOMP_FUNC)                              \
     do {                                                                    \
-        Vec_u8 raw(sz);                                                     \
+        Vec_u8 raw(SZ);                                                     \
         raw.setZero();                                                      \
         TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);                        \
     } while(0);
