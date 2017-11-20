@@ -1108,6 +1108,7 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
     static const int group_sz_blocks = kDefaultGroupSzBlocks;
     static const int length_header_nbytes = 8;
     static const uint16_t max_run_nblocks = 0x7fff; // 15 bit counter
+    // static const uint16_t max_run_nblocks = 2; // TODO rm
     // derived consts
     static const size_t min_data_size = 8 * block_sz * group_sz_blocks;
 
@@ -1206,9 +1207,6 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
                     uint8_t val = src[offset];
                     // printf("%d ", val);
                     int8_t delta = (int8_t)(val - prev_val);
-
-                    // int8_t delta = (int8_t)(val);  // TODO rm
-
                     uint8_t bits = zigzag_encode_i8(delta);
                     mask |= NBITS_MASKS_U8[bits]; // TODO just OR raw vals; no LUT
                     deltas[offset] = bits;
@@ -1255,16 +1253,13 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
             // ------------------------ handle runs of zeros
             bool do_rle = row_width_bits == 0 && run_length_nblocks < max_run_nblocks;
 
-            // do_rle = false; // TODO comment
-
             // printf("row width bits: %d\n", row_width_bits);
 
             if (do_rle) {
+do_rle:
                 run_length_nblocks++; // TODO uncomment
                 src += block_sz * ndims;
 
-                // invariants:
-                //  -run_length_nblocks fits in our 2B format
                 if (src < last_full_group_start) {
                     continue; // still enough data to finish group
                 } else { // not enough data to finish group
@@ -1335,10 +1330,13 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
                     continue;
                 }
 
+                // have to enforce invariant that bitwidth of 0 always gets
+                // run-length encoded; this case can happen when the current
+                // block was zeros, but we hit the limit `max_run_nblocks`
+                if (row_width_bits == 0) { goto do_rle; }
+
                 // printf("row width bits for this nonzero block: %d\n", row_width_bits);
                 // printf("modified header bit offset: %d\n", header_bit_offset);
-
-                // goto skip_write_header; // I'm actually using a goto...
             }
 
             // ------------------------ write out header bits for this block
@@ -1359,8 +1357,6 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
                     ndims % stripe_sz : stripe_sz;
                 header_bit_offset += nbits_sz_bits * add_ndims;
             }
-
-// skip_write_header:
 
             // ------------------------ write out block data
 
@@ -1414,7 +1410,7 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
             src += block_sz * ndims;
             dest += block_sz * out_row_nbytes;
 
-            run_length_nblocks = 0;
+            // run_length_nblocks = 0;
             b++;
         } // for each block
     } // for each group
@@ -1647,6 +1643,9 @@ int64_t decompress8b_rowmajor_delta_rle(const int8_t* src, uint8_t* dest) {
 
                 src++;
                 src += (high_byte > 0); // if 0, wasn't used for run length
+                // if (high_byte > 0) {
+                    // printf("")
+                // }
                 // dest += length * block_sz;
 
                 // printf("about to read src vals: "); dump_bytes(src, ndims);
