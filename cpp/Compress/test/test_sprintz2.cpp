@@ -203,7 +203,7 @@ TEST_CASE("compress8b_rowmajor_delta", "[rowmajor][delta]") {
 TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][dbg]") {
     printf("executing rowmajor delta rle test\n");
 
-    // int ndims = 1;
+    // int ndims = 2;
     // auto ndims_list = ar::range(ndims, ndims + 1);
     auto ndims_list = ar::range(1, 129 + 1);
     for (auto _ndims : ndims_list) {
@@ -226,12 +226,20 @@ TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][dbg]") {
         // TEST_ZEROS(129, comp, decomp);
         // TEST_FUZZ((ndims * 8000), comp, decomp);
         // TEST_FUZZ((40 * 1024 * 1024), comp, decomp);
+        TEST_SPARSE(1024 * 1024 + 13, comp, decomp);
+        // TEST_SPARSE(128, comp, decomp);
+        // TEST_SPARSE(, comp, decomp);
 
-        // auto SZ = 40 * 1024 * 1024;
+        // auto SZ = 1024 * 1024 + 7;
         // srand(123);
+        // // Vec_u8 orig(SZ);
         // Vec_u8 raw(SZ);
         // raw.setRandom();
         // raw /= 254;
+        // // orig.setRandom();
+        // // raw = orig / 254;
+        // TEST_COMPRESSOR(SZ, comp, decomp);
+
         // // Vec_u8 raw(SZ);
         // // for (int i = 0; i < SZ; i++) {
         // //     if ((i / 16) % 2 || (i / 32) % 2) {
@@ -253,11 +261,11 @@ TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][dbg]") {
         // //         TEST_KNOWN_INPUT(sz, COMP_FUNC, DECOMP_FUNC);
         // //     }
         // // }
-        // {
-        //     for (auto sz : sizes) {
-        //         TEST_ZEROS(sz, COMP_FUNC, DECOMP_FUNC);
-        //     }
-        // }
+        // // {
+        // //     for (auto sz : sizes) {
+        // //         TEST_ZEROS(sz, COMP_FUNC, DECOMP_FUNC);
+        // //     }
+        // // }
         // // {
         // //     for (auto sz : sizes) {
         // //         TEST_FUZZ(sz, COMP_FUNC, DECOMP_FUNC);
@@ -266,6 +274,11 @@ TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][dbg]") {
         // // {
         // //     TEST_FUZZ(1024 * 1024 + 7, COMP_FUNC, DECOMP_FUNC);
         // // }
+        // {
+        //     for (auto sz : sizes) {
+        //         TEST_SPARSE(sz, COMP_FUNC, DECOMP_FUNC);
+        //     }
+        // }
 
     }
 }

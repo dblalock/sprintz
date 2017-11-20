@@ -1111,7 +1111,7 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
     // derived consts
     static const size_t min_data_size = 8 * block_sz * group_sz_blocks;
 
-   // const uint8_t* orig_src = src;
+    // const uint8_t* orig_src = src;
     int8_t* orig_dest = dest;
     const uint8_t* src_end = src + len;
 
@@ -1147,6 +1147,7 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
 
     // printf("------------ comp (len = %lld)\n", (int64_t)len);
     // printf("saw original data:\n"); dump_bytes(src, len, ndims);
+    // printf("saw original data:\n"); dump_bytes(src, len, ndims * 2, 4);
     // printf("saw original data:\n"); dump_bytes(src, len, 16);
 
     // ------------------------ temp storage
@@ -1256,6 +1257,8 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
 
             // do_rle = false; // TODO comment
 
+            // printf("row width bits: %d\n", row_width_bits);
+
             if (do_rle) {
                 run_length_nblocks++; // TODO uncomment
                 src += block_sz * ndims;
@@ -1298,10 +1301,9 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
             }
 
             if (run_length_nblocks > 0) { // just finished a run
-                header_bit_offset += ndims;
-                b++;
-
                 // printf("compressing rle block of length %d ending at offset %d\n", run_length_nblocks, (int)(src - orig_src));
+                // printf("initial header bit offset: %d\n", header_bit_offset);
+                b++;
 
                 *dest = run_length_nblocks & 0x7f; // bottom 7 bits
                 // printf("wrote low byte: "); dump_bits(*dest);
@@ -1328,10 +1330,15 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
                 // just feeding the current block through again as part of
                 // the next block; to do this, we need to reset `prev_vals`
                 if (b == group_sz_blocks) {
-                    // printf("resetting prev vals...\n");
+                    // printf("reseting prev vals...\n");
                     memcpy(prev_vals, src - ndims, ndims);
                     continue;
                 }
+
+                // printf("row width bits for this nonzero block: %d\n", row_width_bits);
+                // printf("modified header bit offset: %d\n", header_bit_offset);
+
+                // goto skip_write_header; // I'm actually using a goto...
             }
 
             // ------------------------ write out header bits for this block
@@ -1343,12 +1350,17 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
                 *(uint32_t*)(header_dest + byte_offset) |= \
                     stripe_headers[stripe] << bit_offset;
 
+                // if (ngroups == 3) { printf(" writing stripe width: %d at bit offset %d\n",
+                //     stripe_headers[stripe], header_bit_offset); }
+
                 uint8_t is_final_stripe = stripe == (nstripes - 1);
                 uint8_t has_trailing_dims = (ndims % stripe_sz) > 0;
                 uint8_t add_ndims = is_final_stripe && has_trailing_dims ?
                     ndims % stripe_sz : stripe_sz;
                 header_bit_offset += nbits_sz_bits * add_ndims;
             }
+
+// skip_write_header:
 
             // ------------------------ write out block data
 
@@ -1566,6 +1578,7 @@ int64_t decompress8b_rowmajor_delta_rle(const int8_t* src, uint8_t* dest) {
 
         // // printf("header_tmp:    "); dump_bytes(headers_tmp, nheader_stripes * 8);
         // if (dump_group) { printf("padded headers:"); dump_bytes(headers, nstripes_in_vectors * 8); }
+        // printf("padded headers:"); dump_bytes(headers, nstripes_in_vectors * 8);
 
         // ------------------------ masks and bitwidths for all stripes
         for (size_t v = 0; v < nvectors_in_group; v++) {
@@ -1615,6 +1628,7 @@ int64_t decompress8b_rowmajor_delta_rle(const int8_t* src, uint8_t* dest) {
                 // write out the run
                 if (g > 0 || b > 0) { // if not at very beginning of data
                     const uint8_t* inptr = dest - ndims;
+                    // printf("writing out data: "); dump_bytes(inptr, ndims);
                     for (int i = 0; i < length * block_sz; i++) {
                         // TODO mul by element sz
                         memcpy(dest, inptr, ndims);
@@ -1634,6 +1648,9 @@ int64_t decompress8b_rowmajor_delta_rle(const int8_t* src, uint8_t* dest) {
                 src++;
                 src += (high_byte > 0); // if 0, wasn't used for run length
                 // dest += length * block_sz;
+
+                // printf("about to read src vals: "); dump_bytes(src, ndims);
+                // printf("about to write to dest offset: %d\n", (int)(dest - orig_dest));
 
                 masks += nstripes;
                 bitwidths += nstripes;
@@ -1756,6 +1773,7 @@ int64_t decompress8b_rowmajor_delta_rle(const int8_t* src, uint8_t* dest) {
 
     // size_t dest_sz = dest + remaining_len - orig_dest;
     // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, ndims);
+    // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, ndims * 2, 4);
     // ar::print(orig_dest, dest_sz, "decompressed data");
 
     // printf("reached end of decomp\n");

@@ -128,7 +128,8 @@ inline void dump_bits(T x, bool newline=true) {
 }
 
 template<class T, class CastToT=T> // dumps the raw bytes in memory order
-inline void dump_elements(const T* x, size_t len=1, size_t newline_every=1)
+inline void dump_elements(const T* x, size_t len=1, size_t newline_every=1,
+	int rowmark_every=8)
 {
 	const CastToT* ptr = reinterpret_cast<const CastToT*>(x);
 	// size_t len_elements = len * sizeof(T) / sizeof(CastToT);
@@ -155,23 +156,31 @@ inline void dump_elements(const T* x, size_t len=1, size_t newline_every=1)
 				printf(" | ");
 			}
 		}
+		if (rowmark_every > 0 && write_newline) {
+			size_t row_idx = (i + 1) / newline_every;
+			if (row_idx % rowmark_every == 0) {
+				printf("row    %d\n", (int)row_idx);
+			}
+		}
 	}
 	if (newline_every <= len && ((len_elements % newline_every) != 0)) { printf("\n"); }
 }
 template<class T, class CastToT=T,
 	class _=typename std::enable_if< !std::is_pointer<T>::value >::type >
-inline void dump_elements(T x, size_t newline_every=1) {
-	dump_elements<T, CastToT>(&x, sizeof(x), newline_every);
+inline void dump_elements(T x, size_t newline_every=1, int rowmark_every=8) {
+	dump_elements<T, CastToT>(&x, sizeof(x), newline_every, rowmark_every);
 }
 
 template<class T> // dumps the raw bytes in memory order
-inline void dump_bytes(const T* x, size_t len=1, size_t newline_every=1) {
-	dump_elements<T, uint8_t>(x, len, newline_every);
+inline void dump_bytes(const T* x, size_t len=1, size_t newline_every=1,
+	int rowmark_every=8)
+{
+	dump_elements<T, uint8_t>(x, len, newline_every, rowmark_every);
 }
 
 template<class T, class _=typename std::enable_if< !std::is_pointer<T>::value >::type >
 inline void dump_bytes(T x, size_t newline_every=1) {
-	dump_bytes(&x, sizeof(T), newline_every);
+	dump_bytes(&x, sizeof(T), newline_every, -1);
 }
 
 #ifdef __AVX__

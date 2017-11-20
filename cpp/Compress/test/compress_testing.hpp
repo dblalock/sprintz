@@ -154,6 +154,25 @@ CAPTURE(output_bytes_as_str);                                         \
         TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);                        \
     } while(0);
 
+#define TEST_SPARSE(SZ, COMP_FUNC, DECOMP_FUNC)                             \
+    do {                                                                    \
+    srand(123);                                                             \
+    Vec_u8 orig((SZ));                                                      \
+    Vec_u8 raw((SZ));                                                       \
+    orig.setRandom();                                                       \
+    {                                                                       \
+        raw = orig / 200;                                                   \
+        TEST_COMPRESSOR((SZ), COMP_FUNC, DECOMP_FUNC);                      \
+    }                                                                       \
+    {                                                                       \
+        raw = orig / 250;                                                   \
+        TEST_COMPRESSOR((SZ), COMP_FUNC, DECOMP_FUNC);                      \
+    }                                                                       \
+    {                                                                       \
+        raw = orig / 254;                                                   \
+        TEST_COMPRESSOR((SZ), COMP_FUNC, DECOMP_FUNC);                      \
+    }                                                                       \
+    } while(0);
 
 #define TEST_COMP_DECOMP_PAIR(COMP_FUNC, DECOMP_FUNC)                       \
     do {                                                                    \
@@ -176,6 +195,9 @@ CAPTURE(output_bytes_as_str);                                         \
         }                                                                   \
         SECTION("long fuzz") {                                              \
             TEST_FUZZ(1024 * 1024 + 7, COMP_FUNC, DECOMP_FUNC);             \
+        }                                                                   \
+        SECTION("long sparse fuzz") {                                       \
+            TEST_SPARSE(1024 * 1024 + 7, COMP_FUNC, DECOMP_FUNC);           \
         }                                                                   \
     } while (0);
 
@@ -202,7 +224,9 @@ CAPTURE(output_bytes_as_str);                                         \
         {                                                                   \
             TEST_FUZZ(1024 * 1024 + 7, COMP_FUNC, DECOMP_FUNC);             \
         }                                                                   \
+        {                                                                   \
+            TEST_SPARSE(1024 * 1024 + 7, COMP_FUNC, DECOMP_FUNC);           \
+        }                                                                   \
     } while (0);
-
 
 #endif /* compress_testing_h */
