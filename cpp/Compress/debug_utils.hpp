@@ -190,7 +190,7 @@ template<class CastToT=uint8_t>
 inline void dump_m256i(const __m256i& v, bool newline=true) {
 	for (int i = 0; i < 4; i++) {
 		dump_elements<uint64_t, CastToT>(_mm256_extract_epi64(v, i), -1);
-        std::cout << "  ";
+        std::cout << " | ";
 	}
     if (newline) { std::cout << "\n"; }
 }

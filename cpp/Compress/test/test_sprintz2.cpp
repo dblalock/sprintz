@@ -203,9 +203,11 @@ TEST_CASE("compress8b_rowmajor_delta", "[rowmajor][delta]") {
 TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][dbg]") {
     printf("executing rowmajor delta rle test\n");
 
-    int ndims = 1;
-    auto ndims_list = ar::range(ndims, ndims + 1);
-    // auto ndims_list = ar::range(1, 129 + 1);
+    // int ndims = 64;
+    // int ndims = 17;
+    // auto ndims_list = ar::range(ndims, ndims + 1);
+    auto ndims_list = ar::range(1, 129 + 1);
+    // auto ndims_list = ar::range(64, 129 + 1);
     for (auto _ndims : ndims_list) {
         auto ndims = (uint16_t)_ndims;
         printf("---- ndims = %d\n", ndims);
@@ -224,12 +226,13 @@ TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][dbg]") {
         // TEST_KNOWN_INPUT(ndims * 32, comp, decomp);
         TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
         // TEST_ZEROS(128, comp, decomp);
+        // TEST_ZEROS(4096, comp, decomp);
         // TEST_ZEROS(65535 * 8, comp, decomp);
         // TEST_FUZZ((ndims * 8000), comp, decomp);
-        // TEST_FUZZ((40 * 1024 * 1024), comp, decomp);
+        // TEST_FUZZ((1024 * 1024 + 7), comp, decomp);
         // TEST_SPARSE(1024 * 1024 + 13, comp, decomp);
-        // TEST_SPARSE(128, comp, decomp);
-        // TEST_SPARSE(, comp, decomp);
+        // TEST_SPARSE(512, comp, decomp);
+        // TEST_SPARSE(4096, comp, decomp);
 
         // auto SZ = 1024 * 1024 + 7;
         // srand(123);
