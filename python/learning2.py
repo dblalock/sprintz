@@ -2,6 +2,7 @@
 
 from __future__ import division
 
+import collections
 # import itertools
 import numpy as np
 # from sklearn import linear_model as linear  # for VAR
@@ -10,17 +11,78 @@ import numpy as np
 # from .utils.distance import kmeans, dists_sq
 # from .utils import distance as dist
 
-from python import compress
+# from python import compress
 
 
 # ================================================================ shifts lut
 
-def all_shifts():
+SHIFT_PAIRS_16 = [
+    (7, 1),     # ~0    - .5    = ~-.5
+    (3, 1),     # .125  - .5    = -.375
+    (2, 1),     # .25   - .5    = -.25
+    # (4, 2),     # .0625 - .25   = -.1875
+    (3, 2),     # .125  - .5    = -.125
+    (4, 3),     # .0625 - .125  = -.0625
+    (0, 0),     # 1     - 1     = 0
+    (3, 4),     # .125  - .0625 = .0625
+    (2, 3),     # .25   - .125  - .125
+    (2, 4),     # .25   - .0625 = .1875
+    (1, 2),     # .5    - .25   = .25
+    (1, 3),     # .5    - .125  = .375
+    (0, 1),     # 1     - .5    = .5
+    (0, 2),     # 1     - .25   = .75
+    (0, 3),     # 1     - .125  = .875
+    (0, 4),     # 1     - .0625 = .9375
+    (0, 7),     # 1     - ~0    = ~1
+    ]
+
+
+# should be equivalent to `all_shifts(max_shift=5, omit_duplicates=True)`
+# EDIT: wait, no, not true because we have shifts of 7 at the ends
+SHIFT_PAIRS_26 = [
+    (7, 1),     # ~0    - .5    = ~-.5
+    (5, 1),     # .0625 - .5    = -.46875       # added
+    (4, 1),     # .0625 - .5    = -.4375        # added, max 4
+    (3, 1),     # .125  - .5    = -.375
+    (2, 1),     # .25   - .5    = -.25
+    (5, 2),     # .03125- .25   = -.21875
+    (4, 2),     # .0625 - .25   = -.1875        # added, max 4
+    (3, 2),     # .125  - .25   = -.125
+    (5, 3),     # .03125- .125  = -.09375       # added
+    (4, 3),     # .0625 - .125  = -.0625
+    (5, 4),     # .03125- .0625 = -.03125       # added
+    (0, 0),     # 1     - 1     = 0
+    (4, 5),     # .0625 - .03125= .03125
+    (3, 4),     # .125  - .0625 = .0625
+    (3, 5),     # .125  - .03125= .09375        # added
+    (2, 3),     # .25   - .125  - .125
+    (2, 4),     # .25   - .0625 = .1875
+    (2, 5),     # .25   - .03125= .21875        # added
+    (1, 2),     # .5    - .25   = .25
+    (1, 3),     # .5    - .125  = .375
+    (1, 4),     # .5    - .0625 = .4375         # added, max 4
+    (1, 5),     # .5    - .03125= .46875        # added
+    (0, 1),     # 1     - .5    = .5
+    (0, 2),     # 1     - .25   = .75
+    (0, 3),     # 1     - .125  = .875
+    (0, 4),     # 1     - .0625 = .9375
+    (0, 5),     # 1     - .03125= .96875        # added
+    (0, 7),     # 1     - ~0    = ~1
+    ]
+
+
+def all_shifts(max_shift=-1, omit_duplicates=True):
     vals = {}
     nbits = 8
-    x = 1 << nbits  # reference val
-    for a in range(nbits):
-        for b in range(nbits):
+    x = 1 << nbits  # reference val; 256 for nbits
+    if max_shift < 0:
+        max_shift = nbits - 1
+    if omit_duplicates:
+        vals[(0, 0)] = 0
+    for a in range(max_shift + 1):
+        for b in range(max_shift + 1):
+            if omit_duplicates and a == b:
+                continue
             vals[(a, b)] = (x >> a) - (x >> b)
 
     keys, coeffs = zip(*vals.items())
@@ -33,6 +95,37 @@ def all_shifts():
 
     return keys[order], coeffs[order]
 
+
+# okay, looks like (according to test immediately below) these values are
+# identical to what's in our existing LUT; this makes sense given that impls
+# are basically identical
+def _i16_for_shifts(pos_shift, neg_shift, nbits=8):
+    start_val = 1 << nbits  # 256 for nbits = 8
+    return (start_val >> pos_shift) - (start_val >> neg_shift)
+
+
+# TODO actual unit test
+def _test_shift_coeffs(nbits=8):
+    shifts, shift_coeffs = all_shifts()
+    for (pos_shift, neg_shift), coeff in zip(shifts, shift_coeffs):
+        assert _i16_for_shifts(pos_shift, neg_shift) == coeff
+
+        for val in range(-128, 128):
+            two_shifts_val = (val >> pos_shift) - (val >> neg_shift)
+            # ya, this fails; multiply and rshift != using shifts directly
+            # assert (val * coeff) >> nbits == two_shifts_val
+
+            # this way works; requires two multiplies though...
+            pos_coef = 1 << (nbits - pos_shift)
+            neg_coef = 1 << (nbits - neg_shift)
+            pos = (val * pos_coef) >> nbits
+            neg = (val * neg_coef) >> nbits
+            assert pos - neg == two_shifts_val
+
+            # this way also fails
+            # pos = val * pos_coef
+            # neg = val * neg_coef
+            # assert (pos - neg) >> nbits == two_shifts_val
 
 # def coeff_lut():
 #     """create lookup table `T` such that `T[coeff]` yields the two indices
@@ -64,25 +157,46 @@ def binary_search(array, val):
 
 class OnlineRegressor(object):
 
-    def __init__(self, block_sz=8, verbose=0):
+    def __init__(self, block_sz=8, verbose=0, method='linreg',
+                 shifts=SHIFTS, shift_coeffs=SHIFT_COEFFS, numbits=8):
         # self.prev0 = 0
         # self.prev1 = 0
         # self.mod = 1 << nbits
         # self.shift0 = 0
         # self.shift1 = 1
         self.block_sz = block_sz
+        self.verbose = verbose
+        self.method = method
+        self.shifts = shifts
+        self.shift_coeffs = shift_coeffs
+        self.numbits = numbits
+
         self.last_val = 0
         self.last_delta = 0
-        self.verbose = verbose
+        self.coef = 0
+        self.counter = 0
+        self.t = 0
+
+        # self.approx_256_over_x = 1
+
+        self.Sxy = 0
+        self.Sxx = 0
+
+        # print "using shifts, coeffs:"
+        # print shifts
+        # print shift_coeffs
 
         # for logging
-        self.best_idx_offset_counts = np.zeros(3, dtype=np.int64)
-        self.best_idx_counts = np.zeros(len(SHIFTS), dtype=np.int64)
+        # self.best_idx_offset_counts = np.zeros(3, dtype=np.int64)
+        self.best_idx_counts = np.zeros(len(self.shifts), dtype=np.int64)
+        # counts_len = len(self.shifts) if method == 'linreg' else 512
+        # self.best_idx_counts = np.zeros(counts_len, dtype=np.int64)
+        self.best_coef_counts = collections.Counter()
 
     def feed_group(self, group):
         pass  # TODO determine optimal filter here
 
-        # errhat = a*x0 - b*x0 - a*x1 - b*x1
+        # errhat = a*x0 - b*x0 - a*x1 + b*x1
         #   = a(x0 - x1) + b(x1 - x0)
         #   = c(x0 - x1), where c = (a - b)
         #
@@ -104,52 +218,213 @@ class OnlineRegressor(object):
         diffs[0] = self.last_delta
         self.last_delta = deltas[-1]
 
-        # linear regression
         x = diffs
         y = deltas
-        Sxy = np.sum(x * y)
-        Sxx = np.sum(x * x)
-        # print "x, y dtypes: ", x.dtype, y.dtype
-        # print "Sxx, Sxy dtypes: ", Sxx.dtype, Sxy.dtype
-        coeff = (Sxy << 8) / Sxx  # shift to mirror what we'll need to do in C
 
-        idx = binary_search(SHIFT_COEFFS, coeff)
+        # linear regression
+        if self.method == 'linreg':
 
-        def compute_errs(x, y, shifts):
-            predictions = (x >> shifts[0]) - (x >> shifts[1])
-            return y - predictions
+            Sxy = np.sum(x * y)
+            Sxx = np.sum(x * x)
+            # print "x, y dtypes: ", x.dtype, y.dtype
+            # print "Sxx, Sxy dtypes: ", Sxx.dtype, Sxy.dtype
+            coeff = (Sxy << 8) / Sxx  # shift to mirror what we'll need to do in C
 
-        def compute_total_cost(errs, block_sz=self.block_sz):
-            raw_costs = compress.nbits_cost(errs)
-            block_costs_rows = raw_costs.reshape(-1, block_sz)
-            block_costs = np.max(block_costs_rows, axis=1)
-            return np.sum(block_costs)
+            idx = binary_search(self.shift_coeffs, coeff)
 
-        best_idx_offset = 0
-        errs = compute_errs(x, y, SHIFTS[idx])
-        ret = errs
+            def compute_errs(x, y, shifts):
+                predictions = (x >> shifts[0]) - (x >> shifts[1])
+                return y - predictions
 
-        # These are commented out because, empirically, they're *never* chosen
-        #
-        # cost = compute_total_cost(errs)
-        # if idx > 0:
-        #     errs2 = compute_errs(x, y, SHIFTS[idx - 1])
-        #     cost2 = compute_total_cost(errs)
-        #     if cost2 < cost:
-        #         ret = errs2
-        #         best_idx_offset = -1
-        # if idx < (len(SHIFTS) - 1):
-        #     errs3 = compute_errs(x, y, SHIFTS[idx + 1])
-        #     cost3 = compute_total_cost(errs)
-        #     if cost3 < cost:
-        #         ret = errs3
-        #         best_idx_offset = 1
+            # These are commented out because, empirically, they're
+            # *never* chosen
+            #
+            # best_idx_offset = 0
+            #
+            # def compute_total_cost(errs, block_sz=self.block_sz):
+            #     raw_costs = compress.nbits_cost(errs)
+            #     block_costs_rows = raw_costs.reshape(-1, block_sz)
+            #     block_costs = np.max(block_costs_rows, axis=1)
+            #     return np.sum(block_costs)
+            #
+            # cost = compute_total_cost(errs)
+            # if idx > 0:
+            #     errs2 = compute_errs(x, y, SHIFTS[idx - 1])
+            #     cost2 = compute_total_cost(errs)
+            #     if cost2 < cost:
+            #         ret = errs2
+            #         best_idx_offset = -1
+            # if idx < (len(SHIFTS) - 1):
+            #     errs3 = compute_errs(x, y, SHIFTS[idx + 1])
+            #     cost3 = compute_total_cost(errs)
+            #     if cost3 < cost:
+            #         ret = errs3
+            #         best_idx_offset = 1
+            # self.best_idx_offset_counts[best_idx_offset] += 1
 
-        # for logging
-        self.best_idx_offset_counts[best_idx_offset] += 1
-        self.best_idx_counts[idx + best_idx_offset] += 1
+            errs = compute_errs(x, y, self.shifts[idx])
 
-        return ret
+            self.best_idx_counts[idx] += 1  # for logging
+
+        elif self.method == 'gradient':
+            # update coeffs using last entry in each block
+
+            learning_rate_shift = 7  # learning rate of 2^(-learning_rate_shift)
+            # learning_rate_shift = 4  # learning rate of 2^(-learning_rate_shift)
+
+            # if self.t == 0:
+            #     x0 = x[1:]  # initial delta is raw value, which wrecks things
+            #     y0 = y[1:]
+            #     Sxy = np.sum(x0 * y0)
+            #     Sxx = np.sum(x0 * x0)
+            #     # print "x, y dtypes: ", x.dtype, y.dtype
+            #     # print "Sxx, Sxy dtypes: ", Sxx.dtype, Sxy.dtype
+            #     self.coef = int((Sxy << 8) / Sxx)  # shift to mirror what we'll need to do in C
+            #     self.counter = self.coef << learning_rate_shift
+
+            #     print "initial coeff, counter = ", self.coef, self.counter
+
+            # let counter = 48 (for example)
+            # for each delta: // 2 instructions
+            #     val = counter >> 2
+            #     counter += delta
+            #     <do stuff with val>
+
+            if self.numbits <= 8:
+                predictions = (x * self.coef) >> self.numbits
+            else:
+                predictions = ((x >> 8) * self.coef)
+            errs = y - predictions
+
+            # only update based on a few values for efficiency
+            start_idx = 0 if self.t > 0 else 8
+            # approx_256_over_x = 4
+            for idx in np.arange(start_idx, len(x), 8):
+                xval = x[idx]
+                # xval = x[idx] >> (self.numbits - 8)
+                # grad = int(-errs[idx] * x[idx]) >> 8
+                # grad = int(-errs[idx] * x[idx]) // 256
+                # grad = int(-(errs[idx] << 8) / xval) if xval != 0 else 0  # works great
+                # y0 = np.abs(self.approx_256_over_x) * np.sign(xval)
+                # y0 = 1 + (256 - xval) >> 8
+                # y0 = 3 - ((3 * xval) >> 8)
+
+                xabs = np.abs(xval)
+                if xabs == 0:
+                    lzcnt = self.numbits
+                # elif xval == 1:
+                #     lzcnt = self.numbits - 1
+                else:
+                    lzcnt = self.numbits - 1 - int(np.log2(xabs))
+                lzcnt = max(0, lzcnt - 1)  # round up to nearest power of 2
+
+                # numerator = 1 << self.numbits
+                # recip = 1 << (lzcnt - 8) if lzcnt >= 8 else
+                shift_amount = lzcnt + 8
+                recip = np.sign(xval) << shift_amount
+                grad = int(-errs[idx] * recip)
+
+                # # approximation of what we'd end up doing with a LUT
+                # shift_to_just_4b = self.numbits - 4
+                # # y0 = ((xval >> shift_to_just_4b) + 1) << shift_to_just_4b
+                # shifted_xval = xval >> shift_to_just_4b
+                # if shifted_xval != 0:
+                #     y0 = int(256. / shifted_xval) << shift_to_just_4b
+                # else:
+                #     y0 = 16*np.sign(xval) << shift_to_just_4b
+                # # y0 = y0 * int(2 - (xval * y0 / 256))  # diverges
+                # y0 = int(256. / xval) if xval else 0
+
+                # y0 = (1 << int(8 - np.floor(np.log2(xval)))) * np.sign(xval)
+                # y0 = 4 * np.sign(xval)
+                # self.approx_256_over_x = int( y0*(2 - (int(xval*y0) >> 8)) ) # noqa # doesn't work
+                # grad = int(-errs[idx] * self.approx_256_over_x)
+                # grad = int(-errs[idx] * y0)
+                # grad = int(-errs[idx] * xval) # works
+                # grad = int(-errs[idx] * 2*np.sign(xval))
+                # this_best_coef = self.coef - grad
+                # self.counter += this_best_coef - self.coef
+                self.counter -= grad  # equivalent to above two lines
+                if self.t < 8:
+                    print "grad: ", grad
+            # self.coef = self.counter >> min(self.t, learning_rate_shift)
+            self.coef = self.counter >> learning_rate_shift
+            self.coef = np.clip(self.coef, -256, 256)  # apparently important
+
+            if self.t < 8:
+                print "errs[:10]:   ", errs[:16]
+                print "-grads[:10]: ", errs[:16] * x[:16]
+                print "new coeff, counter = ", self.coef, self.counter
+                print "-----"
+
+            # self.best_idx_counts[self.coef] += 1  # for logging
+            self.best_coef_counts[self.coef] += 1
+
+        elif self.method == 'exact':
+
+            # print "using exact method"
+
+            if self.numbits <= 8:
+                predictions = (x * self.coef) >> self.numbits
+            else:
+                predictions = ((x >> 8) * self.coef)
+            errs = y - predictions
+
+            learn_shift = 6
+            # shift = learn_shift + 2*self.numbits - 8
+            shift = learn_shift
+
+            # only update based on a few values for efficiency
+            start_idx = 0 if self.t > 0 else 8
+            for idx in np.arange(start_idx, len(x), 8):
+                # xval = x[idx]  # >> (self.numbits - 8)
+                # yval = y[idx]  # >> (self.numbits - 8)
+                xval = x[idx] >> (self.numbits - 8)
+                yval = y[idx] >> (self.numbits - 8)
+
+                # # this way works just like global one, or maybe better
+                # self.Sxx += xval * xval
+                # self.Sxy += xval * yval
+
+                # moving average way; seemingly works just as well
+                # Exx = self.Sxx >> learn_shift
+                # Exy = self.Sxy >> learn_shift
+                Exy = self.Sxy >> shift
+                Exx = self.Sxx >> shift
+                # adjust_shift = 2 *
+                diff_xx = (xval * xval) - Exx
+                diff_xy = (xval * yval) - Exy
+                self.Sxx += diff_xx
+                self.Sxy += diff_xy
+
+            # if min(self.Sxy, self.Sxx) >= 1024:
+            #     self.Sxx /= 2
+            #     self.Sxy /= 2
+
+            Exy = self.Sxy >> shift
+            Exx = self.Sxx >> shift
+            self.coef = int((Exy << 8) / Exx)  # works really well
+
+            # none of this really works
+
+            # # print "Exy, Exx = ", Exy, Exx
+            # print "xval, yval: ", xval, yval
+            # print "diff_xx, diff_xy, Exy, Exx = ", diff_xx, diff_xy, Exy, Exx
+
+            # # numerator = 1 << (2 * self.numbits)
+            # numerator = 256
+            # nbits = int(min(4, np.log2(Exx))) if Exx > 1 else 1
+            # assert numerator >= np.abs(Exx)
+            # # print "nbits: ", nbits
+            # recip = int((numerator >> nbits) / (Exx >> nbits)) << nbits
+            # # recip = recip >> (2 * self.numbits - 8)
+            # print "numerator, recip: ", numerator, recip
+            # self.coef = int(Exy * recip)
+
+            self.best_coef_counts[self.coef] += 1
+
+        self.t += 1
+        return errs
 
 # while (first <= last) {
 #    if (array[middle] < search)
@@ -176,14 +451,30 @@ class OnlineRegressor(object):
         return delta - prediction
 
 
-def sub_online_regress(blocks, verbose=2, group_sz_blocks=8):
+def sub_online_regress(blocks, verbose=2, group_sz_blocks=8, max_shift=4,
+                       only_16_shifts=True, method='linreg', numbits=8, **sink):
     blocks = blocks.astype(np.int32)
-    encoder = OnlineRegressor(block_sz=blocks.shape[1], verbose=verbose)
+    if only_16_shifts:
+        shifts = SHIFT_PAIRS_16
+        shift_coeffs = [_i16_for_shifts(*pair) for pair in shifts]
+    else:
+        shifts, shift_coeffs = all_shifts(max_shift=max_shift)
+    encoder = OnlineRegressor(block_sz=blocks.shape[1], verbose=verbose,
+                              shifts=shifts, shift_coeffs=shift_coeffs,
+                              method=method, numbits=numbits)
+
+    # print "using group_sz_blocks: ", group_sz_blocks
+    # print "using method: ", method
+    # print "using nbits: ", numbits
+
     out = np.empty(blocks.shape, dtype=np.int32)
+    if group_sz_blocks < 1:
+        group_sz_blocks = len(blocks)  # global model
+
     ngroups = int(len(blocks) / group_sz_blocks)
     for g in range(ngroups):
-        if verbose and (g > 0) and (g % 100 == 0):
-            print "running on block ", g
+        # if verbose and (g > 0) and (g % 100 == 0):
+        #     print "running on block ", g
         start_idx = g * group_sz_blocks
         end_idx = start_idx + group_sz_blocks
         group = blocks[start_idx:end_idx]
@@ -192,10 +483,17 @@ def sub_online_regress(blocks, verbose=2, group_sz_blocks=8):
     out[end_idx:] = blocks[end_idx:]
 
     if verbose > 1:
-        # former is whether we should use binary search result or index
-        # immediately before or after it
-        print " best idx offset counts: ", encoder.best_idx_offset_counts
-        print " best idx counts: ", encoder.best_idx_counts
+        if method == 'linreg':
+            if group_sz_blocks != len(blocks):
+                import hipsterplot as hp  # pip install hipsterplot
+                # hp.plot(x_vals=encoder.shift_coeffs, y_vals=encoder.best_idx_counts,
+                hp.plot(encoder.best_idx_counts,
+                        num_x_chars=len(encoder.shift_coeffs), num_y_chars=12)
+        else:
+            coeffs_counts = np.array(encoder.best_coef_counts.most_common())
+            print "min, max coeff: {}, {}".format(
+                coeffs_counts[:, 0].min(), coeffs_counts[:, 0].max())
+            print "most common (coeff, counts):\n", coeffs_counts[:16]
 
     return out
 
@@ -205,13 +503,18 @@ def sub_online_regress(blocks, verbose=2, group_sz_blocks=8):
 def main():
     np.set_printoptions(formatter={'float': lambda x: '{:.3f}'.format(x)})
 
-    # print "all shifts:\n", all_shifts()
+    print "all shifts:\n", all_shifts()
+    _test_shift_coeffs()
+
+    # print "shifts_16, coeffs"
+    # print SHIFT_PAIRS_16
+    # print [_i16_for_shifts(*pair) for pair in SHIFT_PAIRS_16]
 
     # x = np.array([5], dtype=np.int32)
     # print "shifting x left: ", x << 5
 
-    blocks = np.arange(8 * 64, dtype=np.int32).reshape(-1, 8)
-    sub_online_regress(blocks)
+    # blocks = np.arange(8 * 64, dtype=np.int32).reshape(-1, 8)
+    # sub_online_regress(blocks)
 
 
 if __name__ == '__main__':

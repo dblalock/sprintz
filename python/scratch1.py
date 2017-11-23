@@ -787,7 +787,7 @@ def name_transforms(transforms):
 
 
 def apply_transforms(X, blocks, transform_names, k=-1, side=None,
-                     chunk_sz=-1, **kwargs):
+                     chunk_sz=-1, numbits=8, **kwargs):
     # diffs_is_cheating=True, k=-1, **nn_kwargs):
 
     # if diffs_is_cheating:
@@ -909,7 +909,19 @@ def apply_transforms(X, blocks, transform_names, k=-1, side=None,
             offsetBlocks = sort_transform(offsetBlocks)
 
         if name == 'online_regress':
-            offsetBlocks = learning2.sub_online_regress(offsetBlocks)
+            offsetBlocks = learning2.sub_online_regress(offsetBlocks, **kwargs)
+
+        if name == 'global_regress':
+            offsetBlocks = learning2.sub_online_regress(
+                offsetBlocks, group_sz_blocks=-1, numbits=numbits, **kwargs)
+
+        if name == 'online_gd':
+            offsetBlocks = learning2.sub_online_regress(
+                offsetBlocks, method='gradient', numbits=numbits, **kwargs)
+
+        if name == 'online_linreg':
+            offsetBlocks = learning2.sub_online_regress(
+                offsetBlocks, method='exact', numbits=numbits, **kwargs)
 
         transform_names = transform_names[1:]  # pop first transform
 
@@ -932,7 +944,7 @@ def apply_transforms(X, blocks, transform_names, k=-1, side=None,
 
 
 def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
-    prefix_nbits=None, **transform_kwargs):
+              prefix_nbits=None, **transform_kwargs):
 
     plot_sort = False  # plot distros of idxs into vals sorted by rel freq
     plot_mixfix = False  # plot distros of codes after mixfix encoding
@@ -954,6 +966,7 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     X = quantize(d.X, numbits, keep_nrows=n)
     blocks = convert_to_blocks(X)
 
+    transform_kwargs.update({'numbits': numbits})
     offsetBlocksLeft, errs_left = apply_transforms(
         X, blocks, left_transforms, side='left', **transform_kwargs)
     offsetBlocksRight, errs_right = apply_transforms(
@@ -1266,8 +1279,10 @@ def main():
 
     # left_transforms = None
     # left_transforms = 'sub_mean'
-    left_transforms = 'delta'
     # left_transforms = 'dyn_filt'
+    # left_transforms = 'delta'
+    # left_transforms = 'online_regress'
+    left_transforms = 'global_regress'
     # left_transforms = 'VAR'
     # left_transforms = ['delta', 'blocklen=4']
     # left_transforms = 'dyn_delta'
@@ -1285,7 +1300,10 @@ def main():
     # right_transforms = '1.5_delta'  # sub half of prev delta from each delta
     # right_transforms = 'dyn_delta'  # pick single or double delta for each block
     # right_transforms = 'dyn_filt'
-    right_transforms = 'online_regress'
+    # right_transforms = 'online_regress'
+    # right_transforms = 'global_regress'
+    right_transforms = 'online_gd'
+    # right_transforms = 'online_linreg'
     # right_transforms = 'VAR'
     # right_transforms = 'hash'
     # right_transforms = ['delta', 'blocklen=32']
@@ -1387,12 +1405,13 @@ def main():
 
     # n = 8
     # n = 32
-    n = 100
+    # n = 100
+    n = 200
 
     # chunk_sz = -1
     # chunk_sz = 8
-    chunk_sz = 16
-    # chunk_sz = 64
+    # chunk_sz = 16
+    chunk_sz = 64
     # chunk_sz = 256
 
     save = True
@@ -1516,7 +1535,6 @@ def main():
     # for d in list(dsets)[20:21]: # ItalyPowerDemand
     # for d in list(dsets)[12:13]:  # ECGFiveDays
     # for d in list(dsets)[:4]:
-    # for d in list(dsets)[1:2]:  # adiac
     # for d in list(dsets)[4:5]:  # ChlorineConcentration
     # for d in list(dsets)[23:24]:  # MALLAT
     # for d in list(dsets)[:23]:
@@ -1524,8 +1542,11 @@ def main():
     # for d in list(dsets)[:5]:
     # for d in dsets:
     # for d in list(dsets)[31:]:
-    for d in list(dsets)[:31]:
+    # for d in list(dsets)[1:2]:  # adiac
+    # for d in list(dsets)[:31]:
+    for d in list(dsets)[:1]: # 50words
         print "------------------------ {}".format(d.name)
+        # continue # TODO rm
         plot_dset(d, numbits=numbits, n=n,
                   left_transforms=left_transforms,
                   right_transforms=right_transforms,

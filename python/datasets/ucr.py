@@ -42,17 +42,17 @@ SHORT_UCR_DATASETS = [  # as determined by instance length, not number thereof
 # ================================================================
 
 def allUCRDatasets():
-    for dataDir in allUCRDatasetDirs():
+    for dataDir in sorted(allUCRDatasetDirs()):
         yield UCRDataset(dataDir, sep=',')
 
 
 def origUCRDatasets():
-    for dataDir in origUCRDatasetDirs():
+    for dataDir in sorted(origUCRDatasetDirs()):
         yield UCRDataset(dataDir)
 
 
 def smallUCRDatasets():
-    for dataDir in smallUCRDatasetDirs():
+    for dataDir in sorted(smallUCRDatasetDirs()):
         yield UCRDataset(dataDir)
 
 

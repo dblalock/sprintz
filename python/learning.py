@@ -508,7 +508,7 @@ def sub_online_kmeans(blocks, k=16, verbose=1, **kwargs):
 # ================================================================ Vector AR
 
 # def var_transform(blocks, ntaps=4, chunk_sz=-1):
-def var_transform(blocks, ntaps=2, chunk_sz=-1):
+def var_transform(blocks, ntaps=4, chunk_sz=-1):
     x = blocks.ravel()
     windows = window.sliding_window_1D(x, ntaps)
     y = windows[1:, -1]  # last col (which is next val), except from first row
@@ -539,7 +539,7 @@ def var_transform(blocks, ntaps=2, chunk_sz=-1):
 
         out[(start_idx + ntaps):(end_idx + ntaps)] = errs
 
-        print "linreg coeffs, intercept: {}, {:.3f}".format(est.coef_, est.intercept_)
+        # print "linreg coeffs, intercept: {}, {:.3f}".format(est.coef_, est.intercept_)
 
     # print "blocks shape: ", blocks.shape
     # print "windows shape: ", windows.shape
