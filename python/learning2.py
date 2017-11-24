@@ -173,15 +173,21 @@ class OnlineRegressor(object):
 
         self.last_val = 0
         self.last_delta = 0
-        self.coef = 0
+        # self.coef = 0
+        self.coef = 256
         self.counter = 0
+        # self.counter = self.coef
         self.t = 0
         self.grad_counter = 0
+        self.offset = 0
+        self.offset_counter = 0
 
         # self.approx_256_over_x = 1
 
         self.Sxy = 0
         self.Sxx = 0
+
+        self.errs = []
 
         # print "using shifts, coeffs:"
         # print shifts
@@ -193,6 +199,7 @@ class OnlineRegressor(object):
         # counts_len = len(self.shifts) if method == 'linreg' else 512
         # self.best_idx_counts = np.zeros(counts_len, dtype=np.int64)
         self.best_coef_counts = collections.Counter()
+        self.best_offset_counts = collections.Counter()
 
     def feed_group(self, group):
         pass  # TODO determine optimal filter here
@@ -294,14 +301,16 @@ class OnlineRegressor(object):
             #     counter += delta
             #     <do stuff with val>
 
-            if self.numbits <= 8:
-                predictions = (x * self.coef) >> self.numbits
-            else:
-                # predictions = ((x >> 8) * self.coef)
-                predictions = (x * self.coef) >> 8
-                # predictions = (x * 256) >> 8
-                # predictions = x  # TODO rm
-                # predictions = np.zeros_like(x)  # TODO rm
+            # if self.numbits <= 8:
+            #     predictions = (x * self.coef) >> self.numbits
+            # else:
+            #     # predictions = ((x >> 8) * self.coef)
+            #     predictions = (x * self.coef) >> 8
+            #     # predictions = (x * 256) >> 8
+            #     # predictions = x  # TODO rm
+            #     # predictions = np.zeros_like(x)  # TODO rm
+            predictions = (x * self.coef) >> int(min(self.numbits, 8))
+            predictions += self.offset
             errs = y - predictions
 
             # only update based on a few values for efficiency
@@ -309,6 +318,7 @@ class OnlineRegressor(object):
             # which_idxs = np.arange(start_idx, len(x), 8)
             which_idxs = np.arange(start_idx, len(x))
             grads = 0
+            # offsets = 0
             for idx in which_idxs:
                 xval = x[idx]
                 # xval = x[idx] >> (self.numbits - 8)
@@ -346,10 +356,28 @@ class OnlineRegressor(object):
 
                 # approx newton step for log(nbits)
                 err = errs[idx]
-                grad = int(-(1 + err)) if err > 0 else int(-(err - 1))
-
+                # if False:  # TODO rm
+                # if self.numbits > 8:
+                #     grad = int(-(1 + err)) if err > 0 else int(-(err - 1))
+                # else:
+                #     grad = int(-err)  # don't add 1
                 # self.grad_counter += (grad - (self.grad_counter >> 8))
+
+                # wtf this works so well for 16b, despite ignoring sign of x...
+                # (when also only shifting counter by learning rate, not
+                # an additional 8)
+                # grad = -err
+
+                # grad = -(err + np.sign(err)) * np.sign(xval)
+                # grad = -err * np.sign(xval)
+                grad = -err * np.sign(xval)
+                grad = -np.sign(err) * xval
+
                 grads += grad
+
+                self.errs.append(err)
+
+                # offsets += np.sign(err)  # optimize bias for l1 loss
 
                 # this is the other one we should actually consider doing
                 #
@@ -387,6 +415,7 @@ class OnlineRegressor(object):
 
             learning_rate_shift = 1
             grad_learning_shift = 1
+            # offset_learning_shift = 4
 
             # compute average gradient for batch
             # grad = int(4 * grads / len(which_idxs))  # div by 16
@@ -394,13 +423,24 @@ class OnlineRegressor(object):
             self.counter -= grad
             self.grad_counter += grad - (self.grad_counter >> grad_learning_shift)
 
-            # self.coef = self.counter >> (learning_rate_shift + (self.numbits - 8))
+            self.coef = self.counter >> (learning_rate_shift + (self.numbits - 8))
+            # self.coef = self.counter >> learning_rate_shift
             # self.coef -= (self.grad_counter >> grad_learning_shift) >> learning_rate_shift
-            learn_shift = int(min(learning_rate_shift, np.log2(self.t + 1)))
+            # learn_shift = int(min(learning_rate_shift, np.log2(self.t + 1)))
             # self.coef = self.counter >> (learn_shift + (self.numbits - 8))
-            self.coef = self.counter >> learn_shift  # for use with l1 loss
+            # self.coef = self.counter >> learn_shift  # for use with l1 loss
             # self.coef -= (self.grad_counter >> grad_learning_shift) >> learn_shift
             # self.coef = 192  # global soln for olive oil
+
+            # quantize coeff by rounding to nearest 16; this seems to help
+            # quite a bit, at least for stuff that really should be double
+            # delta coded (starlight curves, presumably timestamps)
+            self.coef = ((self.coef + 8) >> 4) << 4
+
+            # offset = int(offsets / len(which_idxs))  # div by 64
+            # self.offset_counter += offset
+            # # self.offset = self.offset_counter >> offset_learning_shift
+            # self.offset = 0  # offset doesn't seem to help at all
 
             # self.coef = 0  # why are estimates biased? TODO rm
             # self.coef = 256
@@ -412,6 +452,7 @@ class OnlineRegressor(object):
             # if self.t < 8:
             # if self.t % 100 == 0:
             #     print "----- t = {}".format(self.t)
+            #     print "offset, offset counter: ", self.offset, self.offset_counter
             #     # print "grad, grads sum:   ", grad, grads
             #     # print "learn shift: ", learn_shift
             #     # print "errs[:10]:        ", errs[:16]
@@ -422,6 +463,9 @@ class OnlineRegressor(object):
 
             # self.best_idx_counts[self.coef] += 1  # for logging
             self.best_coef_counts[self.coef] += 1
+            self.best_offset_counts[self.offset] += 1
+
+            # errs -= self.offset  # do this at the end to not mess up training
 
         elif self.method == 'exact':
 
@@ -502,21 +546,11 @@ class OnlineRegressor(object):
 #    middle = (first + last)/2;
 # }
 
-    def feed_val(self, val):
-        delta = (val - self.prev0) % self.mod  # always delta code
-        # diff = self.prev0 - self.prev1  # TODO just delta from prev time step
-        prediction = (self.diff >> self.shift0) - (self.diff >> self.shift1)
-        # add0 = (self.prev0 >> self.shift0) - (self.prev0 >> self.shift1)
-        # add1 = (self.prev1 >> self.shift1) - (self.prev1 >> self.shift0)
-        self.diff = delta
-        self.prev1 = self.prev0
-        self.prev0 = val
-        return delta - prediction
-
 
 def sub_online_regress(blocks, verbose=2, group_sz_blocks=8, max_shift=4,
                        only_16_shifts=True, method='linreg', numbits=8,
-                       drop_first_half=True, **sink):
+                       drop_first_half=False, **sink):
+                       # drop_first_half=True, **sink):
     blocks = blocks.astype(np.int32)
     if only_16_shifts:
         shifts = SHIFT_PAIRS_16
@@ -562,6 +596,12 @@ def sub_online_regress(blocks, verbose=2, group_sz_blocks=8, max_shift=4,
             print "min, max coeff: {}, {}".format(
                 coeffs_counts[:, 0].min(), coeffs_counts[:, 0].max())
             print "most common (coeff, counts):\n", coeffs_counts[:16]
+            # bias_counts = np.array(encoder.best_offset_counts.most_common())
+            # print "most common (bias, counts):\n", bias_counts[:16]
+
+            errs = np.array(encoder.errs)
+            print "raw err mean, median, std, >0 frac: {}, {}, {}, {}".format(
+                errs.mean(), np.median(errs), errs.std(), np.mean(errs > 0))
 
     if drop_first_half and method == 'gradient':
         keep_idx = len(out) // 2

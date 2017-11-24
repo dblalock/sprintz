@@ -1264,7 +1264,7 @@ def main():
 
     # dsets = ds.smallUCRDatasets()
 
-    # dset = list(dsets)[2]
+    # dset = dslist[2]
     # X = dset.X
 
     # print "learning dict seq for dataset: ", dset.name
@@ -1280,9 +1280,9 @@ def main():
     # left_transforms = None
     # left_transforms = 'sub_mean'
     # left_transforms = 'dyn_filt'
-    # left_transforms = 'delta'
+    left_transforms = 'delta'
     # left_transforms = 'online_regress'
-    left_transforms = 'global_regress'
+    # left_transforms = 'global_regress'
     # left_transforms = 'VAR'
     # left_transforms = ['delta', 'blocklen=4']
     # left_transforms = 'dyn_delta'
@@ -1470,11 +1470,11 @@ def main():
             subdir += '_blocksz={}'.format(block_sz)
         subdir += '_k={}'.format(k)
 
-        # for d in list(dsets)[26:27]:  # olive oil
-        # for d in list(dsets)[:5]:
-        # for d in list(dsets)[0:1]:
-        # for d in list(dsets):
-        for d in list(dsets)[7:15]:
+        # for d in dslist[26:27]:  # olive oil
+        # for d in dslist[:5]:
+        # for d in dslist[0:1]:
+        # for d in dslist:
+        for d in dslist[7:15]:
             data = d.X
             # print "X.shape", X.shape
             data = quantize(data, numbits, keep_nrows=n)
@@ -1529,27 +1529,29 @@ def main():
         # plt.show()
         return
 
+    dslist = list(dsets)
     # for d in dsets:
-    # for d in list(dsets)[4:8]:
-    # for d in list(dsets)[26:29]:
-    # for d in list(dsets)[20:21]: # ItalyPowerDemand
-    # for d in list(dsets)[12:13]:  # ECGFiveDays
-    # for d in list(dsets)[:4]:
-    # for d in list(dsets)[4:5]:  # ChlorineConcentration
-    # for d in list(dsets)[23:24]:  # MALLAT
-    # for d in list(dsets)[:23]:
-    # for d in list(dsets)[6:23]:
-    # for d in list(dsets)[:5]:
+    # for d in dslist[4:8]:
+    # for d in dslist[26:29]:
+    # for d in dslist[20:21]: # ItalyPowerDemand
+    # for d in dslist[12:13]:  # ECGFiveDays
+    # for d in dslist[:4]:
+    # for d in dslist[4:5]:  # ChlorineConcentration
+    # for d in dslist[23:24]:  # MALLAT
+    # for d in dslist[:23]:
+    # for d in dslist[6:23]:
+    # for d in dslist[:5]:
     # for d in dsets:
-    # for d in list(dsets)[31:]:
-    # for d in list(dsets)[1:2]:  # adiac
-    # for d in list(dsets)[:1]: # 50words
-    # for d in list(dsets)[26:27]:  # OSULeaf
-    # for d in list(dsets)[27:28]:  # Olive Oil
-    # for d in list(dsets)[30:31]:  # starlight curves
-    # dslist = list(dsets)
+    # for d in dslist[31:]:
+    # for d in dslist[:1]: # 50words
+    # for d in dslist[26:27]:  # OSULeaf
+    # for d in dslist[27:28]:  # Olive Oil
+    # for d in dslist[30:31]:  # starlight curves
+    # for d in dslist[1:2]:  # adiac
+    # for d in dslist[4:6]:
+    # for d in dslist[3:4]:
     # for d in (dslist[26], dslist[27], dslist[30]):
-    for d in list(dsets)[:31]:
+    for d in dslist[:31]:
         print "------------------------ {}".format(d.name)
         # continue # TODO rm
         plot_dset(d, numbits=numbits, n=n,
