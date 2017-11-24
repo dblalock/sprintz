@@ -1407,6 +1407,7 @@ def main():
     # n = 32
     # n = 100
     n = 200
+    # n = 500
 
     # chunk_sz = -1
     # chunk_sz = 8
@@ -1530,7 +1531,6 @@ def main():
 
     # for d in dsets:
     # for d in list(dsets)[4:8]:
-    # for d in list(dsets)[26:27]:  # olive oil
     # for d in list(dsets)[26:29]:
     # for d in list(dsets)[20:21]: # ItalyPowerDemand
     # for d in list(dsets)[12:13]:  # ECGFiveDays
@@ -1543,8 +1543,13 @@ def main():
     # for d in dsets:
     # for d in list(dsets)[31:]:
     # for d in list(dsets)[1:2]:  # adiac
-    # for d in list(dsets)[:31]:
-    for d in list(dsets)[:1]: # 50words
+    # for d in list(dsets)[:1]: # 50words
+    # for d in list(dsets)[26:27]:  # OSULeaf
+    # for d in list(dsets)[27:28]:  # Olive Oil
+    # for d in list(dsets)[30:31]:  # starlight curves
+    # dslist = list(dsets)
+    # for d in (dslist[26], dslist[27], dslist[30]):
+    for d in list(dsets)[:31]:
         print "------------------------ {}".format(d.name)
         # continue # TODO rm
         plot_dset(d, numbits=numbits, n=n,

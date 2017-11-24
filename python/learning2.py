@@ -176,6 +176,7 @@ class OnlineRegressor(object):
         self.coef = 0
         self.counter = 0
         self.t = 0
+        self.grad_counter = 0
 
         # self.approx_256_over_x = 1
 
@@ -269,8 +270,11 @@ class OnlineRegressor(object):
         elif self.method == 'gradient':
             # update coeffs using last entry in each block
 
-            learning_rate_shift = 7  # learning rate of 2^(-learning_rate_shift)
+            # learning_rate_shift = 7  # learning rate of 2^(-learning_rate_shift)
+            # learning_rate_shift = 8  # learning rate of 2^(-learning_rate_shift)
+            # learning_rate_shift = 12  # learning rate of 2^(-learning_rate_shift)
             # learning_rate_shift = 4  # learning rate of 2^(-learning_rate_shift)
+            # learning_rate_shift = 2  # learning rate of 2^(-learning_rate_shift)
 
             # if self.t == 0:
             #     x0 = x[1:]  # initial delta is raw value, which wrecks things
@@ -280,7 +284,7 @@ class OnlineRegressor(object):
             #     # print "x, y dtypes: ", x.dtype, y.dtype
             #     # print "Sxx, Sxy dtypes: ", Sxx.dtype, Sxy.dtype
             #     self.coef = int((Sxy << 8) / Sxx)  # shift to mirror what we'll need to do in C
-            #     self.counter = self.coef << learning_rate_shift
+            #     self.counter = self.coef << (learning_rate_shift + self.numbits - 8)
 
             #     print "initial coeff, counter = ", self.coef, self.counter
 
@@ -293,36 +297,63 @@ class OnlineRegressor(object):
             if self.numbits <= 8:
                 predictions = (x * self.coef) >> self.numbits
             else:
-                predictions = ((x >> 8) * self.coef)
+                # predictions = ((x >> 8) * self.coef)
+                predictions = (x * self.coef) >> 8
+                # predictions = (x * 256) >> 8
+                # predictions = x  # TODO rm
+                # predictions = np.zeros_like(x)  # TODO rm
             errs = y - predictions
 
             # only update based on a few values for efficiency
             start_idx = 0 if self.t > 0 else 8
-            # approx_256_over_x = 4
-            for idx in np.arange(start_idx, len(x), 8):
+            # which_idxs = np.arange(start_idx, len(x), 8)
+            which_idxs = np.arange(start_idx, len(x))
+            grads = 0
+            for idx in which_idxs:
                 xval = x[idx]
                 # xval = x[idx] >> (self.numbits - 8)
                 # grad = int(-errs[idx] * x[idx]) >> 8
                 # grad = int(-errs[idx] * x[idx]) // 256
-                # grad = int(-(errs[idx] << 8) / xval) if xval != 0 else 0  # works great
                 # y0 = np.abs(self.approx_256_over_x) * np.sign(xval)
                 # y0 = 1 + (256 - xval) >> 8
                 # y0 = 3 - ((3 * xval) >> 8)
+                # grad = int(-(errs[idx] << 8) / xval) if xval != 0 else 0  # works great
+                # self.counter -= grad  # equivalent to above two lines
+                # if self.t % 100 == 0:
+                #     print "grad:", grad
+                # continue
 
-                xabs = np.abs(xval)
-                if xabs == 0:
-                    lzcnt = self.numbits
-                # elif xval == 1:
-                #     lzcnt = self.numbits - 1
-                else:
-                    lzcnt = self.numbits - 1 - int(np.log2(xabs))
-                lzcnt = max(0, lzcnt - 1)  # round up to nearest power of 2
+                # # xabs = self.t # TODO rm
+                # xabs = np.abs(xval)
+                # if xabs == 0:
+                #     lzcnt = self.numbits
+                # else:
+                #     lzcnt = self.numbits - 1 - int(np.log2(xabs))
+                # lzcnt = max(0, lzcnt - 1)  # round up to nearest power of 2
+                # # lzcnt = min(15, lzcnt + 1)  # round up to nearest power of 2
+                # # numerator = 1 << self.numbits
+                # # recip = 1 << (lzcnt - 8) if lzcnt >= 8 else
+                # # recip = np.sign(xval) << (8 + lzcnt)
+                # shift_amt = max(0, lzcnt - (self.numbits - 8))  # usually 0, maybe 1 sometimes
+                # recip = (1 << shift_amt) * np.sign(xval)
+                # grad = int(-errs[idx] * recip)
+                # # grad = int(grad / len(which_idxs))
 
-                # numerator = 1 << self.numbits
-                # recip = 1 << (lzcnt - 8) if lzcnt >= 8 else
-                shift_amount = lzcnt + 8
-                recip = np.sign(xval) << shift_amount
-                grad = int(-errs[idx] * recip)
+                # normal grad descent
+                # grad = int(-errs[idx] * np.sign(xval))  # div by sqrt(hessian)
+                # grad = int(-errs[idx] * xval) >> self.numbits  # true gradient
+                # grad = int(-np.sign(errs[idx]) * np.sign(xval))  # l1 gradient
+
+                # approx newton step for log(nbits)
+                err = errs[idx]
+                grad = int(-(1 + err)) if err > 0 else int(-(err - 1))
+
+                # self.grad_counter += (grad - (self.grad_counter >> 8))
+                grads += grad
+
+                # this is the other one we should actually consider doing
+                #
+                # grad = int(-errs[idx] * np.sign(xval))
 
                 # # approximation of what we'd end up doing with a LUT
                 # shift_to_just_4b = self.numbits - 4
@@ -342,20 +373,52 @@ class OnlineRegressor(object):
                 # grad = int(-errs[idx] * y0)
                 # grad = int(-errs[idx] * xval) # works
                 # grad = int(-errs[idx] * 2*np.sign(xval))
+
                 # this_best_coef = self.coef - grad
                 # self.counter += this_best_coef - self.coef
-                self.counter -= grad  # equivalent to above two lines
-                if self.t < 8:
-                    print "grad: ", grad
+                # self.counter -= grad  # equivalent to above two lines
+                # self.counter -= grad >> learning_rate_shift
+                # if self.t < 8:
+                # if self.t % 50 == 0:
+                #     print "grad: ", grad
+                #     # print "recip, grad: ", recip, grad
             # self.coef = self.counter >> min(self.t, learning_rate_shift)
-            self.coef = self.counter >> learning_rate_shift
-            self.coef = np.clip(self.coef, -256, 256)  # apparently important
+            # self.coef = self.counter >> learning_rate_shift
 
-            if self.t < 8:
-                print "errs[:10]:   ", errs[:16]
-                print "-grads[:10]: ", errs[:16] * x[:16]
-                print "new coeff, counter = ", self.coef, self.counter
-                print "-----"
+            learning_rate_shift = 1
+            grad_learning_shift = 1
+
+            # compute average gradient for batch
+            # grad = int(4 * grads / len(which_idxs))  # div by 16
+            grad = int(grads / len(which_idxs))  # div by 64
+            self.counter -= grad
+            self.grad_counter += grad - (self.grad_counter >> grad_learning_shift)
+
+            # self.coef = self.counter >> (learning_rate_shift + (self.numbits - 8))
+            # self.coef -= (self.grad_counter >> grad_learning_shift) >> learning_rate_shift
+            learn_shift = int(min(learning_rate_shift, np.log2(self.t + 1)))
+            # self.coef = self.counter >> (learn_shift + (self.numbits - 8))
+            self.coef = self.counter >> learn_shift  # for use with l1 loss
+            # self.coef -= (self.grad_counter >> grad_learning_shift) >> learn_shift
+            # self.coef = 192  # global soln for olive oil
+
+            # self.coef = 0  # why are estimates biased? TODO rm
+            # self.coef = 256
+
+            # self.coef = self.counter
+            # self.coef = np.clip(self.coef, -256, 256)  # apparently important
+            # self.coef = np.clip(self.coef, -128, 256)  # apparently important
+
+            # if self.t < 8:
+            # if self.t % 100 == 0:
+            #     print "----- t = {}".format(self.t)
+            #     # print "grad, grads sum:   ", grad, grads
+            #     # print "learn shift: ", learn_shift
+            #     # print "errs[:10]:        ", errs[:16]
+            #     # print "-grads[:10]: ", errs[:16] * x[:16]
+            #     # print "signed errs[:10]: ", errs[:16] * np.sign(x[:16])
+            #     print "new coeff, grad_counter, counter = ", self.coef, self.grad_counter, self.counter
+            #     # print "new coeff, grad counter = ", self.coef, self.grad_counter
 
             # self.best_idx_counts[self.coef] += 1  # for logging
             self.best_coef_counts[self.coef] += 1
@@ -452,7 +515,8 @@ class OnlineRegressor(object):
 
 
 def sub_online_regress(blocks, verbose=2, group_sz_blocks=8, max_shift=4,
-                       only_16_shifts=True, method='linreg', numbits=8, **sink):
+                       only_16_shifts=True, method='linreg', numbits=8,
+                       drop_first_half=True, **sink):
     blocks = blocks.astype(np.int32)
     if only_16_shifts:
         shifts = SHIFT_PAIRS_16
@@ -489,13 +553,38 @@ def sub_online_regress(blocks, verbose=2, group_sz_blocks=8, max_shift=4,
                 # hp.plot(x_vals=encoder.shift_coeffs, y_vals=encoder.best_idx_counts,
                 hp.plot(encoder.best_idx_counts,
                         num_x_chars=len(encoder.shift_coeffs), num_y_chars=12)
+            else:
+                coef_idx = np.argmax(encoder.best_idx_counts)
+                coef = encoder.shift_coeffs[coef_idx]
+                print "global linreg coeff: ", coef
         else:
             coeffs_counts = np.array(encoder.best_coef_counts.most_common())
             print "min, max coeff: {}, {}".format(
                 coeffs_counts[:, 0].min(), coeffs_counts[:, 0].max())
             print "most common (coeff, counts):\n", coeffs_counts[:16]
 
+    if drop_first_half and method == 'gradient':
+        keep_idx = len(out) // 2
+        out[:keep_idx] = out[keep_idx:(2*keep_idx)]
+        print "NOTE: duplicating second half of data into first half!!" \
+            " (blocks {}:)".format(keep_idx)
+
     return out
+
+
+def _test_moving_avg(x0=0):
+    # vals = np.zeros(5, dtype=np.int32) + 100
+    vals = np.zeros(5, dtype=np.int32) - 100
+    shft = 3
+    counter = x0 << shft
+    xhats = []
+    for v in vals:
+        xhat = counter >> shft
+        xhats.append(xhat)
+        counter += (v - xhat)
+
+    print "vals:  ", vals
+    print "xhats: ", xhats
 
 
 # ================================================================ main
@@ -503,8 +592,10 @@ def sub_online_regress(blocks, verbose=2, group_sz_blocks=8, max_shift=4,
 def main():
     np.set_printoptions(formatter={'float': lambda x: '{:.3f}'.format(x)})
 
-    print "all shifts:\n", all_shifts()
-    _test_shift_coeffs()
+    # print "all shifts:\n", all_shifts()
+    # _test_shift_coeffs()
+
+    _test_moving_avg()
 
     # print "shifts_16, coeffs"
     # print SHIFT_PAIRS_16
