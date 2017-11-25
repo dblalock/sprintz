@@ -89,9 +89,12 @@ uint32_t encode_xff_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
     // const __m256i zeros = _mm256_setzero_si256();
     // const __m256i ones = _mm256_cmpeq_epi8(zeros, zeros);
 
-    const __m256i filter_coeffs = _mm256_setr_epi16(
+    const __m256i filter_coeffs_even = _mm256_setr_epi16(
         16, 32, 64, 128, 256, 255, 128, 64,
         31, 32, 33, 200, 256, 200, 100, 50);
+    const __m256i filter_coeffs_odd = _mm256_setr_epi16(
+        256, 128, 64, 32, 16, 8, 4, 2,
+        2, 4, 8, 16, 32, 64, 128, 256);
     const __m256i low_mask = _mm256_set1_epi16(0xff);
 
     for (int32_t b = 0; b < nblocks; b++) { // for each block
@@ -116,27 +119,12 @@ uint32_t encode_xff_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
                 //  | [...;bf][...;dh]
                 //  = [ae; bf][cg; dh]  // vpblendv
                 __m256i even_predictions = _mm256_mullo_epi16(
-                    _mm256_and_si256(prev_deltas, low_mask), filter_coeffs);
+                    _mm256_and_si256(prev_deltas, low_mask), filter_coeffs_even);
                 __m256i odd_predictions = _mm256_mullo_epi16(
-                    _mm256_srli_epi16(prev_deltas, 8), filter_coeffs);
+                    _mm256_srai_epi16(prev_deltas, 8), filter_coeffs_odd);
                 __m256i vpredictions = _mm256_blendv_epi8(odd_predictions,
                     _mm256_srli_epi16(even_predictions, 8), low_mask);
 
-                //
-                // __m256i left_prev_deltas16 = _mm256_cvtepi8_epi16(
-                //     _mm256_extracti128_si256(prev_deltas, 0));
-                // __m256i right_prev_deltas16 = _mm256_cvtepi8_epi16(
-                //     _mm256_extracti128_si256(prev_deltas, 1));
-                // __m256i left_predictions = _mm256_mulhi_epi16(left_prev_deltas16, filter_coeffs);
-                // __m256i right_predictions = _mm256_mulhi_epi16(right_prev_deltas16, filter_coeffs);
-                // __m256i packed_predictions = _mm256_packs_epi16(left_predictions, right_predictions);
-                // __m256i vpredictions = _mm256_permute4x64_epi64(
-                //     packed_predictions, _MM_SHUFFLE(3,1,2,0));
-
-                // __m256i vpredictions = _mm256_sub_epi8(prev_deltas, zeros);
-                // __m256i vpredictions = _mm256_sub_epi8(prev_deltas, ones);
-                // __m256i vpredictions = _mm256_andnot_si256(high_bits_one,
-                //     _mm256_srai_epi16(prev_deltas, 1));
                 // __m256i vpredictions = prev_deltas;
                 __m256i verrs = _mm256_sub_epi8(vdeltas, vpredictions);
 
@@ -209,9 +197,12 @@ uint32_t decode_xff_rowmajor(const int8_t* src, uint32_t len, uint8_t* dest,
     // const __m256i high_bits_one = _mm256_set1_epi8(-128);
     // const __m256i zeros = _mm256_setzero_si256();
     // const __m256i ones = _mm256_cmpeq_epi8(zeros, zeros);
-    const __m256i filter_coeffs = _mm256_setr_epi16(
+    const __m256i filter_coeffs_even = _mm256_setr_epi16(
         16, 32, 64, 128, 256, 255, 128, 64,
         31, 32, 33, 200, 256, 200, 100, 50);
+    const __m256i filter_coeffs_odd = _mm256_setr_epi16(
+        256, 128, 64, 32, 16, 8, 4, 2,
+        2, 4, 8, 16, 32, 64, 128, 256);
     const __m256i low_mask = _mm256_set1_epi16(0xff);
 
     for (uint32_t b = 0; b < nblocks; b++) { // for each block
@@ -227,16 +218,12 @@ uint32_t decode_xff_rowmajor(const int8_t* src, uint32_t len, uint8_t* dest,
 
                 // see encode func for explanation
                 __m256i even_predictions = _mm256_mullo_epi16(
-                    _mm256_and_si256(prev_deltas, low_mask), filter_coeffs);
+                    _mm256_and_si256(prev_deltas, low_mask), filter_coeffs_even);
                 __m256i odd_predictions = _mm256_mullo_epi16(
-                    _mm256_srli_epi16(prev_deltas, 8), filter_coeffs);
+                    _mm256_srai_epi16(prev_deltas, 8), filter_coeffs_odd);
                 __m256i vpredictions = _mm256_blendv_epi8(odd_predictions,
                     _mm256_srli_epi16(even_predictions, 8), low_mask);
 
-                // __m256i vpredictions = _mm256_sub_epi8(prev_deltas, ones);
-                // __m256i vdeltadiffs = _mm256_sub_epi8(prev_deltas)
-                // __m256i vpredictions = _mm256_andnot_si256(high_bits_one,
-                //     _mm256_srai_epi16(prev_deltas, 1));
                 __m256i vdeltas = _mm256_add_epi8(verrs, vpredictions);
                 __m256i vals = _mm256_add_epi8(vdeltas, prev_vals);
 

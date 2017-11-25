@@ -24,7 +24,7 @@
 
 // ============================================================ sprintz predict
 
-TEST_CASE("xff_rowmajor_8b (no compression)", "[rowmajor][delta]") {
+TEST_CASE("xff_rowmajor_8b (no compression)", "[rowmajor][delta][dbg]") {
     printf("executing rowmajor xff test\n");
     
     //     int ndims = 33;
