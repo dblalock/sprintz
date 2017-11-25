@@ -352,7 +352,6 @@ class OnlineRegressor(object):
                 # normal grad descent
                 # grad = int(-errs[idx] * np.sign(xval))  # div by sqrt(hessian)
                 # grad = int(-errs[idx] * xval) >> self.numbits  # true gradient
-                # grad = int(-np.sign(errs[idx]) * np.sign(xval))  # l1 gradient
 
                 # approx newton step for log(nbits)
                 err = errs[idx]
@@ -370,8 +369,12 @@ class OnlineRegressor(object):
 
                 # grad = -(err + np.sign(err)) * np.sign(xval)
                 # grad = -err * np.sign(xval)
-                grad = -err * np.sign(xval)
-                grad = -np.sign(err) * xval
+
+                # these both seem to work pretty well; prolly need to directly
+                # compare them
+                # grad = -err * np.sign(xval)
+                grad = -np.sign(err) * xval  # significantly better than prev line
+                # ^ duh; above is minimizer for L1 loss
 
                 grads += grad
 
@@ -435,7 +438,12 @@ class OnlineRegressor(object):
             # quantize coeff by rounding to nearest 16; this seems to help
             # quite a bit, at least for stuff that really should be double
             # delta coded (starlight curves, presumably timestamps)
-            self.coef = ((self.coef + 8) >> 4) << 4
+            # self.coef = ((self.coef + 8) >> 4) << 4
+
+            # like above, but use sign since shift and unshift rounds towards 0
+            # EDIT: no apparent difference, though perhaps cuz almost nothing
+            # actually wants a negative coef
+            self.coef = ((self.coef + 8 * np.sign(self.coef)) >> 4) << 4
 
             # offset = int(offsets / len(which_idxs))  # div by 64
             # self.offset_counter += offset
