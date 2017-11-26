@@ -55,7 +55,9 @@ uint32_t encode_xff_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
                              uint16_t ndims, bool write_size)
 {
     static const uint8_t vector_sz = 32;
-    static const uint8_t block_sz = 8;
+    static const uint8_t log2_block_sz = 3;
+    static const uint8_t block_sz = 1 << log2_block_sz;
+    static const uint8_t learning_shift = 1;
 
     int8_t* orig_dest = dest;
 
@@ -65,8 +67,11 @@ uint32_t encode_xff_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
     uint32_t padded_ndims = round_up_to_multiple(ndims, vector_sz);
     uint16_t nvectors = padded_ndims / vector_sz + ((padded_ndims % vector_sz) > 0);
 
-    uint8_t* prev_vals_ar = (uint8_t*)calloc(2 * vector_sz, nvectors);
-    int8_t* prev_deltas_ar = (int8_t*)prev_vals_ar + vector_sz * nvectors;
+    // allocate these three arrays contiguously
+    uint8_t* prev_vals_ar   = (uint8_t*)calloc(4 * nvectors, vector_sz);
+    int8_t*  prev_deltas_ar = (int8_t* )prev_vals_ar + vector_sz * 1 * nvectors;
+    uint8_t* coeffs_ar_even = (uint8_t*)prev_vals_ar + vector_sz * 2 * nvectors;
+    uint8_t* coeffs_ar_odd  = (uint8_t*)prev_vals_ar + vector_sz * 3 * nvectors;
 
     if (write_size) {
         *(uint32_t*)dest = len;
@@ -89,23 +94,55 @@ uint32_t encode_xff_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
     // const __m256i zeros = _mm256_setzero_si256();
     // const __m256i ones = _mm256_cmpeq_epi8(zeros, zeros);
 
-    const __m256i filter_coeffs_even = _mm256_setr_epi16(
-        16, 32, 64, 128, 256, 255, 128, 64,
-        31, 32, 33, 200, 256, 200, 100, 50);
-    const __m256i filter_coeffs_odd = _mm256_setr_epi16(
-        256, 128, 64, 32, 16, 8, 4, 2,
-        2, 4, 8, 16, 32, 64, 128, 256);
+    // const __m256i filter_coeffs_even = _mm256_setr_epi16(
+    //     16, 32, 64, 128, 256, 255, 128, 64,
+    //     31, 32, 33, 200, 256, 200, 100, 50);
+    // const __m256i filter_coeffs_odd = _mm256_setr_epi16(
+    //     256, 128, 64, 32, 16, 8, 4, 2,
+    //     2, 4, 8, 16, 32, 64, 128, 256);
     const __m256i low_mask = _mm256_set1_epi16(0xff);
 
     for (int32_t b = 0; b < nblocks; b++) { // for each block
+        // printf("==== %d\n", b);
         for (int32_t v = nvectors - 1; v >= 0; v--) { // for each stripe
-            __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar + v * vector_sz);
-            __m256i* prev_deltas_ptr = (__m256i*)(prev_deltas_ar + v * vector_sz);
+            uint32_t v_offset = v * vector_sz;
+            __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar + v_offset);
+            __m256i* prev_deltas_ptr = (__m256i*)(prev_deltas_ar + v_offset);
             __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
             __m256i prev_deltas = _mm256_loadu_si256(prev_deltas_ptr);
+
+            const __m256i* even_counters_ptr =
+                (const __m256i*)(coeffs_ar_even + v_offset);
+            const __m256i* odd_counters_ptr =
+                (const __m256i*)(coeffs_ar_odd + v_offset);
+            __m256i coef_counters_even = _mm256_loadu_si256(even_counters_ptr);
+            __m256i coef_counters_odd = _mm256_loadu_si256(odd_counters_ptr);
+
+            // implements coef[i] = ((counter[i] >> learn_shift) >> 4) << 4)
+            __m256i rounding_offsets = _mm256_set1_epi16(8 << learning_shift);
+
+            __m256i filter_coeffs_even = _mm256_srai_epi16(
+                _mm256_add_epi16(rounding_offsets, coef_counters_even),
+                learning_shift + 4);
+            __m256i filter_coeffs_odd  = _mm256_srai_epi16(
+                _mm256_add_epi16(rounding_offsets, coef_counters_odd),
+                learning_shift + 4);
+            filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 4);
+            filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 4);
+
+            // filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 15); // TODO rm
+            // filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 15);  // after dbg
+
+            // __m256i gradients_even = _mm256_setzero_si256();
+            // __m256i gradients_odd = _mm256_setzero_si256();
+            __m256i gradients_sum = _mm256_setzero_si256();
+
+            // if (b == 1) { printf("filter_coeffs_even: "); dump_m256i(filter_coeffs_even); }
+            // if (b == 1) { printf("filter_coeffs_odd: "); dump_m256i(filter_coeffs_odd); }
+
             for (uint8_t i = 0; i < block_sz; i++) {
-                const uint8_t* in_ptr = src + i * ndims + v * vector_sz;
-                int8_t* out_ptr = dest + i * ndims + v * vector_sz;
+                const uint8_t* in_ptr = src + i * ndims + v_offset;
+                int8_t* out_ptr = dest + i * ndims + v_offset;
                 __m256i vals = _mm256_loadu_si256((__m256i*)in_ptr);
                 __m256i vdeltas = _mm256_sub_epi8(vals, prev_vals);
 
@@ -125,8 +162,19 @@ uint32_t encode_xff_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
                 __m256i vpredictions = _mm256_blendv_epi8(odd_predictions,
                     _mm256_srli_epi16(even_predictions, 8), low_mask);
 
-                // __m256i vpredictions = prev_deltas;
                 __m256i verrs = _mm256_sub_epi8(vdeltas, vpredictions);
+
+                // if (b == 0) { printf("verrs: "); dump_m256i(verrs); }
+                // if (b == 0) { printf("prev_deltas: "); dump_m256i(prev_deltas); }
+                // if (b < 2 ) { printf("deltas: "); dump_m256i(vdeltas); }
+                // if (b == 1) { printf("predictions: "); dump_m256i(vpredictions); }
+                // printf("vals: "); dump_m256i(verrs);
+
+                // compute gradients
+                __m256i gradients = _mm256_sign_epi8(prev_deltas, verrs);
+                gradients_sum = _mm256_add_epi8(gradients_sum, gradients);
+
+                // if (b == 0) { printf("grad sums: "); dump_m256i(gradients_sum); }
 
                 _mm256_storeu_si256((__m256i*)out_ptr, verrs);
                 prev_deltas = vdeltas;
@@ -134,6 +182,35 @@ uint32_t encode_xff_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
             }
             _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
             _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
+
+            // mean of gradients in block, for even and odd indices
+            // __m256i gradients = _mm256_srai_epi16(gradients_sum, log2_block_sz);
+            // __m256i even_grads = _mm256_and_si256(gradients, low_mask);
+            // __m256i odd_grads = _mm256_srai_epi16(gradients, 8);
+            const uint8_t rshift = 8 + log2_block_sz;
+            __m256i even_grads = _mm256_srai_epi16(
+                _mm256_slli_epi16(gradients_sum, 8), rshift);
+            __m256i odd_grads = _mm256_srai_epi16(gradients_sum, rshift);
+
+            // if (b == 0) { printf("mean gradients: "); dump_m256i(gradients); }
+            // if (b == 0) { printf("even gradients: "); dump_m256i(even_grads); }
+            // if (b == 0) { printf("odd gradients:  "); dump_m256i(odd_grads); }
+
+            // store updated coefficients (or, technically, the counters)
+            coef_counters_even = _mm256_add_epi16(coef_counters_even, even_grads);
+            coef_counters_odd = _mm256_add_epi16(coef_counters_odd, odd_grads);
+
+            // // TODO rm (this works with encoder and decoder both do it)
+            // coef_counters_even = _mm256_add_epi16(coef_counters_even, _mm256_set1_epi16(1));
+            // coef_counters_odd = _mm256_add_epi16(coef_counters_odd, _mm256_set1_epi16(1));
+
+            // // TODO rm after debug
+            // coef_counters_even = _mm256_srli_epi16(coef_counters_even, 15); // TODO rm
+            // coef_counters_odd = _mm256_srli_epi16(coef_counters_odd, 15); // TODO rm
+
+            _mm256_storeu_si256((__m256i*)even_counters_ptr, coef_counters_even);
+            _mm256_storeu_si256((__m256i*)odd_counters_ptr, coef_counters_odd);
+
         } // for each vector
         src += block_sz_elems;
         dest += block_sz_elems;
@@ -170,7 +247,10 @@ uint32_t decode_xff_rowmajor(const int8_t* src, uint32_t len, uint8_t* dest,
                              uint16_t ndims)
 {
     static const uint8_t vector_sz = 32;
-    static const uint8_t block_sz = 8;
+    static const uint8_t log2_block_sz = 3;
+    static const uint8_t block_sz = 1 << log2_block_sz;
+    static const uint8_t learning_shift = 1;
+
     uint8_t* orig_dest = dest;
 
     if (ndims == 0) { return 0; }
@@ -181,8 +261,11 @@ uint32_t decode_xff_rowmajor(const int8_t* src, uint32_t len, uint8_t* dest,
     uint32_t padded_ndims = round_up_to_multiple(ndims, vector_sz);
     uint16_t nvectors = padded_ndims / vector_sz + ((padded_ndims % vector_sz) > 0);
 
-    uint8_t* prev_vals_ar = (uint8_t*)calloc(2 * vector_sz, nvectors);
-    int8_t* prev_deltas_ar = (int8_t*)prev_vals_ar + vector_sz * nvectors;
+    // allocate these three arrays contiguously
+    uint8_t* prev_vals_ar   = (uint8_t*)calloc(4 * nvectors, vector_sz);
+    int8_t*  prev_deltas_ar = (int8_t* )prev_vals_ar + vector_sz * 1 * nvectors;
+    uint8_t* coeffs_ar_even = (uint8_t*)prev_vals_ar + vector_sz * 2 * nvectors;
+    uint8_t* coeffs_ar_odd  = (uint8_t*)prev_vals_ar + vector_sz * 3 * nvectors;
 
     // printf("-------- decompression (len = %lld, ndims = %d)\n", (int64_t)len, ndims);
     // printf("saw compressed data:\n");
@@ -197,23 +280,53 @@ uint32_t decode_xff_rowmajor(const int8_t* src, uint32_t len, uint8_t* dest,
     // const __m256i high_bits_one = _mm256_set1_epi8(-128);
     // const __m256i zeros = _mm256_setzero_si256();
     // const __m256i ones = _mm256_cmpeq_epi8(zeros, zeros);
-    const __m256i filter_coeffs_even = _mm256_setr_epi16(
-        16, 32, 64, 128, 256, 255, 128, 64,
-        31, 32, 33, 200, 256, 200, 100, 50);
-    const __m256i filter_coeffs_odd = _mm256_setr_epi16(
-        256, 128, 64, 32, 16, 8, 4, 2,
-        2, 4, 8, 16, 32, 64, 128, 256);
+    // const __m256i filter_coeffs_even = _mm256_setr_epi16(
+    //     16, 32, 64, 128, 256, 255, 128, 64,
+    //     31, 32, 33, 200, 256, 200, 100, 50);
+    // const __m256i filter_coeffs_odd = _mm256_setr_epi16(
+    //     256, 128, 64, 32, 16, 8, 4, 2,
+    //     2, 4, 8, 16, 32, 64, 128, 256);
     const __m256i low_mask = _mm256_set1_epi16(0xff);
 
     for (uint32_t b = 0; b < nblocks; b++) { // for each block
+        // printf("==== %d\n", b);
         for (int32_t v = nvectors - 1; v >= 0; v--) { // for each stripe
-            __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar + v * vector_sz);
-            __m256i* prev_deltas_ptr = (__m256i*)(prev_deltas_ar + v * vector_sz);
+            uint32_t v_offset = v * vector_sz;
+            __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar + v_offset);
+            __m256i* prev_deltas_ptr = (__m256i*)(prev_deltas_ar + v_offset);
             __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
             __m256i prev_deltas = _mm256_loadu_si256(prev_deltas_ptr);
+
+            const __m256i* even_counters_ptr =
+                (const __m256i*)(coeffs_ar_even + v_offset);
+            const __m256i* odd_counters_ptr =
+                (const __m256i*)(coeffs_ar_odd + v_offset);
+            __m256i coef_counters_even = _mm256_loadu_si256(even_counters_ptr);
+            __m256i coef_counters_odd = _mm256_loadu_si256(odd_counters_ptr);
+
+            // implements coef[i] = ((counter[i] >> learn_shift) >> 4) << 4)
+            __m256i rounding_offsets = _mm256_set1_epi16(8 << learning_shift);
+
+            __m256i filter_coeffs_even = _mm256_srai_epi16(
+                _mm256_add_epi16(rounding_offsets, coef_counters_even),
+                learning_shift + 4);
+            __m256i filter_coeffs_odd  = _mm256_srai_epi16(
+                _mm256_add_epi16(rounding_offsets, coef_counters_odd),
+                learning_shift + 4);
+            filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 4);
+            filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 4);
+
+            // filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 15); // TODO rm
+            // filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 15);  // after dbg
+
+            __m256i gradients_sum = _mm256_setzero_si256();
+
+            // if (b == 1) { printf("filter_coeffs_even: "); dump_m256i(filter_coeffs_even); }
+            // if (b == 1) { printf("filter_coeffs_odd: "); dump_m256i(filter_coeffs_odd); }
+
             for (uint8_t i = 0; i < block_sz; i++) {
-                const int8_t* in_ptr = src + i * ndims + v * vector_sz;
-                uint8_t* out_ptr = dest + i * ndims + v * vector_sz;
+                const int8_t* in_ptr = src + i * ndims + v_offset;
+                uint8_t* out_ptr = dest + i * ndims + v_offset;
                 __m256i verrs = _mm256_loadu_si256((__m256i*)in_ptr);
 
                 // see encode func for explanation
@@ -224,8 +337,20 @@ uint32_t decode_xff_rowmajor(const int8_t* src, uint32_t len, uint8_t* dest,
                 __m256i vpredictions = _mm256_blendv_epi8(odd_predictions,
                     _mm256_srli_epi16(even_predictions, 8), low_mask);
 
+                // compute gradients
+                __m256i gradients = _mm256_sign_epi8(prev_deltas, verrs);
+                gradients_sum = _mm256_add_epi8(gradients_sum, gradients);
+
                 __m256i vdeltas = _mm256_add_epi8(verrs, vpredictions);
                 __m256i vals = _mm256_add_epi8(vdeltas, prev_vals);
+
+                // if (b == 0) { printf("verrs: "); dump_m256i(verrs); }
+                // if (b == 0) { printf("prev_deltas: "); dump_m256i(prev_deltas); }
+                // if (b < 2 ) { printf("deltas: "); dump_m256i(vdeltas); }
+                // if (b == 1) { printf("predictions: "); dump_m256i(vpredictions); }
+                // printf("vals: "); dump_m256i(verrs);
+
+                // if (b == 0) { printf("grad sums: "); dump_m256i(gradients_sum); }
 
                 _mm256_storeu_si256((__m256i*)out_ptr, vals);
                 prev_deltas = vdeltas;
@@ -233,6 +358,33 @@ uint32_t decode_xff_rowmajor(const int8_t* src, uint32_t len, uint8_t* dest,
             }
             _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
             _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
+
+            // mean of gradients in block, for even and odd indices
+            // __m256i gradients = _mm256_srai_epi16(gradients_sum, log2_block_sz);
+            // __m256i even_grads = _mm256_and_si256(gradients, low_mask);
+            const uint8_t rshift = 8 + log2_block_sz;
+            __m256i even_grads = _mm256_srai_epi16(
+                _mm256_slli_epi16(gradients_sum, 8), rshift);
+            __m256i odd_grads = _mm256_srai_epi16(gradients_sum, rshift);
+
+            // store updated coefficients (or, technically, the counters)
+            coef_counters_even = _mm256_add_epi16(coef_counters_even, even_grads);
+            coef_counters_odd = _mm256_add_epi16(coef_counters_odd, odd_grads);
+
+            // if (b == 0) { printf("even gradients: "); dump_m256i(even_grads); }
+            // if (b == 0) { printf("odd gradients:  "); dump_m256i(odd_grads); }
+
+            // // TODO rm (this works with encoder and decoder both do it)
+            // coef_counters_even = _mm256_add_epi16(coef_counters_even, _mm256_set1_epi16(1));
+            // coef_counters_odd = _mm256_add_epi16(coef_counters_odd, _mm256_set1_epi16(1));
+
+            // // TODO rm after debug
+            // coef_counters_even = _mm256_srli_epi16(coef_counters_even, 15); // TODO rm
+            // coef_counters_odd = _mm256_srli_epi16(coef_counters_odd, 15); // TODO rm
+
+            _mm256_storeu_si256((__m256i*)even_counters_ptr, coef_counters_even);
+            _mm256_storeu_si256((__m256i*)odd_counters_ptr, coef_counters_odd);
+
         } // for each vector
         src += block_sz_elems;
         dest += block_sz_elems;
@@ -240,6 +392,8 @@ uint32_t decode_xff_rowmajor(const int8_t* src, uint32_t len, uint8_t* dest,
 
     // undo delta coding for trailing elements serially
     decode_delta_serial(src, dest, orig_dest + len, ndims, nblocks == 0);
+
+    // printf("decoded data:\n"); dump_bytes(orig_dest, len, ndims);
 
     free(prev_vals_ar);
     return len;

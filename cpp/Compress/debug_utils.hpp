@@ -159,7 +159,7 @@ inline void dump_elements(const T* x, size_t len=1, size_t newline_every=1,
 		if (rowmark_every > 0 && write_newline) {
 			size_t row_idx = (i + 1) / newline_every;
 			if (row_idx % rowmark_every == 0) {
-				printf("row    %d\n", (int)row_idx);
+				printf("  row  %d\n", (int)row_idx);
 			}
 		}
 	}
