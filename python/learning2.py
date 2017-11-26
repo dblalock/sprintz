@@ -173,9 +173,11 @@ class OnlineRegressor(object):
 
         self.last_val = 0
         self.last_delta = 0
-        # self.coef = 0
-        self.coef = 256
+        self.coef = 0
+        # self.coef = 256
         self.counter = 0
+        # self.counter = 256
+        # self.counter = 8 << 1  # equivalent to adding 8 to round to nearest?
         # self.counter = self.coef
         self.t = 0
         self.grad_counter = 0
@@ -316,7 +318,9 @@ class OnlineRegressor(object):
             # only update based on a few values for efficiency
             start_idx = 0 if self.t > 0 else 8
             # which_idxs = np.arange(start_idx, len(x), 8)
-            which_idxs = np.arange(start_idx, len(x))
+            # which_idxs = np.arange(start_idx, len(x))
+            # which_idxs = np.arange(start_idx, len(x), 2)
+            which_idxs = np.arange(start_idx, len(x), 4)
             grads = 0
             # offsets = 0
             for idx in which_idxs:
@@ -378,6 +382,11 @@ class OnlineRegressor(object):
 
                 grads += grad
 
+                # simulate int8 overflow, adjusted for fact that we do 8 blocks
+                # per group (so 1024, 2048 instead of 128, 256)
+                # grads = ((grads + 1024) % 2048) - 1024  # wrecks accuracy
+                # grads = ((grads + 8192) % 16384) - 8192  # no effect
+
                 self.errs.append(err)
 
                 # offsets += np.sign(err)  # optimize bias for l1 loss
@@ -417,14 +426,15 @@ class OnlineRegressor(object):
             # self.coef = self.counter >> learning_rate_shift
 
             learning_rate_shift = 1
-            grad_learning_shift = 1
+            # grad_learning_shift = 1
             # offset_learning_shift = 4
 
             # compute average gradient for batch
             # grad = int(4 * grads / len(which_idxs))  # div by 16
             grad = int(grads / len(which_idxs))  # div by 64
             self.counter -= grad
-            self.grad_counter += grad - (self.grad_counter >> grad_learning_shift)
+
+            # self.grad_counter += grad - (self.grad_counter >> grad_learning_shift)
 
             self.coef = self.counter >> (learning_rate_shift + (self.numbits - 8))
             # self.coef = self.counter >> learning_rate_shift
@@ -439,11 +449,12 @@ class OnlineRegressor(object):
             # quite a bit, at least for stuff that really should be double
             # delta coded (starlight curves, presumably timestamps)
             # self.coef = ((self.coef + 8) >> 4) << 4
+            self.coef = (self.coef >> 4) << 4  # just round towards 0
 
             # like above, but use sign since shift and unshift rounds towards 0
             # EDIT: no apparent difference, though perhaps cuz almost nothing
             # actually wants a negative coef
-            self.coef = ((self.coef + 8 * np.sign(self.coef)) >> 4) << 4
+            # self.coef = ((self.coef + 8 * np.sign(self.coef)) >> 4) << 4
 
             # offset = int(offsets / len(which_idxs))  # div by 64
             # self.offset_counter += offset

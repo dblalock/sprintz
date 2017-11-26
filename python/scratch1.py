@@ -1358,9 +1358,9 @@ def main():
     # right_transforms = ['delta', 'dyn_filt']
     # right_transforms = ['delta', 'split_dyn_filt']
 
-    # numbits = 16
+    numbits = 16
     # numbits = 12
-    numbits = 8
+    # numbits = 8
 
     # num_neighbors = 256
     num_neighbors = 1024
@@ -1549,9 +1549,9 @@ def main():
     # for d in dslist[30:31]:  # starlight curves
     # for d in dslist[1:2]:  # adiac
     # for d in dslist[4:6]:
-    # for d in (dslist[26], dslist[27], dslist[30]):
+    # for d in dslist[3:4]: # CBF
     # for d in dslist[:31]:
-    for d in dslist[3:4]: # CBF
+    for d in (dslist[26], dslist[27], dslist[30], dslist[1], dslist[14]):
         print "------------------------ {}".format(d.name)
         # continue # TODO rm
         plot_dset(d, numbits=numbits, n=n,
