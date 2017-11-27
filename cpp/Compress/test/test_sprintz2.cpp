@@ -68,7 +68,7 @@
 }                                                                   \
 //*/
 
-TEST_CASE("compress8b_rowmajor", "[rowmajor]") {
+TEST_CASE("compress8b_rowmajor", "[rowmajor][nodelta]") {
     printf("executing rowmajor test\n");
 
    // uint16_t ndims = 8;
@@ -200,7 +200,7 @@ TEST_CASE("compress8b_rowmajor_delta", "[rowmajor][delta]") {
 
 // ============================================================ rowmajor delta rle
 
-TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta]") {
+TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][dbg]") {
     printf("executing rowmajor delta rle test\n");
 
     // int ndims = 64;
