@@ -16,16 +16,15 @@
 // #include "array_utils.hpp"
 //#include "sprintz2.h"
 // #include "bitpack.h"
-#include "predict.h"
+#include "sprintz_xff.h"
 #include "test_utils.hpp"
-
 #include "debug_utils.hpp" // TODO rm
 
 
 // ============================================================ sprintz predict
 
-TEST_CASE("xff_rowmajor_8b (no compression)", "[rowmajor][delta]") {
-    printf("executing rowmajor xff test\n");
+TEST_CASE("xff_rowmajor_8b (with compression)", "[rowmajor][xff][dbg]") {
+    printf("executing rowmajor compress xff test\n");
 
     // int ndims = 9;
     // auto ndims_list = ar::range(ndims, ndims + 1);
@@ -35,10 +34,11 @@ TEST_CASE("xff_rowmajor_8b (no compression)", "[rowmajor][delta]") {
         printf("---- ndims = %d\n", ndims);
         CAPTURE(ndims);
         auto comp = [ndims](uint8_t* src, size_t len, int8_t* dest) {
-            return encode_xff_rowmajor(src, (uint32_t)len, dest, ndims);
+            // return encode_xff_rowmajor(src, (uint32_t)len, dest, ndims);
+            return compress8b_rowmajor_xff(src, (uint32_t)len, dest, ndims);
         };
         auto decomp = [](int8_t* src, uint8_t* dest) {
-            return decode_xff_rowmajor(src, dest);
+            return decompress8b_rowmajor_xff(src, dest);
         };
 
         // TEST_SQUARES_INPUT(7, comp, decomp);

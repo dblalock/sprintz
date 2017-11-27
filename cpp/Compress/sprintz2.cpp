@@ -13,19 +13,9 @@
 #include <string.h>
 
 #include "bitpack.h"
+#include "util.h" // for memrep
 
-// #define VERBOSE_COMPRESS
-
-// #include "array_utils.hpp" // TODO rm
 // #include "debug_utils.hpp" // TODO rm
-
-#if __cpp_constexpr >= 201304
-    #define CONSTEXPR_FUNC constexpr
-#else
-    #define CONSTEXPR_FUNC
-#endif
-
-// static constexpr uint64_t kHeaderMask8b = TILE_BYTE(0x07); // 3 ones
 
 // byte shuffle values to construct data masks; note that nbits == 7 yields
 // a byte of all ones (0xff); also note that rows 1 and 3 below are unused
@@ -38,185 +28,7 @@ static const __m256i nbits_to_mask = _mm256_setr_epi8(
 
 static const int kDefaultGroupSzBlocks = 2;
 
-
-// XXX note that this function writes past `buff + in_nbytes * ncopies` by
-// up to `vector_sz - 1` bytes
-// void repeat_bytes(const uint8_t* src, size_t in_nbytes, uint8_t* out,
-// inline void repeat_bytes(size_t in_nbytes, uint8_t* buff,
-//                          size_t ncopies)
-// XXX assumes previous in_nbytes entries in buff are what we're supposed
-// to copy; this function is really only suitable for being called in
-// rowmajor delta_rle decompression
-// const uint8_t* src = buff - in_nbytes;
-// uint8_t* dest = buff;
-
-
-// TODO have wrapper func with this signature, but have this impl
-// assume it's just one buff that already has values written at the beginning,
-// since this is the situation where we'll actually call it
-//  -easy reduction from general case to this case by just doing one copy
-
-inline void memrep(uint8_t* dest, const uint8_t*src, int32_t in_nbytes,
-                    int32_t ncopies)
-{
-    if (in_nbytes < 1 || ncopies < 1) { return; }
-
-    static const int vector_sz = 32;
-
-    // uint8_t* orig_dest = dest;
-
-    // printf("------------------------\n");
-    // printf("requested in_nbytes, ncopies = %d, %d\n", in_nbytes, ncopies);
-
-    // ------------------------ nbytes > vector_sz
-    if (in_nbytes > vector_sz) {
-        size_t nvectors = (in_nbytes / vector_sz) + ((in_nbytes % vector_sz) > 0);
-        size_t trailing_nbytes = in_nbytes % vector_sz;
-        trailing_nbytes += trailing_nbytes == 0 ? vector_sz : 0;
-        for (size_t i = 0; i < ncopies - 1; i++) {
-            for (size_t v = 0; v < nvectors - 1; v++) {
-                __m256i x = _mm256_loadu_si256(
-                    (const __m256i*)(src + v * vector_sz));
-                _mm256_storeu_si256((__m256i*)dest, x);
-                dest += vector_sz;
-            }
-            __m256i x = _mm256_loadu_si256(
-                (const __m256i*)(src + (nvectors - 1) * vector_sz));
-            _mm256_storeu_si256((__m256i*)dest, x);
-            dest += trailing_nbytes;
-        }
-        // for last copy, don't vectorize to avoid writing past end
-        memcpy(dest, src, in_nbytes);
-        return;
-    }
-
-    // ------------------------ 1 <= in_nbytes <= vector_sz
-
-    uint32_t total_nvectors = (ncopies * in_nbytes) / vector_sz;
-
-    // if data fills less than two vectors, just memcpy
-    // if (total_nvectors <= (1 << 30)) { // TODO rm after debug
-    // if (total_nvectors <= 2) { // TODO uncomment after debug
-    if (total_nvectors < 1) {
-        for (size_t i = 0; i < ncopies; i++) {
-            memcpy(dest, src, in_nbytes);
-            dest += in_nbytes;
-        }
-    }
-
-    // populate a vector with as many copies of the data as possible
-    __m256i v;
-    switch (in_nbytes) {
-    case 1:
-        v = _mm256_set1_epi8(*(const uint8_t*)src); break;
-    case 2:
-        v = _mm256_set1_epi16(*(const uint16_t*)src); break;
-    case 3:
-        memcpy(dest, src, 3); memcpy(dest + 3, src, 3);
-        memcpy(dest + 6, dest, 6); memcpy(dest + 12, dest, 12);
-        memcpy(dest + 24, dest, 6); // bytes 24-30
-        // memcpy(dest, src, 4); memcpy(dest + 3, src, 4);
-        // memcpy(dest + 6, dest, 6); memcpy(dest + 12, dest, 12);
-        v = _mm256_loadu_si256((const __m256i*)dest);
-        // printf("initial stuff we wrote: "); dump_bytes(dest, 32);
-        dest += 8 * in_nbytes;
-        ncopies -= 8;
-        break;
-    case 4:
-        v = _mm256_set1_epi32(*(const uint32_t*)src); break;
-    case 5:
-        memcpy(dest, src, in_nbytes);
-        memcpy(dest + in_nbytes, dest, in_nbytes);
-        memcpy(dest + 2*in_nbytes, dest, 2*in_nbytes);
-        memcpy(dest + 4*in_nbytes, dest, 2*in_nbytes); // bytes 20-30
-        v = _mm256_loadu_si256((const __m256i*)dest);
-        dest += 6 * in_nbytes;
-        ncopies -= 6;
-        break;
-    case 6:
-        memcpy(dest, src, in_nbytes);
-        memcpy(dest + in_nbytes, dest, in_nbytes);
-        memcpy(dest + 2*in_nbytes, dest, 2*in_nbytes);
-        memcpy(dest + 4*in_nbytes, dest, in_nbytes); // bytes 24-30
-        v = _mm256_loadu_si256((const __m256i*)dest);
-        dest += 5 * in_nbytes;
-        ncopies -= 5;
-        break;
-    case 7:
-        memcpy(dest, src, in_nbytes);
-        memcpy(dest + in_nbytes, dest, in_nbytes);
-        memcpy(dest + 2*in_nbytes, dest, 2*in_nbytes);
-        v = _mm256_loadu_si256((const __m256i*)dest);
-        dest += 4 * in_nbytes;
-        ncopies -= 4;
-        break;
-    case 8:
-        v = _mm256_set1_epi64x(*(const uint64_t*)src); break;
-    case 9: case 10:
-        memcpy(dest, src, in_nbytes);
-        memcpy(dest + in_nbytes, dest, in_nbytes);
-        memcpy(dest + 2*in_nbytes, dest, in_nbytes); // third copy
-        v = _mm256_loadu_si256((const __m256i*)dest);
-        dest += 3 * in_nbytes;
-        ncopies -= 3;
-        break;
-    case 11: case 12: case 13: case 14: case 15:
-        memcpy(dest, src, in_nbytes);
-        memcpy(dest + in_nbytes, dest, in_nbytes);
-        v = _mm256_loadu_si256((const __m256i*)dest);
-        dest += 2 * in_nbytes;
-        ncopies -= 2;
-        break;
-    case 16:
-        v = _mm256_broadcastsi128_si256(_mm_loadu_si128((const __m128i*)src));
-        break;
-    case 32:
-        v = _mm256_loadu_si256((const __m256i*)src); break;
-    default: // 17 through 31
-        memcpy(dest, src, in_nbytes);
-        v = _mm256_loadu_si256((const __m256i*)dest);
-        dest += in_nbytes;
-        ncopies -= 1;
-        break;
-    }
-
-    // printf("vector we're copying: "); dump_m256i(v);
-
-    // compute number of vectors to write (ncopies might have changed) and
-    // write them
-    total_nvectors = (ncopies * in_nbytes) / vector_sz;
-    uint8_t copies_per_vector = vector_sz / in_nbytes;
-    uint8_t stride_nbytes = copies_per_vector * in_nbytes;
-    for (size_t i = 0; i < total_nvectors; i++) {
-        _mm256_storeu_si256((__m256i*)dest, v);
-        dest += stride_nbytes;
-    }
-
-    // copy remaining bytes using memcpy (to avoid writing past end)
-    uint32_t written_ncopies = copies_per_vector * total_nvectors;
-    uint32_t remaining_ncopies = ncopies - written_ncopies;
-    // printf("total nvectors, copies per vector = %d, %d\n", total_nvectors, copies_per_vector);
-    // printf("stride_nbytes, written_ncopies, remaining_ncopies = %d, %d, %d\n", stride_nbytes, written_ncopies, remaining_ncopies);
-    for (uint32_t i = 0; i < remaining_ncopies; i++) {
-        memcpy(dest, src, in_nbytes);
-        dest += in_nbytes;
-    }
-
-    // printf("everything we wrote: "); dump_bytes(orig_dest, (int)(dest - orig_dest));
-}
-
-
-// inline void write_run(uint8_t* dest, int32_t in_nbytes, int32_t ncopies) {
-//     return memrep(dest - in_nbytes, dest, in_nbytes, ncopies);
-// }
-
 // ------------------------------------------------ row-major, no delta or RLE
-
-//template<typename T, typename T2>
-//CONSTEXPR_FUNC inline T round_up_to_multiple(T x, T2 multipleof) {
-//    T remainder = x % multipleof;
-//    return remainder ? (x + multipleof - remainder) : x;
-//}
 
 int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
                             uint16_t ndims, bool write_size)
@@ -793,6 +605,7 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
     // TODO just look at src and special case first row
     // uint8_t* deltas = (uint8_t*)calloc(1, (block_sz + 1) * ndims);
     int8_t* deltas = (int8_t*)calloc(1, (block_sz + 1) * ndims);
+    uint8_t* prev_vals_ar = (uint8_t*)(deltas + block_sz * ndims);
 
     // ================================ main loop
 
@@ -821,8 +634,9 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
                 // compute maximum number of bits used by any value of this dim,
                 // while simultaneously computing deltas
                 uint8_t mask = 0;
-                uint32_t prev_val_offset = block_sz * ndims + dim;
-                uint8_t prev_val = deltas[prev_val_offset];
+                // uint32_t prev_val_offset = block_sz * ndims + dim;
+                // uint8_t prev_val = deltas[prev_val_offset];
+                uint8_t prev_val = prev_vals_ar[dim];
                 for (uint8_t i = 0; i < block_sz; i++) {
                     // uint8_t val = src[(i * ndims) + dim];
                     // mask |= NBITS_MASKS_U8[val];
@@ -844,7 +658,8 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
                     prev_val = val;
                 }
                 // write out value for delta encoding of next block
-                deltas[prev_val_offset] = (int8_t)src[((block_sz - 1) * ndims) + dim];
+                // deltas[prev_val_offset] = (int8_t)src[((block_sz - 1) * ndims) + dim];
+                prev_vals_ar[dim] = src[((block_sz - 1) * ndims) + dim];
 
                 // mask = NBITS_MASKS_U8[255]; // TODO rm
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
@@ -1335,7 +1150,7 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
     // extra row is for storing previous values
     // TODO just look at src and special case first row
     int8_t* deltas = (int8_t*)calloc(1, (block_sz + 1) * ndims);
-    uint8_t* prev_vals = (uint8_t*)deltas + (block_sz * ndims);
+    uint8_t* prev_vals_ar = (uint8_t*)(deltas + block_sz * ndims);
 
     // ================================ main loop
 
@@ -1372,7 +1187,7 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
                 uint8_t mask = 0;
                 // uint32_t prev_val_offset = block_sz * ndims + dim;
                 // uint8_t prev_val = deltas[prev_val_offset];
-                uint8_t prev_val = prev_vals[dim];
+                uint8_t prev_val = prev_vals_ar[dim];
                 // printf("vals: ");
                 for (uint8_t i = 0; i < block_sz; i++) {
                     uint32_t offset = (i * ndims) + dim;
@@ -1387,7 +1202,7 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
                 // printf("\n");
                 // write out value for delta encoding of next block
                 // deltas[prev_val_offset] = (int8_t)src[((block_sz - 1) * ndims) + dim];
-                prev_vals[dim] = src[((block_sz - 1) * ndims) + dim];
+                prev_vals_ar[dim] = src[((block_sz - 1) * ndims) + dim];
 
                 // if (mask > 0) { mask = NBITS_MASKS_U8[255]; } // TODO rm
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
@@ -1498,7 +1313,7 @@ do_rle:
                 // the next block; to do this, we need to reset `prev_vals`
                 if (b == group_sz_blocks) {
                     // printf("reseting prev vals...\n");
-                    memcpy(prev_vals, src - ndims, ndims);
+                    memcpy(prev_vals_ar, src - ndims, ndims);
                     continue;
                 }
 
