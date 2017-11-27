@@ -107,7 +107,7 @@ int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len, int8_t* dest,
             // ------------------------ compute info for each stripe
             // printf("comp: starting deltas:\n"); dump_bytes(deltas, (block_sz + 1) * ndims, ndims);
 
-            // const uint8_t coef = 0;
+            const uint8_t coef = 5;
 
             for (uint16_t dim = 0; dim < ndims; dim++) {
                 // compute maximum number of bits used by any value of this dim,
@@ -121,6 +121,7 @@ int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len, int8_t* dest,
                     int8_t delta = (int8_t)(val - prev_val);
 
                     int8_t prediction = 5; // TODO real prediction
+                    // int8_t prediction = (((int16_t)prev_delta) * coef) >> 8;
 
                     int8_t err = delta - prediction;
                     uint8_t bits = zigzag_encode_i8(err);
@@ -331,7 +332,11 @@ int64_t decompress8b_rowmajor_xff(const int8_t* src, uint8_t* dest) {
 
     // extra row in deltas is to store last decoded values
     // TODO just special case very first row
-    uint8_t* deltas = (uint8_t*)calloc((block_sz + 1) * padded_ndims, 1);
+    int8_t* errs_ar = (int8_t*)calloc((block_sz + 4) * padded_ndims, 1);
+    uint8_t* prev_vals_ar = (uint8_t*)(errs_ar + (block_sz + 0) * padded_ndims);
+    int8_t* prev_deltas_ar = (int8_t*)(errs_ar + (block_sz + 1) * padded_ndims);
+    int8_t* coeffs_ar_even = (int8_t*)(errs_ar + (block_sz + 2) * padded_ndims);
+    int8_t* coeffs_ar_odd =  (int8_t*)(errs_ar + (block_sz + 3) * padded_ndims);
 
     // ================================ main loop
 
@@ -418,7 +423,8 @@ int64_t decompress8b_rowmajor_xff(const int8_t* src, uint8_t* dest) {
                 uint8_t total_bits = nbits + offset_bits;
 
                 const int8_t* inptr = src + offset_bytes;
-                uint8_t* outptr = deltas + (stripe * stripe_sz);
+                // uint8_t* outptr = deltas + (stripe * stripe_sz);
+                int8_t* outptr = errs_ar + (stripe * stripe_sz);
                 uint32_t out_row_nbytes = padded_ndims;
 
                 // this is the hot loop
@@ -445,28 +451,37 @@ int64_t decompress8b_rowmajor_xff(const int8_t* src, uint8_t* dest) {
 
             // also works when we don't actually delta code
             for (int32_t v = nvectors - 1; v >= 0; v--) {
-                uint32_t vstripe_start = v * vector_sz;
-                uint32_t prev_vals_offset = block_sz * padded_ndims
-                    + vstripe_start;
-                __m256i prev_vals = _mm256_loadu_si256((const __m256i*)
-                    (deltas + prev_vals_offset));
-                // printf("========\ninitial prev vals: "); dump_m256i(prev_vals);
+                uint32_t v_offset = v * vector_sz;
+                __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar + v_offset);
+                __m256i* prev_deltas_ptr = (__m256i*)(prev_deltas_ar + v_offset);
+                __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
+                __m256i prev_deltas = _mm256_loadu_si256(prev_deltas_ptr);
                 __m256i vals = _mm256_setzero_si256();
 
+                const __m256i low_mask = _mm256_set1_epi16(0xff);
+
+                // TODO real coeffs
+                const __m256i filter_coeffs_even = _mm256_set1_epi16(5);
+                const __m256i filter_coeffs_odd = _mm256_set1_epi16(5);
+
                 const __m256i vpredictions = _mm256_set1_epi8(5); // TODO real predictions
-                // const __m256i vpredictions = _mm256_set1_epi8(0); // TODO real predictions
 
                 for (uint8_t i = 0; i < block_sz; i++) {
-                    uint32_t in_offset = i * padded_ndims + vstripe_start;
-                    uint32_t out_offset = i * ndims + vstripe_start;
+                    uint32_t in_offset = i * padded_ndims + v_offset;
+                    uint32_t out_offset = i * ndims + v_offset;
 
-                    // __m256i x = _mm256_loadu_si256(
-                    __m256i raw_vdeltas = _mm256_loadu_si256(
-                        (const __m256i*)(deltas + in_offset));
+                    __m256i raw_verrs = _mm256_loadu_si256(
+                        (const __m256i*)(errs_ar + in_offset));
+
+                    // __m256i even_predictions = _mm256_mullo_epi16(
+                    //     _mm256_and_si256(prev_deltas, low_mask), filter_coeffs_even);
+                    // __m256i odd_predictions = _mm256_mullo_epi16(
+                    //     _mm256_srai_epi16(prev_deltas, 8), filter_coeffs_odd);
+                    // __m256i vpredictions = _mm256_blendv_epi8(odd_predictions,
+                    //     _mm256_srli_epi16(even_predictions, 8), low_mask);
 
                     // zigzag decode
-                    // __m256i vdeltas = mm256_zigzag_decode_epi8(raw_vdeltas);
-                    __m256i verrs = mm256_zigzag_decode_epi8(raw_vdeltas);
+                    __m256i verrs = mm256_zigzag_decode_epi8(raw_verrs);
                     __m256i vdeltas = _mm256_add_epi8(verrs, vpredictions);
 
                     // delta decode
@@ -475,7 +490,10 @@ int64_t decompress8b_rowmajor_xff(const int8_t* src, uint8_t* dest) {
                     _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
                     prev_vals = vals;
                 }
-                _mm256_storeu_si256((__m256i*)(deltas+prev_vals_offset), vals);
+                // _mm256_storeu_si256((__m256i*)(prev_vals_ar + v_offset), vals);
+                _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
+                _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
+                // _mm256_storeu_si256((__m256i*)(deltas + prev_vals_offset), vals);
             }
 
             src += block_sz * in_row_nbytes;
