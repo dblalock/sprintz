@@ -127,9 +127,9 @@ int64_t compress8b_rowmajor(const uint8_t* src, size_t len, int8_t* dest,
                 uint8_t mask = 0;
                 for (int i = 0; i < block_sz; i++) {
                     uint8_t val = src[(i * ndims) + dim];
-                    mask |= NBITS_MASKS_U8[val];
+                    mask |= val;
                 }
-                // mask = NBITS_MASKS_U8[255]; // TODO rm
+                mask = NBITS_MASKS_U8[mask];
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
 
                 uint16_t stripe = dim / stripe_sz;
@@ -637,31 +637,22 @@ int64_t compress8b_rowmajor_delta(const uint8_t* src, size_t len, int8_t* dest,
                 // uint32_t prev_val_offset = block_sz * ndims + dim;
                 // uint8_t prev_val = deltas[prev_val_offset];
                 uint8_t prev_val = prev_vals_ar[dim];
+                // uint8_t val = 0;
                 for (uint8_t i = 0; i < block_sz; i++) {
-                    // uint8_t val = src[(i * ndims) + dim];
-                    // mask |= NBITS_MASKS_U8[val];
-
                     uint32_t offset = (i * ndims) + dim;
-
                     uint8_t val = src[offset];
                     int8_t delta = (int8_t)(val - prev_val);
-                    // int8_t delta = (int8_t)val; // TODO rm
                     uint8_t bits = zigzag_encode_i8(delta);
-                    mask |= NBITS_MASKS_U8[bits]; // just OR raw vals; no LUT
+                    mask |= bits;
                     deltas[offset] = bits;
-
-                    // // TODO rm after debug
-                    // uint8_t val = src[(i * ndims) + dim];
-                    // mask |= NBITS_MASKS_U8[val];
-                    // deltas[offset] = val;
-
                     prev_val = val;
                 }
                 // write out value for delta encoding of next block
                 // deltas[prev_val_offset] = (int8_t)src[((block_sz - 1) * ndims) + dim];
-                prev_vals_ar[dim] = src[((block_sz - 1) * ndims) + dim];
+                // prev_vals_ar[dim] = src[((block_sz - 1) * ndims) + dim];
+                prev_vals_ar[dim] = prev_val;
 
-                // mask = NBITS_MASKS_U8[255]; // TODO rm
+                mask = NBITS_MASKS_U8[mask];
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
 
                 uint16_t stripe = dim / stripe_sz;
@@ -1185,24 +1176,20 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
                 // compute maximum number of bits used by any value of this dim,
                 // while simultaneously computing deltas
                 uint8_t mask = 0;
-                // uint32_t prev_val_offset = block_sz * ndims + dim;
-                // uint8_t prev_val = deltas[prev_val_offset];
                 uint8_t prev_val = prev_vals_ar[dim];
-                // printf("vals: ");
                 for (uint8_t i = 0; i < block_sz; i++) {
                     uint32_t offset = (i * ndims) + dim;
                     uint8_t val = src[offset];
-                    // printf("%d ", val);
                     int8_t delta = (int8_t)(val - prev_val);
                     uint8_t bits = zigzag_encode_i8(delta);
-                    mask |= NBITS_MASKS_U8[bits]; // TODO just OR raw vals; no LUT
+                    mask |= bits;
                     deltas[offset] = bits;
                     prev_val = val;
                 }
-                // printf("\n");
                 // write out value for delta encoding of next block
-                // deltas[prev_val_offset] = (int8_t)src[((block_sz - 1) * ndims) + dim];
-                prev_vals_ar[dim] = src[((block_sz - 1) * ndims) + dim];
+                mask = NBITS_MASKS_U8[mask];
+                // prev_vals_ar[dim] = src[((block_sz - 1) * ndims) + dim];
+                prev_vals_ar[dim] = prev_val;
 
                 // if (mask > 0) { mask = NBITS_MASKS_U8[255]; } // TODO rm
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
@@ -1297,10 +1284,7 @@ do_rle:
                     dest++;
                 }
 
-                // make it read in last block (which was nonzero) again by
-                // contuing-ing without adding to src
                 run_length_nblocks = 0;
-                // continue;
 
                 // write out header (equivalent since already zeroed)
                 header_bit_offset += ndims * nbits_sz_bits;
