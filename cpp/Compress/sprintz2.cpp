@@ -1659,9 +1659,6 @@ int64_t decompress8b_rowmajor_delta_rle(const int8_t* src, uint8_t* dest) {
                 }
             } // for each stripe
 
-            // const __m256i zeros = _mm256_setzero_si256();
-            // const __m256i high_bits_one = _mm256_set1_epi8(-128);
-
             // also works when we don't actually delta code
             for (int32_t v = nvectors - 1; v >= 0; v--) {
                 uint32_t vstripe_start = v * vector_sz;
@@ -1669,34 +1666,17 @@ int64_t decompress8b_rowmajor_delta_rle(const int8_t* src, uint8_t* dest) {
                     + vstripe_start;
                 __m256i prev_vals = _mm256_loadu_si256((const __m256i*)
                     (deltas + prev_vals_offset));
-                // printf("========\ninitial prev vals: "); dump_m256i(prev_vals);
                 __m256i vals = _mm256_setzero_si256();
                 for (uint8_t i = 0; i < block_sz; i++) {
                     uint32_t in_offset = i * padded_ndims + vstripe_start;
                     uint32_t out_offset = i * ndims + vstripe_start;
-                    // TODO actual delta coding
-                    // memcpy(dest + out_offset, deltas + in_offset, vector_sz);
 
-                    // __m256i x = _mm256_loadu_si256(
                     __m256i raw_vdeltas = _mm256_loadu_si256(
                         (const __m256i*)(deltas + in_offset));
-
-                    // zigzag decode
                     __m256i vdeltas = mm256_zigzag_decode_epi8(raw_vdeltas);
-
-                    // __m256i shifted = _mm256_andnot_si256(
-                    //     high_bits_one, _mm256_srli_epi64(x, 1));
-                    // __m256i invert_mask = _mm256_cmpgt_epi8(zeros, _mm256_slli_epi64(x, 7));
-                    // __m256i vdeltas = _mm256_xor_si256(invert_mask, shifted);
-
-                    // delta decode
                     vals = _mm256_add_epi8(prev_vals, vdeltas);
 
-                    // vals = vdeltas;
                     _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
-                    // printf("---- row %d\n", i);
-                    // printf("deltas: "); dump_m256i(vdeltas);
-                    // printf("vals:   "); dump_m256i(vals);
                     prev_vals = vals;
                 }
                 _mm256_storeu_si256((__m256i*)(deltas+prev_vals_offset), vals);
