@@ -26,8 +26,8 @@
 TEST_CASE("xff_rowmajor_8b (with compression)", "[rowmajor][xff][dbg]") {
     printf("executing rowmajor compress xff test\n");
 
-    // int ndims = 9;
-    // auto ndims_list = ar::range(ndims, ndims + 1);
+//     int ndims = 8;
+//     auto ndims_list = ar::range(ndims, ndims + 1);
     auto ndims_list = ar::range(1, 129 + 1);
     for (auto _ndims : ndims_list) {
         auto ndims = (uint16_t)_ndims;
@@ -43,7 +43,7 @@ TEST_CASE("xff_rowmajor_8b (with compression)", "[rowmajor][xff][dbg]") {
 
         // TEST_SQUARES_INPUT(7, comp, decomp);
         // TEST_SQUARES_INPUT(16, comp, decomp);
-       // TEST_SQUARES_INPUT(16 * ndims, comp, decomp);
+//        TEST_SQUARES_INPUT(16 * ndims, comp, decomp);
        // TEST_SQUARES_INPUT(24 * ndims, comp, decomp);
 //                 TEST_SQUARES_INPUT(ndims * 8, comp, decomp);
         //         TEST_SIMPLE_INPUTS(ndims * 2, comp, decomp);

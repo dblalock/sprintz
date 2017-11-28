@@ -14,6 +14,8 @@
 #include <string.h>
 #include <assert.h>
 
+#include <type_traits>  // for std::is_signed
+
 #ifdef __cplusplus
 	#include <iostream>
 	#include <cstdarg>
@@ -132,8 +134,8 @@ inline void dump_elements(const T* x, size_t len=1, size_t newline_every=1,
 	int rowmark_every=8)
 {
 	const CastToT* ptr = reinterpret_cast<const CastToT*>(x);
-	// size_t len_elements = len * sizeof(T) / sizeof(CastToT);
-	size_t len_elements = len;
+	size_t len_elements = (len * sizeof(T) / sizeof(CastToT));
+	// size_t len_elements = len;
 	if (newline_every == 1) {
 		newline_every = len_elements >= 32 ? 32 : len_elements;
 	} else if (newline_every == 0) {
@@ -142,7 +144,11 @@ inline void dump_elements(const T* x, size_t len=1, size_t newline_every=1,
 	// printf("dump_elements: len=%lu, len_elements = %lu\n", len, len_elements);
 	// printf("dump_elements: newline_every=%lu\n", newline_every);
 	for (size_t i = 0; i < len_elements; i++) {
-		printf("%3d", (int)ptr[i]);
+		if (std::is_signed<CastToT>::value) {
+			printf("%4d", (int)ptr[i]);  // wider to allow for negative sign
+		} else {
+			printf("%3d", (int)ptr[i]);
+		}
 		// printf("%d", (int)ptr[i]);
 		int write_newline = newline_every > 0 && ((i+1) % newline_every) == 0;
 		// } else if (((i+1) % 8 == 0) && i + 1 < len_elements) { // write 8B separator unless at very end
@@ -156,10 +162,11 @@ inline void dump_elements(const T* x, size_t len=1, size_t newline_every=1,
 				printf(" | ");
 			}
 		}
-		if (rowmark_every > 0 && write_newline) {
+		if (rowmark_every > 0 && write_newline && i != (len_elements - 1)) {
 			size_t row_idx = (i + 1) / newline_every;
 			if (row_idx % rowmark_every == 0) {
-				printf("  row  %d\n", (int)row_idx);
+				// printf("  row  %d\n", (int)row_idx);
+				printf("   #%d\n", (int)row_idx);
 			}
 		}
 	}
@@ -168,7 +175,7 @@ inline void dump_elements(const T* x, size_t len=1, size_t newline_every=1,
 template<class T, class CastToT=T,
 	class _=typename std::enable_if< !std::is_pointer<T>::value >::type >
 inline void dump_elements(T x, size_t newline_every=1, int rowmark_every=8) {
-	dump_elements<T, CastToT>(&x, sizeof(x), newline_every, rowmark_every);
+	dump_elements<T, CastToT>(&x, 1, newline_every, rowmark_every);
 }
 
 template<class T> // dumps the raw bytes in memory order
@@ -189,6 +196,8 @@ inline void dump_bytes(T x, size_t newline_every=1) {
 template<class CastToT=uint8_t>
 inline void dump_m256i(const __m256i& v, bool newline=true) {
 	for (int i = 0; i < 4; i++) {
+		// uint64_t x = _mm256_extract_epi64(v, i);
+		// dump_elements<
 		dump_elements<uint64_t, CastToT>(_mm256_extract_epi64(v, i), -1);
         std::cout << " | ";
 	}
