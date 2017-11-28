@@ -1595,17 +1595,8 @@ int64_t decompress8b_rowmajor_delta_rle(const int8_t* src, uint8_t* dest) {
 
                 // write out the run
                 if (g > 0 || b > 0) { // if not at very beginning of data
-                    // this way works
                     const uint8_t* inptr = dest - ndims;
-                    // for (int i = 0; i < length * block_sz; i++) {
-                    //     // TODO mul by element sz
-                    //     memcpy(dest, inptr, ndims);
-                    //     dest += ndims;
-                    // }
-                    // vectorized way
-                    // write_run(dest, ndims * sizeof(*src), length * block_sz);
                     uint32_t ncopies = length * block_sz;
-                    // printf("data we're tiling: "); dump_bytes(inptr, ndims * elem_sz);
                     memrep(dest, inptr, ndims * elem_sz, ncopies);
                     dest += ndims * ncopies;
                 } else { // deltas of 0 at very start -> all zeros
@@ -1613,21 +1604,10 @@ int64_t decompress8b_rowmajor_delta_rle(const int8_t* src, uint8_t* dest) {
                     memset(dest, 0, num_zeros);
                     dest += num_zeros;
                 }
-
-                // memset(dest, prev_val, length * block_sz);
-
                 // printf("decompressed rle block of length %d at offset %d\n", length, (int)(dest - orig_dest));
-                // printf("low_byte, high_byte = "); dump_bits(low_byte, false); dump_bits(high_byte);
 
                 src++;
                 src += (high_byte > 0); // if 0, wasn't used for run length
-                // if (high_byte > 0) {
-                    // printf("")
-                // }
-                // dest += length * block_sz;
-
-                // printf("about to read src vals: "); dump_bytes(src, ndims);
-                // printf("about to write to dest offset: %d\n", (int)(dest - orig_dest));
 
                 masks += nstripes;
                 bitwidths += nstripes;
