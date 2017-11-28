@@ -28,15 +28,29 @@ static const int kDefaultGroupSzBlocks = 2;
 
 // ========================================================== rowmajor xff
 
+#define SIGN(x) ((x) > 0) - ((x) < 0)
+
+inline int8_t copysign_i8(int8_t sign_of, int8_t val) {
+    int8_t mask = sign_of >> 7; // technically UB, but sane compilers do this
+    int8_t maybe_negated = (val ^ mask) - mask;
+    return sign_of != 0 ? maybe_negated : 0; // let compiler optimize this
+}
+
 int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len, int8_t* dest,
                             uint16_t ndims, bool write_size)
 {
     // constants that could, in principle, be changed (but not in this impl)
-    static const int block_sz = 8;
-    static const int stripe_sz = 8;
-    static const int nbits_sz_bits = 3;
+    static const uint8_t log2_block_sz = 3;
+    static const uint8_t stripe_sz = 8;
+    static const uint8_t nbits_sz_bits = 3;
     // constants that could actually be changed in this impl
-    static const int group_sz_blocks = kDefaultGroupSzBlocks;
+    // static const uint8_t log2_learning_downsample = 1; // TODO uncomment
+    static const uint8_t log2_learning_downsample = 0;
+    static const uint8_t group_sz_blocks = kDefaultGroupSzBlocks;
+    static const uint8_t learning_shift = 1;
+    // derived constants
+    static const uint8_t block_sz = 1 << log2_block_sz;
+    static const uint8_t learning_downsample = 1 << log2_learning_downsample;
 
     const uint8_t* orig_src = src;
     int8_t* orig_dest = dest;
@@ -80,9 +94,10 @@ int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len, int8_t* dest,
     // TODO just look at src and special case first row
     // int8_t* deltas = (int8_t*)calloc(1, (block_sz + 2) * ndims);
     // uint8_t* prev_vals_ar = (uint8_t*)(deltas + block_sz * ndims);
-    int8_t* errs = (int8_t*)calloc(1, (block_sz + 2) * ndims);
-    uint8_t* prev_vals_ar = (uint8_t*)(errs + block_sz * ndims);
-    uint8_t* prev_deltas_ar = (uint8_t*)(errs + (block_sz + 1) * ndims);
+    int8_t* errs = (int8_t*)calloc(1, (block_sz + 4) * ndims);
+    uint8_t* prev_vals_ar   = (uint8_t*)(errs + block_sz * ndims);
+    int8_t* prev_deltas_ar  = (int8_t* )(errs + (block_sz + 1) * ndims);
+    int16_t* coef_counters_ar=(int16_t*)(errs + (block_sz + 2) * ndims);
 
     // ================================ main loop
 
@@ -107,10 +122,14 @@ int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len, int8_t* dest,
             // ------------------------ compute info for each stripe
             // printf("comp: starting deltas:\n"); dump_bytes(deltas, (block_sz + 1) * ndims, ndims);
 
-            const int16_t coef = 5;
+            // const int16_t coef = 5;
 
             auto deltas = (int8_t*)calloc(ndims * block_sz, 1); // TODO rm
             auto predictions = (int8_t*)calloc(ndims * block_sz, 1); // TODO rm
+            auto grads = (int8_t*)calloc(ndims, 1); // TODO rm
+            // auto grad_sums = (int8_t*)calloc(ndims * block_sz / learning_downsample, 1); // TODO rm
+            auto grad_sums = (int8_t*)calloc(ndims * block_sz, 1); // TODO rm
+            auto all_grads = (int8_t*)calloc(ndims * block_sz, 1); // TODO rm
 
             // printf("errs (transposed):\n");
             // printf("predictions (transposed):\n");
@@ -121,6 +140,10 @@ int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len, int8_t* dest,
                 uint8_t prev_val = prev_vals_ar[dim];
                 int8_t prev_delta = prev_deltas_ar[dim];
                 // printf("deltas: ");
+
+                int16_t coef = (coef_counters_ar[dim] >> (learning_shift + 4)) << 4;
+                int8_t grad_sum = 0;
+
                 for (uint8_t i = 0; i < block_sz; i++) {
                     uint32_t offset = (i * ndims) + dim;
                     uint8_t val = src[offset];
@@ -132,13 +155,41 @@ int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len, int8_t* dest,
 
                     int8_t err = delta - prediction;
                     uint8_t bits = zigzag_encode_i8(err);
+
+                    if (i % learning_downsample == (learning_downsample - 1)) {
+                        // grad_sum += err >= 0 ? prev_delta : -prev_delta;
+                        // grad_sum += SIGN(err) * prev_delta;
+
+                        int8_t grad = copysign_i8(err, prev_delta);
+
+                        // TODO rm this verbose way
+                        int8_t grad2 = prev_delta;
+                        if (err == 0) {
+                            grad2 = 0;
+                        } else if (err < 0) {
+                            grad2 = -prev_delta;
+                        }
+
+                        if (grad != grad2) {
+                            printf("grad, grad2, err, prev_delta: %d, %d, %d, %d\n", grad, grad2, err, prev_delta);
+                            int8_t mask = err >> 7; // technically UB, but sane compilers do this
+                            printf("mask, prev_delta ^ mask = %d, %d\n", mask, prev_delta ^ mask);
+                            // return (val ^ mask) - mask;
+                        }
+
+                        grad_sum += grad;
+                        // grad_sums[(i * ndims / learning_downsample) + dim] = grad_sum;
+                        grad_sums[(i * ndims) + dim] = grad_sum;
+                        all_grads[(i * ndims) + dim] = grad;
+                    }
+
+                    deltas[offset] = delta; // TODO rm
+                    predictions[offset] = prediction; // TODO rm
+
                     mask |= bits;
                     errs[offset] = bits;
                     prev_val = val;
                     prev_delta = delta;
-
-                    deltas[offset] = delta; // TODO rm
-                    predictions[offset] = prediction; // TODO rm
 
                     // printf("%d ", delta);
                     // printf("%d ", (uint8_t)err);
@@ -149,6 +200,15 @@ int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len, int8_t* dest,
                 mask = NBITS_MASKS_U8[mask];
                 prev_vals_ar[dim] = prev_val;
                 prev_deltas_ar[dim] = prev_delta;
+
+                // update prediction coefficient
+                int8_t grad = grad_sum >> (log2_block_sz - log2_learning_downsample);
+                // int16_t grad = ((uint16_t)grad_sum) >> 15;  // > 32766 ? 1 : 0; // TODO rm
+                // int16_t grad = 0;
+                coef_counters_ar[dim] += grad;
+                grads[dim] = grad;
+
+                // printf("grad_sum, grad = %d, %d\n", grad_sum, grad);
 
                 // mask = NBITS_MASKS_U8[255]; // TODO rm
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
@@ -166,27 +226,21 @@ int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len, int8_t* dest,
                 // printf("write_nbits = %d, stripe header = ", write_nbits);
                 // dump_bytes(stripe_headers[stripe], false); dump_bits(stripe_headers[stripe]);
             }
+            // TODO rm all this
             // printf("zigzagged errs:\n"); dump_elements(errs, ndims*block_sz, ndims);
-            // printf("zigzagged errs:\n"); dump_bytes(errs, ndims*block_sz, ndims);
-            // printf("zigzagged errs: \n");
             // printf("predictions:\n"); dump_elements(predictions, ndims*block_sz, ndims);
-            // printf("deltas:\n"); dump_elements(deltas, ndims*block_sz, ndims);
+            // if (b == 0) {
+            //     printf("deltas:\n"); dump_elements(deltas, ndims*block_sz, ndims);
+            //     printf("all grads:\n"); dump_elements(all_grads, ndims * block_sz, ndims);
+            //     printf("grad_sums:\n"); dump_elements(grad_sums, ndims * block_sz, ndims);
+            //     // printf("mean grads:\n"); dump_elements(grads, ndims, ndims);
+            //     // printf("coef counters:\n"); dump_elements(coef_counters_ar, ndims, ndims);
+            // }
             free(predictions);
             free(deltas);
-            // printf("deltas: \n");
-            // for (uint8_t i = 0; i < block_sz; i++) {
-            //     for (uint16_t j = 0; j < ndims; j++) {
-            //         printf("%d ", (int)(deltas[i * ndims + j]));
-            //     }
-            //     printf("\n");
-            // }
-            // printf("errs: \n");
-            // for (uint8_t i = 0; i < block_sz; i++) {
-            //     for (uint16_t j = 0; j < ndims; j++) {
-            //         printf("%d ", (int)zigzag_decode_i8(errs[i * ndims + j]));
-            //     }
-            //     printf("\n");
-            // }
+            free(grads);
+            free(grad_sums);
+            free(all_grads);
 
             // compute start offsets of each stripe (in bits)
             stripe_bitoffsets[0] = 0;
@@ -285,14 +339,19 @@ int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len, int8_t* dest,
 
 int64_t decompress8b_rowmajor_xff(const int8_t* src, uint8_t* dest) {
     // constants that could, in principle, be changed (but not in this impl)
-    static const uint8_t block_sz = 8;
+    static const uint8_t log2_block_sz = 3;
     static const uint8_t vector_sz = 32;
     static const uint8_t stripe_sz = 8;
     static const uint8_t nbits_sz_bits = 3;
     // constants that could actually be changed in this impl
+    // static const uint8_t log2_learning_downsample = 1;
+    static const uint8_t log2_learning_downsample = 0;
     static const uint8_t group_sz_blocks = kDefaultGroupSzBlocks;
+    static const uint8_t learning_shift = 1;
     // derived constants
+    static const uint8_t block_sz = 1 << log2_block_sz;
     static const int group_sz_per_dim = block_sz * group_sz_blocks;
+    static const uint8_t learning_downsample = 1 << log2_learning_downsample;
     static const uint8_t stripe_header_sz = nbits_sz_bits * stripe_sz / 8;
     static const uint8_t nbits_sz_mask = (1 << nbits_sz_bits) - 1;
     static const uint64_t kHeaderUnpackMask = TILE_BYTE(nbits_sz_mask);
@@ -485,7 +544,6 @@ int64_t decompress8b_rowmajor_xff(const int8_t* src, uint8_t* dest) {
                 }
             } // for each stripe
 
-            // also works when we don't actually delta code
             for (int32_t v = nvectors - 1; v >= 0; v--) {
                 uint32_t v_offset = v * vector_sz;
                 __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar + v_offset);
@@ -499,13 +557,33 @@ int64_t decompress8b_rowmajor_xff(const int8_t* src, uint8_t* dest) {
                 // const __m256i shift_to_upper = _mm256_set1_epi16(0xffff - 0x00ff);
                 const __m256i max_pos_val = _mm256_set1_epi16(127);
 
+                const __m256i* even_counters_ptr =
+                    (const __m256i*)(coeffs_ar_even + v_offset);
+                const __m256i* odd_counters_ptr =
+                    (const __m256i*)(coeffs_ar_odd + v_offset);
+                __m256i coef_counters_even = _mm256_loadu_si256(even_counters_ptr);
+                __m256i coef_counters_odd = _mm256_loadu_si256(odd_counters_ptr);
+
+                // set coef[i] to ((counter[i] >> learn_shift) >> 4) << 4)
+                __m256i filter_coeffs_even  = _mm256_srai_epi16(
+                    coef_counters_even, learning_shift + 4);
+                __m256i filter_coeffs_odd  = _mm256_srai_epi16(
+                    coef_counters_odd, learning_shift + 4);
+                filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 4);
+                filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 4);
+
                 // TODO real coeffs
-                const __m256i filter_coeffs_even = _mm256_set1_epi16(5);
-                const __m256i filter_coeffs_odd = _mm256_set1_epi16(5);
+                // const __m256i filter_coeffs_even = _mm256_set1_epi16(5);
+                // const __m256i filter_coeffs_odd = _mm256_set1_epi16(5);
 
                 // const __m256i vpredictions = _mm256_set1_epi8(5); // TODO real predictions
 
                 // printf("==== b=%d\n", b);
+
+                // printf("coeffs even: "); dump_m256i(filter_coeffs_even);
+                // printf("counters even: "); dump_m256i(coef_counters_even);
+
+                __m256i gradients_sum = _mm256_setzero_si256();
 
                 for (uint8_t i = 0; i < block_sz; i++) {
                     uint32_t in_offset = i * padded_ndims + v_offset;
@@ -539,6 +617,15 @@ int64_t decompress8b_rowmajor_xff(const int8_t* src, uint8_t* dest) {
                     // zigzag decode
                     __m256i verrs = mm256_zigzag_decode_epi8(raw_verrs);
 
+                    // compute gradients, but downsample for speed
+                    if (i % learning_downsample == (learning_downsample - 1)) {
+                        __m256i gradients = _mm256_sign_epi8(prev_deltas, verrs);
+                        gradients_sum = _mm256_add_epi8(gradients_sum, gradients);
+                        // if (b == 0) { printf("grads%d: ", i); dump_m256i<int8_t>(gradients); }
+                        // if (b == 0) { printf("gradsums%d: ", i); dump_m256i<int8_t>(gradients_sum); }
+                        // if (b == 0) { printf("\n"); }
+                    }
+
                     // looks like errs are good, so xff part is prolly what's
                     // not quite symmetric
                     // printf("verrs: "); dump_m256i(verrs);
@@ -559,8 +646,28 @@ int64_t decompress8b_rowmajor_xff(const int8_t* src, uint8_t* dest) {
                 _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
                 _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
                 // _mm256_storeu_si256((__m256i*)(deltas + prev_vals_offset), vals);
-            }
 
+                // mean of gradients in block, for even and odd indices
+                const uint8_t rshift = 8 + log2_block_sz - log2_learning_downsample;
+                __m256i even_grads = _mm256_srai_epi16(
+                    _mm256_slli_epi16(gradients_sum, 8), rshift);
+                __m256i odd_grads = _mm256_srai_epi16(gradients_sum, rshift);
+
+                // printf("rshift: %d\n", rshift);
+                // printf("even grads: "); dump_m256i<int16_t>(even_grads);
+                // printf("counters even: "); dump_m256i(coef_counters_even);
+
+                // TODO rm
+                // __m256i even_grads = _mm256_setzero_si256();
+                // __m256i odd_grads = _mm256_setzero_si256();
+
+                // store updated coefficients (or, technically, the counters)
+                coef_counters_even = _mm256_add_epi16(coef_counters_even, even_grads);
+                coef_counters_odd = _mm256_add_epi16(coef_counters_odd, odd_grads);
+
+                _mm256_storeu_si256((__m256i*)even_counters_ptr, coef_counters_even);
+                _mm256_storeu_si256((__m256i*)odd_counters_ptr, coef_counters_odd);
+            }
             src += block_sz * in_row_nbytes;
             dest += block_sz * ndims;
             masks += nstripes;

@@ -48,23 +48,26 @@ TEST_CASE("xff_rowmajor_8b (with compression)", "[rowmajor][xff][dbg]") {
 //                 TEST_SQUARES_INPUT(ndims * 8, comp, decomp);
         //         TEST_SIMPLE_INPUTS(ndims * 2, comp, decomp);
         //         TEST_SIMPLE_INPUTS(ndims * 16, comp, decomp);
-        // TEST_KNOWN_INPUT(ndims * 16, comp, decomp);
+//         TEST_KNOWN_INPUT(ndims * 16, comp, decomp);
         // TEST_KNOWN_INPUT(ndims * 32, comp, decomp);
         TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
+//        TEST_COMP_DECOMP_PAIR(comp, decomp);
         // TEST_KNOWN_INPUT(ndims * 19, comp, decomp);
         // TEST_SIMPLE_INPUTS(ndims * 19, comp, decomp);
+//        TEST_FUZZ(ndims * 16, comp, decomp);
 
-        // #define COMP_FUNC comp
-        // #define DECOMP_FUNC decomp
-
-        // auto SZ = ndims * 19;
-        // Vec_u8 raw(SZ);
-        // {
-        //     for (int i = 0; i < SZ; i++) {
-        //         raw(i) = (i % 2) ? (i + 64) % 128 : 0;
-        //     }
-        //     TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);
-        // }
+//         #define COMP_FUNC comp
+//         #define DECOMP_FUNC decomp
+//
+//         auto SZ = ndims * 16;
+//         Vec_u8 raw(SZ);
+//         {
+//             for (int i = 0; i < SZ; i++) {
+////                 raw(i) = (i % 2) ? (i + 64) % 128 : 0;
+//                 raw(i) = (i % ndims) + (i / ndims)*(i / ndims);
+//             }
+//             TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);
+//         }
 
         // vector<int64_t> sizes {1, 2, 7, 8, 15, 16, 17, 31, 32, 33, 63, 64,
         //     66, 71, 72, 73, 127, 128, 129, 135, 136, 137, 4096, 4096 + 17};
