@@ -107,11 +107,12 @@ TEST_CASE("xff_rle_rowmajor_8b (with compression)", "[rowmajor][xff][rle][dbg]")
         printf("---- ndims = %d\n", ndims);
         CAPTURE(ndims);
         auto comp = [ndims](uint8_t* src, size_t len, int8_t* dest) {
-            // return encode_xff_rowmajor(src, (uint32_t)len, dest, ndims);
             return compress8b_rowmajor_xff_rle(src, (uint32_t)len, dest, ndims);
+//            return compress8b_rowmajor_xff(src, (uint32_t)len, dest, ndims);
         };
         auto decomp = [](int8_t* src, uint8_t* dest) {
             return decompress8b_rowmajor_xff_rle(src, dest);
+//            return decompress8b_rowmajor_xff(src, dest);
         };
         
         // TEST_SQUARES_INPUT(7, comp, decomp);
