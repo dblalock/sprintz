@@ -651,7 +651,7 @@ int64_t compress8b_rowmajor_xff_rle(const uint8_t* src, size_t len,
     static const uint8_t learning_downsample = 1 << log2_learning_downsample;
     static const size_t min_data_size = 8 * block_sz * group_sz_blocks;
 
-    // const uint8_t* orig_src = src;
+    const uint8_t* orig_src = src;
     int8_t* orig_dest = dest;
     const uint8_t* src_end = src + len;
 
@@ -752,7 +752,8 @@ int64_t compress8b_rowmajor_xff_rle(const uint8_t* src, size_t len,
                     uint8_t bits = zigzag_encode_i8(err);
 
                     if (i % learning_downsample == learning_downsample - 1) {
-                        grad_sum += copysign_i8(err, prev_delta);
+                        // grad_sum += copysign_i8(err, prev_delta);
+                        grad_sum += 0; // TODO rm
                     }
 
                     mask |= bits;
@@ -808,14 +809,14 @@ int64_t compress8b_rowmajor_xff_rle(const uint8_t* src, size_t len,
             bool do_rle = row_width_bits == 0 && run_length_nblocks < max_run_nblocks;
 
             // printf("row width bits: %d\n", row_width_bits);
-            do_rle = false;
+            // do_rle = false;
 
             if (do_rle) {
 do_rle:
                 run_length_nblocks++; // TODO uncomment
                 src += block_sz * ndims;
 
-                // printf("************************ trying to encode a run!");
+                // printf("************************ trying to encode a run!\n");
 
                 if (src < last_full_group_start) {
                     continue; // still enough data to finish group
@@ -825,6 +826,7 @@ do_rle:
                     header_bit_offset += ndims * nbits_sz_bits;
 
                     // printf("aborting and compressing rle block of length %d ending at src offset %d\n", run_length_nblocks, (int)(src - orig_src));
+                    // printf("coefs: "); dump_elements(coef_counters_ar, ndims, ndims);
 
                     b++; // we're finishing off this block
 
@@ -854,7 +856,6 @@ do_rle:
 
             if (run_length_nblocks > 0) { // just finished a run
                 // printf("compressing rle block of length %d ending at offset %d\n", run_length_nblocks, (int)(src - orig_src));
-                // printf("initial header bit offset: %d\n", header_bit_offset);
                 b++;
 
                 *dest = run_length_nblocks & 0x7f; // bottom 7 bits
@@ -1182,9 +1183,9 @@ int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
                 bitwidths[nstripes - 1]);
             uint32_t in_row_nbytes = (in_row_nbits >> 3) + ((in_row_nbits % 8) > 0);
 
-            if (in_row_nbits > 99999) { // TODO rm
-                // printf("************************ trying to decode a run!");
-            // if (in_row_nbits == 0) {
+            // if (in_row_nbits > 99999) { // TODO rm
+            if (in_row_nbits == 0) {
+                // printf("************************ trying to decode a run!\n");
                 int8_t low_byte = (int8_t)*src;
                 uint8_t high_byte = (uint8_t)*(src + 1);
                 high_byte = high_byte & (low_byte >> 7); // 0 if low msb == 0
@@ -1193,15 +1194,89 @@ int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
                 // write out the run
                 if (g > 0 || b > 0) { // if not at very beginning of data
                     const uint8_t* inptr = dest - ndims;
-                    uint32_t ncopies = length * block_sz;
-                    memrep(dest, inptr, ndims * elem_sz, ncopies);
-                    dest += ndims * ncopies;
+
+                    // // just delta code; this works with coefs clamped to 0
+                    // uint32_t ncopies = length * block_sz;
+                    // memrep(dest, inptr, ndims * elem_sz, ncopies); // just delta coding
+                    // dest += ndims * length * block_sz;
+
+                    // // delta code in manner that parallels xff impl here
+                    // for (int32_t bb = 0; bb < length; bb++) {
+                    //     for (int32_t v = nvectors - 1; v >= 0; v--) {
+                    //         uint32_t v_offset = v * vector_sz;
+                    //         __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar + v_offset);
+                    //         __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
+                    //         for (uint8_t i = 0; i < block_sz; i++) {
+                    //             uint32_t out_offset = i * ndims + v_offset;
+                    //             _mm256_storeu_si256((__m256i*)(dest + out_offset), prev_vals);
+                    //         }
+                    //     }
+                    //     dest += ndims * block_sz;
+                    // }
+
+                    for (int32_t bb = 0; bb < length; bb++) {
+                        for (int32_t v = nvectors - 1; v >= 0; v--) {
+                            uint32_t v_offset = v * vector_sz;
+                            __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar + v_offset);
+                            __m256i* prev_deltas_ptr = (__m256i*)(prev_deltas_ar + v_offset);
+                            __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
+                            __m256i prev_deltas = _mm256_loadu_si256(prev_deltas_ptr);
+                            __m256i vals = _mm256_setzero_si256();
+
+                            // compute filter coeffs
+                            // TODO store in an array to avoid recomputation
+                            __m256i coef_counters_even = _mm256_loadu_si256(
+                                (const __m256i*)(coeffs_ar_even + v_offset));
+                            __m256i coef_counters_odd = _mm256_loadu_si256(
+                                (const __m256i*)(coeffs_ar_odd + v_offset));
+                            __m256i filter_coeffs_even  = _mm256_srai_epi16(
+                                coef_counters_even, learning_shift + 4);
+                            __m256i filter_coeffs_odd  = _mm256_srai_epi16(
+                                coef_counters_odd, learning_shift + 4);
+                            filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 4);
+                            filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 4);
+
+                            // printf("filter coeffs even at start of block:\n"); dump_m256i(filter_coeffs_even);
+                            // if (bb == 0) { printf("filter coeffs for run:\n"); dump_m256i(filter_coeffs_even); }
+
+                            for (uint8_t i = 0; i < block_sz; i++) {
+                                uint32_t in_offset = i * padded_ndims + v_offset;
+                                uint32_t out_offset = i * ndims + v_offset;
+
+                                __m256i even_prev_deltas = _mm256_srai_epi16(
+                                    _mm256_slli_epi16(prev_deltas, 8), 8);
+                                __m256i odd_prev_deltas = _mm256_srai_epi16(
+                                    prev_deltas, 8);
+
+                                __m256i even_predictions = _mm256_mullo_epi16(
+                                    even_prev_deltas, filter_coeffs_even);
+                                __m256i odd_predictions = _mm256_mullo_epi16(
+                                    odd_prev_deltas, filter_coeffs_odd);
+                                __m256i vpredictions = _mm256_blendv_epi8(odd_predictions,
+                                    _mm256_srli_epi16(even_predictions, 8), low_mask);
+
+                                // if 0 err, predictions equal true deltas
+                                __m256i vdeltas = vpredictions;
+                                vals = _mm256_add_epi8(prev_vals, vdeltas);
+
+                                _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
+                                prev_deltas = vdeltas;
+                                prev_vals = vals;
+                            } // for each row
+                            _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
+                            _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
+                            // printf("filter coeffs even at end of block: "); dump_m256i(filter_coeffs_even);
+                        } // for each vector
+                        dest += ndims * block_sz;
+                    } // for each block in run
                 } else { // deltas of 0 at very start -> all zeros
                     size_t num_zeros = length * block_sz * ndims;
                     memset(dest, 0, num_zeros);
                     dest += num_zeros;
                 }
-                // printf("decompressed rle block of length %d at offset %d\n", length, (int)(dest - orig_dest));
+                // if (length == 0) {
+                //     printf("decompressed rle block of length %d at offset %d\n", length, (int)(dest - orig_dest));
+                // }
 
                 src++;
                 src += (high_byte > 0); // if 0, wasn't used for run length
@@ -1318,7 +1393,8 @@ int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
 
                     // compute gradients, but downsample for speed
                     if (i % learning_downsample == learning_downsample - 1) {
-                        __m256i gradients = _mm256_sign_epi8(prev_deltas, verrs);
+                        // __m256i gradients = _mm256_sign_epi8(prev_deltas, verrs);
+                        __m256i gradients = _mm256_setzero_si256(); // TODO rm
                         gradients_sum = _mm256_add_epi8(gradients_sum, gradients);
                     }
 
