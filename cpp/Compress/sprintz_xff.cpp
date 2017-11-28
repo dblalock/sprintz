@@ -28,7 +28,7 @@ static const int kDefaultGroupSzBlocks = 2;
 
 // ========================================================== rowmajor xff
 
-#define SIGN(x) ((x) > 0) - ((x) < 0)
+// #define SIGN(x) ((x) > 0) - ((x) < 0)
 
 inline int8_t copysign_i8(int8_t sign_of, int8_t val) {
     int8_t mask = sign_of >> 7; // technically UB, but sane compilers do this
@@ -814,15 +814,18 @@ int64_t compress8b_rowmajor_xff_rle(const uint8_t* src, size_t len,
     int8_t* dest, uint16_t ndims, bool write_size)
 {
     // constants that could, in principle, be changed (but not in this impl)
-    static const int block_sz = 8;
-    static const int stripe_sz = 8;
-    static const int nbits_sz_bits = 3;
+    static const uint8_t learning_shift = 1;
+    static const uint8_t log2_block_sz = 3;
+    static const uint8_t nbits_sz_bits = 3;
+    static const uint8_t stripe_sz = 8;
     // constants that could actually be changed in this impl
-    static const int group_sz_blocks = kDefaultGroupSzBlocks;
-    static const int length_header_nbytes = 8;
+    static const uint8_t group_sz_blocks = kDefaultGroupSzBlocks;
+    static const uint8_t length_header_nbytes = 8;
+    static const uint8_t log2_learning_downsample = 1;
     static const uint16_t max_run_nblocks = 0x7fff; // 15 bit counter
-    // static const uint16_t max_run_nblocks = 2; // TODO rm
-    // derived consts
+    // derived constants
+    static const uint8_t block_sz = 1 << log2_block_sz;
+    static const uint8_t learning_downsample = 1 << log2_learning_downsample;
     static const size_t min_data_size = 8 * block_sz * group_sz_blocks;
 
     // const uint8_t* orig_src = src;
@@ -873,10 +876,11 @@ int64_t compress8b_rowmajor_xff_rle(const uint8_t* src, size_t len,
     uint32_t total_header_bytes_padded = total_header_bytes + 4;
     uint8_t* header_bytes = (uint8_t*)calloc(total_header_bytes_padded, 1);
 
-    // extra row is for storing previous values
-    // TODO just look at src and special case first row
-    int8_t* deltas = (int8_t*)calloc(1, (block_sz + 1) * ndims);
-    uint8_t* prev_vals_ar = (uint8_t*)(deltas + block_sz * ndims);
+    // contiguous allocation of xff stats
+    int8_t* errs = (int8_t*)calloc(1, (block_sz + 4) * ndims);
+    uint8_t* prev_vals_ar   = (uint8_t*)(errs + block_sz * ndims);
+    int8_t* prev_deltas_ar  = (int8_t* )(errs + (block_sz + 1) * ndims);
+    int16_t* coef_counters_ar=(int16_t*)(errs + (block_sz + 2) * ndims);
 
     // ================================ main loop
 
@@ -912,19 +916,36 @@ int64_t compress8b_rowmajor_xff_rle(const uint8_t* src, size_t len,
                 // while simultaneously computing deltas
                 uint8_t mask = 0;
                 uint8_t prev_val = prev_vals_ar[dim];
+                int8_t prev_delta = prev_deltas_ar[dim];
+
+                int16_t coef = (coef_counters_ar[dim] >> (learning_shift + 4)) << 4;
+                int8_t grad_sum = 0;
+
                 for (uint8_t i = 0; i < block_sz; i++) {
                     uint32_t offset = (i * ndims) + dim;
                     uint8_t val = src[offset];
                     int8_t delta = (int8_t)(val - prev_val);
+                    int8_t prediction = (((int16_t)prev_delta) * coef) >> 8;
+                    int8_t err = delta - prediction;
                     uint8_t bits = zigzag_encode_i8(delta);
+                    // uint8_t bits = zigzag_encode_i8(err);
+
+                    if (i % learning_downsample == learning_downsample - 1) {
+                        grad_sum += copysign_i8(err, prev_delta);
+                    }
+
                     mask |= bits;
-                    deltas[offset] = bits;
+                    errs[offset] = bits;
                     prev_val = val;
                 }
                 // write out value for delta encoding of next block
                 mask = NBITS_MASKS_U8[mask];
                 // prev_vals_ar[dim] = src[((block_sz - 1) * ndims) + dim];
                 prev_vals_ar[dim] = prev_val;
+
+                // update prediction coefficient
+                int8_t grad = grad_sum >> (log2_block_sz - log2_learning_downsample);
+                coef_counters_ar[dim] += grad;
 
                 // if (mask > 0) { mask = NBITS_MASKS_U8[255]; } // TODO rm
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
@@ -1084,7 +1105,8 @@ do_rle:
                 uint16_t total_bits = nbits + offset_bits;
 
                 int8_t* outptr = dest + offset_bytes;
-                const uint8_t* inptr = (const uint8_t*)(deltas +
+                // const uint8_t* inptr = (const uint8_t*)(deltas +
+                const uint8_t* inptr = (const uint8_t*)(errs +
                     (stripe * stripe_sz));
 
                 if (total_bits <= 64) { // always fits in one u64
@@ -1127,7 +1149,8 @@ main_loop_end:
     free(stripe_bitoffsets);
     free(stripe_masks);
     free(stripe_headers);
-    free(deltas);
+    // free(deltas);
+    free(errs);
 
     size_t remaining_len = src_end - src;
     if (write_size) {
@@ -1142,19 +1165,22 @@ main_loop_end:
 
 int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
     // constants that could, in principle, be changed (but not in this impl)
-    static const uint8_t block_sz = 8;
-    static const uint8_t vector_sz = 32;
-    static const uint8_t stripe_sz = 8;
+    static const uint8_t log2_block_sz = 3;
     static const uint8_t nbits_sz_bits = 3;
+    static const uint8_t stripe_sz = 8;
+    static const uint8_t vector_sz = 32;
     // constants that could actually be changed in this impl
     static const uint8_t group_sz_blocks = kDefaultGroupSzBlocks;
+    static const uint8_t learning_shift = 1;
+    static const uint8_t log2_learning_downsample = 1;
     // derived constants
-    // static const int group_sz_per_dim = block_sz * group_sz_blocks;
+    static const uint8_t block_sz = 1 << log2_block_sz;
     const uint8_t elem_sz = sizeof(*src);
-    static const uint8_t stripe_header_sz = nbits_sz_bits * stripe_sz / 8;
+    static const uint8_t learning_downsample = 1 << log2_learning_downsample;
+    static const size_t min_data_size = 8 * block_sz * group_sz_blocks;
     static const uint8_t nbits_sz_mask = (1 << nbits_sz_bits) - 1;
     static const uint64_t kHeaderUnpackMask = TILE_BYTE(nbits_sz_mask);
-    static const size_t min_data_size = 8 * block_sz * group_sz_blocks;
+    static const uint8_t stripe_header_sz = nbits_sz_bits * stripe_sz / 8;
     assert(stripe_sz % 8 == 0);
     assert(vector_sz % stripe_sz == 0);
     assert(vector_sz >= stripe_sz);
@@ -1239,7 +1265,13 @@ int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
 
     // extra row in deltas is to store last decoded values
     // TODO just special case very first row
-    uint8_t* deltas = (uint8_t*)calloc((block_sz + 1) * padded_ndims, 1);
+    // uint8_t* deltas = (uint8_t*)calloc((block_sz + 1) * padded_ndims, 1);
+
+    int8_t* errs_ar = (int8_t*)calloc((block_sz + 4) * padded_ndims, 1);
+    uint8_t* prev_vals_ar = (uint8_t*)(errs_ar + (block_sz + 0) * padded_ndims);
+    int8_t* prev_deltas_ar = (int8_t*)(errs_ar + (block_sz + 1) * padded_ndims);
+    int8_t* coeffs_ar_even = (int8_t*)(errs_ar + (block_sz + 2) * padded_ndims);
+    int8_t* coeffs_ar_odd =  (int8_t*)(errs_ar + (block_sz + 3) * padded_ndims);
 
     // printf("nvectors, padded_ndims = %d, %d\n", nvectors, padded_ndims);
 
@@ -1349,7 +1381,6 @@ int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
                 continue;
             }
 
-
             // ------------------------ unpack data for each stripe
             // for (size_t stripe = 0; stripe < nstripes; stripe++) {
             for (int stripe = nstripes - 1; stripe >= 0; stripe--) {
@@ -1363,7 +1394,8 @@ int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
                 const int8_t* inptr = src + offset_bytes;
                 // uint8_t* outptr = dest + (stripe * stripe_sz);
                 // uint32_t out_row_nbytes = ndims;
-                uint8_t* outptr = deltas + (stripe * stripe_sz);
+                // uint8_t* outptr = deltas + (stripe * stripe_sz);
+                int8_t* outptr = errs_ar + (stripe * stripe_sz);
                 uint32_t out_row_nbytes = padded_ndims;
 
                 // printf("nbits at idx %d = %d\n", stripe + nstripes * b, nbits);
@@ -1403,38 +1435,26 @@ int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
                 uint32_t prev_vals_offset = block_sz * padded_ndims
                     + vstripe_start;
                 __m256i prev_vals = _mm256_loadu_si256((const __m256i*)
-                    (deltas + prev_vals_offset));
-                // printf("========\ninitial prev vals: "); dump_m256i(prev_vals);
+                    (errs_ar + prev_vals_offset));
                 __m256i vals = _mm256_setzero_si256();
                 for (uint8_t i = 0; i < block_sz; i++) {
                     uint32_t in_offset = i * padded_ndims + vstripe_start;
                     uint32_t out_offset = i * ndims + vstripe_start;
-                    // TODO actual delta coding
-                    // memcpy(dest + out_offset, deltas + in_offset, vector_sz);
 
-                    // __m256i x = _mm256_loadu_si256(
-                    __m256i raw_vdeltas = _mm256_loadu_si256(
-                        (const __m256i*)(deltas + in_offset));
+                    __m256i raw_verrs = _mm256_loadu_si256(
+                        (const __m256i*)(errs_ar + in_offset));
+                        // (const __m256i*)(deltas + in_offset));
 
                     // zigzag decode
-                    __m256i vdeltas = mm256_zigzag_decode_epi8(raw_vdeltas);
-
-                    // __m256i shifted = _mm256_andnot_si256(
-                    //     high_bits_one, _mm256_srli_epi64(x, 1));
-                    // __m256i invert_mask = _mm256_cmpgt_epi8(zeros, _mm256_slli_epi64(x, 7));
-                    // __m256i vdeltas = _mm256_xor_si256(invert_mask, shifted);
+                    __m256i verrs = mm256_zigzag_decode_epi8(raw_verrs);
 
                     // delta decode
-                    vals = _mm256_add_epi8(prev_vals, vdeltas);
+                    vals = _mm256_add_epi8(prev_vals, verrs);
 
-                    // vals = vdeltas;
                     _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
-                    // printf("---- row %d\n", i);
-                    // printf("deltas: "); dump_m256i(vdeltas);
-                    // printf("vals:   "); dump_m256i(vals);
                     prev_vals = vals;
                 }
-                _mm256_storeu_si256((__m256i*)(deltas+prev_vals_offset), vals);
+                _mm256_storeu_si256((__m256i*)(errs_ar+prev_vals_offset), vals);
             }
 
             src += block_sz * in_row_nbytes;
@@ -1450,17 +1470,9 @@ int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
     free(data_masks);
     free(stripe_bitwidths);
     free(stripe_bitoffsets);
-
-    // printf("bytes read: %lld\n", (uint64_t)(src - orig_src));
-
-    // size_t remaining_len = orig_len - (dest - orig_dest);
+    free(errs_ar);
 
     // copy over trailing data
-    // size_t remaining_len = orig_len % group_sz;
-    // size_t remaining_len = orig_len - (src - orig_src);
-    // printf("remaining len: %d\n", (int)remaining_len);
-    // printf("read bytes: %lu\n", remaining_len);
-    // printf("remaining data: "); ar::print(src, remaining_len);
     memcpy(dest, src, remaining_len);
 
     // size_t dest_sz = dest + remaining_len - orig_dest;
@@ -1468,6 +1480,5 @@ int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
     // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, ndims * 2, 4);
     // ar::print(orig_dest, dest_sz, "decompressed data");
 
-    // printf("reached end of decomp\n");
     return dest + remaining_len - orig_dest;
 }
