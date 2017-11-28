@@ -23,7 +23,7 @@
 
 // ============================================================ sprintz predict
 
-TEST_CASE("xff_rowmajor_8b (with compression)", "[rowmajor][xff][dbg]") {
+TEST_CASE("xff_rowmajor_8b (with compression)", "[rowmajor][xff]") {
     printf("executing rowmajor compress xff test\n");
 
 //     int ndims = 8;
@@ -96,3 +96,33 @@ TEST_CASE("xff_rowmajor_8b (with compression)", "[rowmajor][xff][dbg]") {
     }
 }
 
+TEST_CASE("xff_rle_rowmajor_8b (with compression)", "[rowmajor][xff][rle][dbg]") {
+    printf("executing rowmajor compress xff + rle test\n");
+    
+    //     int ndims = 8;
+    //     auto ndims_list = ar::range(ndims, ndims + 1);
+    auto ndims_list = ar::range(1, 129 + 1);
+    for (auto _ndims : ndims_list) {
+        auto ndims = (uint16_t)_ndims;
+        printf("---- ndims = %d\n", ndims);
+        CAPTURE(ndims);
+        auto comp = [ndims](uint8_t* src, size_t len, int8_t* dest) {
+            // return encode_xff_rowmajor(src, (uint32_t)len, dest, ndims);
+            return compress8b_rowmajor_xff_rle(src, (uint32_t)len, dest, ndims);
+        };
+        auto decomp = [](int8_t* src, uint8_t* dest) {
+            return decompress8b_rowmajor_xff_rle(src, dest);
+        };
+        
+        // TEST_SQUARES_INPUT(7, comp, decomp);
+        // TEST_SQUARES_INPUT(16, comp, decomp);
+        //        TEST_SQUARES_INPUT(16 * ndims, comp, decomp);
+        // TEST_SQUARES_INPUT(24 * ndims, comp, decomp);
+        //                 TEST_SQUARES_INPUT(ndims * 8, comp, decomp);
+        //         TEST_SIMPLE_INPUTS(ndims * 2, comp, decomp);
+        //         TEST_SIMPLE_INPUTS(ndims * 16, comp, decomp);
+        //         TEST_KNOWN_INPUT(ndims * 16, comp, decomp);
+        // TEST_KNOWN_INPUT(ndims * 32, comp, decomp);
+        TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
+    }
+}

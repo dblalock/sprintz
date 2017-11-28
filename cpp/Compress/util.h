@@ -31,7 +31,7 @@ static CONSTEXPR inline T round_up_to_multiple(T x, T2 multipleof) {
     return remainder ? (x + multipleof - remainder) : x;
 }
 
-inline void memrep(uint8_t* dest, const uint8_t*src, int32_t in_nbytes,
+inline void memrep(uint8_t* dest, const uint8_t* src, int32_t in_nbytes,
                     int32_t ncopies)
 {
     if (in_nbytes < 1 || ncopies < 1) { return; }

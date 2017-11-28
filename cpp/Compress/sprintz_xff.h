@@ -23,5 +23,8 @@ int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len,
     int8_t* dest, uint16_t ndims, bool write_size=true);
 int64_t decompress8b_rowmajor_xff(const int8_t* src, uint8_t* dest);
 
+int64_t compress8b_rowmajor_xff_rle(const uint8_t* src, size_t len,
+    int8_t* dest, uint16_t ndims, bool write_size=true);
+int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest);
 
 #endif
