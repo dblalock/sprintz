@@ -96,12 +96,26 @@ TEST_CASE("xff_rowmajor_8b (with compression)", "[rowmajor][xff]") {
     }
 }
 
+#undef TEST_SPARSE
+#define TEST_SPARSE(SZ, COMP_FUNC, DECOMP_FUNC)                             \
+    do {                                                                    \
+    srand(123);                                                             \
+    Vec_u8 orig((SZ));                                                      \
+    Vec_u8 raw((SZ));                                                       \
+    orig.setRandom();                                                       \
+    {                                                                       \
+        raw = orig / 250;                                                   \
+        TEST_COMPRESSOR((SZ), COMP_FUNC, DECOMP_FUNC);                      \
+    }                                                                       \
+    } while(0);
+
+
 TEST_CASE("xff_rle_rowmajor_8b (with compression)", "[rowmajor][xff][rle][dbg]") {
     printf("executing rowmajor compress xff + rle test\n");
     
-//     int ndims = 4;
-//     auto ndims_list = ar::range(ndims, ndims + 1);
-    auto ndims_list = ar::range(1, 129 + 1);
+     int ndims = 3;
+     auto ndims_list = ar::range(ndims, ndims + 1);
+//    auto ndims_list = ar::range(1, 129 + 1);
     for (auto _ndims : ndims_list) {
         auto ndims = (uint16_t)_ndims;
         printf("---- ndims = %d\n", ndims);
@@ -124,7 +138,9 @@ TEST_CASE("xff_rle_rowmajor_8b (with compression)", "[rowmajor][xff][rle][dbg]")
         //         TEST_SIMPLE_INPUTS(ndims * 16, comp, decomp);
         //         TEST_KNOWN_INPUT(ndims * 16, comp, decomp);
         // TEST_KNOWN_INPUT(ndims * 32, comp, decomp);
-        TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
+//        TEST_SPARSE(120 * ndims, comp, decomp);
+        TEST_SPARSE(300 * ndims, comp, decomp);
+//        TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
 //        TEST_FUZZ(128 * ndims, comp, decomp);
 //        TEST_COMP_DECOMP_PAIR(comp, decomp);
     }

@@ -20,23 +20,31 @@
     decompressed.setOnes();                                             \
     */
 
-#define TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC)                     \
-    Vec_i8 compressed((SZ) * 3/2 + 64);                                 \
-    Vec_u8 decompressed((SZ)+ 64);                                      \
-    compressed += 0x55; /* poison memory */                             \
-    decompressed += 0xaa;                                               \
-    auto len = COMP_FUNC(raw.data(), (SZ), compressed.data());          \
-    len = DECOMP_FUNC(compressed.data(), decompressed.data());          \
-    CAPTURE(SZ);                                                        \
-    REQUIRE(len == (SZ));                                               \
-    auto arrays_eq = ar::all_eq(raw.data(), decompressed.data(), (SZ)); \
-    if ((SZ) < 100 && !arrays_eq) {                                     \
-        printf("**** Test Failed! ****\n");                             \
-        auto input_as_str = ar::to_string(raw.data(), (SZ));            \
-        auto output_as_str = ar::to_string(decompressed.data(), (SZ));  \
-        printf("input:\t%s\n", input_as_str.c_str());                   \
-        printf("output:\t%s\n", output_as_str.c_str());                 \
-    }                                                                   \
+#define TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC)                         \
+    Vec_i8 compressed((SZ) * 3/2 + 64);                                     \
+    Vec_u8 decompressed((SZ)+ 64);                                          \
+    compressed += 0x55; /* poison memory */                                 \
+    decompressed += 0xaa;                                                   \
+    auto len = COMP_FUNC(raw.data(), (SZ), compressed.data());              \
+    len = DECOMP_FUNC(compressed.data(), decompressed.data());              \
+    CAPTURE(SZ);                                                            \
+    REQUIRE(len == (SZ));                                                   \
+    auto arrays_eq = ar::all_eq(raw.data(), decompressed.data(), (SZ));     \
+    if (!arrays_eq) {                                                       \
+        printf("**** Test Failed! ****\n");                                 \
+        for (uint64_t i = 0; i < (SZ); i++) {                               \
+            if (raw.data()[i] != decompressed.data()[i]) {                  \
+                printf("first disagreement at index: %llu\n", i);           \
+                break;                                                      \
+            }                                                               \
+        }                                                                   \
+        if ((SZ) < 100) {                                                   \
+            auto input_as_str = ar::to_string(raw.data(), (SZ));            \
+            auto output_as_str = ar::to_string(decompressed.data(), (SZ));  \
+            printf("input:\t%s\n", input_as_str.c_str());                   \
+            printf("output:\t%s\n", output_as_str.c_str());                 \
+        }                                                                   \
+    }                                                                       \
     REQUIRE(arrays_eq);
 
 /*
