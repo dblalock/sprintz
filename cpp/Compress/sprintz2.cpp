@@ -1224,6 +1224,8 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
             // printf("stripe bitwidth 0: %d\n", stripe_bitwidths[0]);
             // printf("--- block %d, in offset = %d, row_width_bits = %u\n", b, (int)(src - orig_src), row_width_bits);
 
+just_read_block:
+
             // ------------------------ handle runs of zeros
             bool do_rle = row_width_bits == 0 && run_length_nblocks < max_run_nblocks;
 
@@ -1292,13 +1294,23 @@ do_rle:
                 // if closing the run finished this block, life is hard; we
                 // can't just execute the below code because it would try to
                 // write past the end of the header bytes and write a data
-                // block the decoder isn't expecting; handle this case by
-                // just feeding the current block through again as part of
-                // the next block; to do this, we need to reset `prev_vals`
+                // block the decoder isn't expecting
                 if (b == group_sz_blocks) {
                     // printf("reseting prev vals...\n");
-                    memcpy(prev_vals_ar, src - ndims, ndims);
-                    continue;
+                    // memcpy(prev_vals_ar, src - ndims, ndims);
+                    // continue;
+
+                    // start new group, and pretend the block we read
+                    // was the first block in that group (which it is now)
+                    ngroups++;  // invariant: groups we start are always finished
+                    header_bit_offset = 0;
+                    b = 0;
+                    header_dest = dest;
+                    dest += total_header_bytes;
+                    memset(header_bytes, 0, total_header_bytes_padded);
+                    memset(header_dest, 0, total_header_bytes);
+
+                    goto just_read_block;
                 }
 
                 // have to enforce invariant that bitwidth of 0 always gets
