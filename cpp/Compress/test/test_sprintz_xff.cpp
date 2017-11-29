@@ -113,9 +113,9 @@ TEST_CASE("xff_rowmajor_8b (with compression)", "[rowmajor][xff]") {
 TEST_CASE("xff_rle_rowmajor_8b (with compression)", "[rowmajor][xff][rle][dbg]") {
     printf("executing rowmajor compress xff + rle test\n");
     
-     int ndims = 3;
-     auto ndims_list = ar::range(ndims, ndims + 1);
-//    auto ndims_list = ar::range(1, 129 + 1);
+//     int ndims = 3;
+//     auto ndims_list = ar::range(ndims, ndims + 1);
+    auto ndims_list = ar::range(1, 129 + 1);
     for (auto _ndims : ndims_list) {
         auto ndims = (uint16_t)_ndims;
         printf("---- ndims = %d\n", ndims);
@@ -139,8 +139,9 @@ TEST_CASE("xff_rle_rowmajor_8b (with compression)", "[rowmajor][xff][rle][dbg]")
         //         TEST_KNOWN_INPUT(ndims * 16, comp, decomp);
         // TEST_KNOWN_INPUT(ndims * 32, comp, decomp);
 //        TEST_SPARSE(120 * ndims, comp, decomp);
-        TEST_SPARSE(300 * ndims, comp, decomp);
-//        TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
+//        TEST_SPARSE(300 * ndims, comp, decomp);
+//        TEST_SPARSE(4096 * ndims, comp, decomp);
+        TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
 //        TEST_FUZZ(128 * ndims, comp, decomp);
 //        TEST_COMP_DECOMP_PAIR(comp, decomp);
     }

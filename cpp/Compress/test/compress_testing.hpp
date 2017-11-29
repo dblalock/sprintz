@@ -31,10 +31,13 @@
     REQUIRE(len == (SZ));                                                   \
     auto arrays_eq = ar::all_eq(raw.data(), decompressed.data(), (SZ));     \
     if (!arrays_eq) {                                                       \
-        printf("**** Test Failed! ****\n");                                 \
+        printf("\n**** Test Failed! ****\n");                               \
         for (uint64_t i = 0; i < (SZ); i++) {                               \
             if (raw.data()[i] != decompressed.data()[i]) {                  \
-                printf("first disagreement at index: %llu\n", i);           \
+                printf("first disagreement at index: %llu", i);             \
+                printf(" (input %lld != output %lld)\n",                    \
+                    (long long)raw.data()[i],                               \
+                    (long long)decompressed.data()[i]);                     \
                 break;                                                      \
             }                                                               \
         }                                                                   \
