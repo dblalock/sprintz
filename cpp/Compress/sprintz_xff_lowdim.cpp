@@ -34,7 +34,7 @@ static const int debug = 0;
 
 // ------------------------------------------------ delta + rle low ndims
 
-int64_t compress8b_rowmajor_delta_rle_lowdim(const uint8_t* src, size_t len,
+int64_t compress8b_rowmajor_xff_rle_lowdim(const uint8_t* src, size_t len,
     int8_t* dest, uint16_t ndims, bool write_size)
 {
     // constants that could, in principle, be changed (but not in this impl)
@@ -314,7 +314,7 @@ main_loop_end:
     return dest + remaining_len - orig_dest;
 }
 
-int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest) {
+int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
     // constants that could, in principle, be changed (but not in this impl)
     static const uint8_t block_sz = 8;
     static const uint8_t vector_sz = 32;
