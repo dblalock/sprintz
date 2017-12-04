@@ -110,7 +110,7 @@ TEST_CASE("xff_rowmajor_8b (with compression)", "[rowmajor][xff]") {
     } while(0);
 
 
-TEST_CASE("xff_rle_rowmajor_8b (with compression)", "[rowmajor][xff][rle][dbg]") {
+TEST_CASE("xff_rle_rowmajor_8b (with compression)", "[rowmajor][xff][rle]") {
     printf("executing rowmajor compress xff + rle test\n");
     
 //     int ndims = 3;

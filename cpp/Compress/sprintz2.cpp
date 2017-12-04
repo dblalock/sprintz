@@ -1073,7 +1073,7 @@ int64_t decompress8b_rowmajor_delta(const int8_t* src, uint8_t* dest) {
 }
 
 
-// ========================================================== rowmajor delta
+// ========================================================== rowmajor delta rle
 
 int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, size_t len,
     int8_t* dest, uint16_t ndims, bool write_size)

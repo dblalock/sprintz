@@ -43,7 +43,7 @@
  * c6 d6
  * c7 d7
  */
-void transpose_2x8_8b(const uint8_t* src, uint8_t* dest) {
+static inline void transpose_2x8_8b(const uint8_t* src, uint8_t* dest) {
     static const int a = 0;
     static const int b = 8;
     static const int c = 0;
@@ -91,7 +91,7 @@ void transpose_2x8_8b(const uint8_t* src, uint8_t* dest) {
  * a6 b6
  * a7 b7
  */
-void transpose_2x8_16b(const uint16_t* src, uint16_t* dest) {
+static inline void transpose_2x8_16b(const uint16_t* src, uint16_t* dest) {
     static const int a = 0;
     static const int b = 0;
     static const __m256i idxs0 = _mm256_setr_epi8(
@@ -149,7 +149,7 @@ void transpose_2x8_16b(const uint16_t* src, uint16_t* dest) {
  * a7 b7 c7
  * 0 0 0 0 0 0 0 0
  */
-void transpose_3x8_8b(const uint8_t* src, uint8_t* dest) {
+static inline void transpose_3x8_8b(const uint8_t* src, uint8_t* dest) {
     static const int a = 0;
     static const int b = 8;
     static const int c = 16 - 16;
@@ -219,7 +219,7 @@ void transpose_3x8_8b(const uint8_t* src, uint8_t* dest) {
  * a7 b7 c7
  * 0 0 0 0 0 0 0 0
  */
-void transpose_3x8_16b(const uint16_t* src, uint16_t* dest) {
+static inline void transpose_3x8_16b(const uint16_t* src, uint16_t* dest) {
     // int a = 0, b = 0;//, c = 0;
     // shuffle idxs for mat (output rows 0-1)
     //  a0-3  b0-3
@@ -312,7 +312,7 @@ void transpose_3x8_16b(const uint16_t* src, uint16_t* dest) {
  * a6 b6 c6 d6
  * a7 b7 c7 d7
  */
-void transpose_4x8_8b(const uint8_t* src, uint8_t* dest) {
+static inline void transpose_4x8_8b(const uint8_t* src, uint8_t* dest) {
     static const int a = 0;
     static const int b = 8;
     static const int c = 16 - 16;
