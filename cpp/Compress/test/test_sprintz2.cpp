@@ -290,7 +290,7 @@ TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta]") {
 TEST_CASE("compress8b_rowmajor_delta_rle_lowdims", "[rowmajor][delta][rle][dbg]") {
     printf("executing rowmajor delta test\n");
 
-    // int ndims = 3;
+    // int ndims = 1;
     // auto ndims_list = ar::range(ndims, ndims + 1);
     auto ndims_list = ar::range(1, 4 + 1);
     for (auto _ndims : ndims_list) {
@@ -340,7 +340,9 @@ TEST_CASE("compress8b_rowmajor_delta_rle_lowdims", "[rowmajor][delta][rle][dbg]"
         // TEST_SIMPLE_INPUTS(ndims * 16, comp, decomp);
         // TEST_KNOWN_INPUT(ndims * 16, comp, decomp);
         // TEST_KNOWN_INPUT(ndims * 32, comp, decomp);
-        // TEST_ZEROS(65536, comp, decomp);
+        // TEST_ZEROS(400 * 1024, comp, decomp);
+        // TEST_ZEROS(128, comp, decomp);
+        // TEST_ZEROS(4096, comp, decomp);
         // TEST_SPARSE(1 << 10, comp, decomp);
         TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
         // TEST_COMP_DECOMP_PAIR(comp, decomp);

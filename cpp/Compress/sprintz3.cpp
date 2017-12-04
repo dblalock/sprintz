@@ -27,9 +27,10 @@ static const __m256i nbits_to_mask = _mm256_setr_epi8(
 
 
 static const int kDefaultGroupSzBlocks = 2;
+// static const int kDefaultGroupSzBlocks = 8;  // slight pareto improvement
 
-static const bool debug = false;
-// static const bool debug = true;
+static const int debug = 0;
+// static const int debug = 1;
 
 // ------------------------------------------------ delta + rle low ndims
 
@@ -44,7 +45,7 @@ int64_t compress8b_rowmajor_delta_rle_lowdim(const uint8_t* src, size_t len,
     static const int group_sz_blocks = kDefaultGroupSzBlocks;
     static const int length_header_nbytes = 8;
     static const uint16_t max_run_nblocks = 0x7fff; // 15 bit counter
-    // static const uint16_t max_run_nblocks = 2; // TODO rm
+    // static const uint16_t max_run_nblocks = 8; // TODO rm
     // derived consts
     static const size_t min_data_size = 8 * block_sz * group_sz_blocks;
 
@@ -84,7 +85,7 @@ int64_t compress8b_rowmajor_delta_rle_lowdim(const uint8_t* src, size_t len,
 
     if (debug) {
         printf("------------ comp (len = %lld)\n", (int64_t)len);
-        printf("saw original data:\n"); dump_bytes(src, len);
+        if (debug > 2) { printf("saw original data:\n"); dump_bytes(src, len); }
     }
     // // printf("saw original data:\n"); dump_bytes(src, len, ndims);
     // // printf("saw original data:\n"); dump_bytes(src, len, ndims * 2, 4);
@@ -177,6 +178,7 @@ do_rle:
                     // just increment addr at which to write next time
                     header_bit_offset += ndims * nbits_sz_bits;
 
+                    if (debug) { printf("%d.%d nbits: ", (int)ngroups - 1, b); dump_bytes(dims_nbits, ndims); }
                     if (debug) { printf("aborting and compressing rle block of length %d ending at src offset %d\n", run_length_nblocks, (int)(src - orig_src)); }
 
                     b++; // we're finishing off this block
@@ -206,6 +208,7 @@ do_rle:
             }
 
             if (run_length_nblocks > 0) { // just finished a run
+                if (debug) { printf("%d.%d nbits: ", (int)ngroups - 1, b); dump_bytes(dims_nbits, ndims); }
                 if (debug) { printf("compressing rle block of length %d ending at offset %d\n", run_length_nblocks, (int)(src - orig_src)); }
                 // printf("initial header bit offset: %d\n", header_bit_offset);
                 b++;
@@ -230,7 +233,7 @@ do_rle:
                 // write past the end of the header bytes and write a data
                 // block the decoder isn't expecting
                 if (b == group_sz_blocks) {
-                    // printf("reseting prev vals...\n");
+                    // printf("forcing group end...\n");
                     // memcpy(prev_vals_ar, src - ndims, ndims);
                     // continue;
 
@@ -250,7 +253,8 @@ do_rle:
                 // have to enforce invariant that bitwidth of 0 always gets
                 // run-length encoded; this case can happen when the current
                 // block was zeros, but we hit the limit `max_run_nblocks`
-                if (total_header_bits == 0) { goto do_rle; }
+                // printf("total_header_bits: %d\n", )
+                if (total_dims_nbits == 0) { goto do_rle; }
 
                 // printf("row width bits for this nonzero block: %d\n", row_width_bits);
                 // printf("modified header bit offset: %d\n", header_bit_offset);
@@ -327,9 +331,6 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
     static const uint8_t nbits_sz_mask = (1 << nbits_sz_bits) - 1;
     static const uint64_t kHeaderUnpackMask = TILE_BYTE(nbits_sz_mask);
     static const size_t min_data_size = 8 * block_sz * group_sz_blocks;
-    // assert(stripe_sz % 8 == 0);
-    // assert(vector_sz % stripe_sz == 0);
-    // assert(vector_sz >= stripe_sz);
 
     uint8_t* orig_dest = dest;
     // const int8_t* orig_src = src;
@@ -337,11 +338,7 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
     // ================================ one-time initialization
 
     // ------------------------ read original data size, ndims
-    // static const size_t len_nbytes = 6;
-    // uint64_t one = 1; // make next line legible
-    // uint64_t len_mask = (one << (8 * len_nbytes)) - 1;
-    // uint64_t orig_len = (*(uint64_t*)src) & len_mask;
-    // uint16_t ndims = (*(uint16_t*)(src + len_nbytes));
+
     static const size_t len_nbytes = 4;
     uint64_t one = 1; // make next line legible
     uint64_t len_mask = (one << (8 * len_nbytes)) - 1;
@@ -350,11 +347,8 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
     uint16_t ndims = (*(uint16_t*)(src + len_nbytes + 2));
     src += 8;
 
-    // bool just_cpy = orig_len < min_data_size;
     bool just_cpy = (ngroups == 0) && remaining_len < min_data_size;
-    // just_cpy = just_cpy || orig_len & (((uint64_t)1) << 47);
     if (just_cpy) { // if data was too small or failed to compress
-        // printf("decomp: data less than min data size: %lu\n", min_data_size);
         memcpy(dest, src, (size_t)remaining_len);
         return remaining_len;
     }
@@ -366,10 +360,11 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
     if (debug) {
         int64_t min_orig_len = ngroups * group_sz_blocks * block_sz * ndims;
         printf("-------- decompression (orig_len = %lld)\n", (int64_t)min_orig_len);
-        printf("saw compressed data (with possible missing data if runs):\n");
-        dump_bytes(src, min_orig_len + 8);
+        if (debug > 2) {
+            printf("saw compressed data (with possible missing data if runs):\n");
+            dump_bytes(src, min_orig_len + 8);
+        }
     }
-    // // dump_bits(src, 32);
 
     // ------------------------ stats derived from ndims
     // header stats
@@ -380,45 +375,22 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
     uint32_t total_header_bytes = (total_header_bits / 8) + ((total_header_bits % 8) > 0);
     uint32_t group_header_sz = nheader_vals * elem_sz;
 
-    // // final header can be shorter than others; construct mask so we don't
-    // // read in start of packed data as header bytes
-    // uint8_t remaining_header_sz = total_header_bytes % stripe_header_sz;
-    // uint8_t final_header_sz = remaining_header_sz ? remaining_header_sz : stripe_header_sz;
-    // uint32_t shift_bits = 8 * (4 - final_header_sz);
-    // uint32_t final_header_mask = ((uint32_t)0xffffffff) >> shift_bits;
-
     // stats for main decompression loop
     uint32_t group_sz = ndims * group_sz_per_dim;
     // uint16_t nstripes = ndims / stripe_sz + ((ndims % stripe_sz) > 0);
     uint32_t padded_ndims = round_up_to_multiple(ndims, vector_sz);
     uint16_t nvectors = padded_ndims / vector_sz + ((padded_ndims % vector_sz) > 0);
 
-    // stats for sizing temp storage
-    // uint32_t nstripes_in_group = nstripes * group_sz_blocks;
-
-
-    // uint32_t group_header_sz = round_up_to_multiple(
-    //     nstripes_in_group * stripe_sz, vector_sz);
-    // uint32_t nstripes_in_vectors = group_header_sz / stripe_sz;
-    // uint16_t nvectors_in_group = group_header_sz / vector_sz;
-    // uint16_t nvectors_in_group = group_header_sz / vector_sz;
-
     // ------------------------ temp storage
     // allocate temp vars of minimal possible size such that we can
     // do vector loads and stores (except bitwidths, which are u64s so
     // that we can store directly after sad_epu8)
-    // uint64_t* headers_tmp       = (uint64_t*)calloc(nheader_stripes, 8);
-    uint8_t*  headers           = (uint8_t*) calloc(1, group_header_sz);
-    // uint64_t* data_masks        = (uint64_t*)calloc(nstripes_in_vectors, 8);
-    // uint64_t* stripe_bitwidths  = (uint64_t*)calloc(nstripes_in_vectors, 8);
-    // uint32_t* stripe_bitoffsets = (uint32_t*)calloc(nstripes, 4);
+    uint8_t*  headers = (uint8_t*) calloc(1, group_header_sz);
 
     // extra row in deltas is to store last decoded values
     // TODO just special case very first row
     uint8_t* deltas = (uint8_t*)calloc(block_sz * padded_ndims, 1);
     uint8_t* prev_vals_ar = (uint8_t*)calloc(padded_ndims, 1);
-
-    // printf("nvectors, padded_ndims = %d, %d\n", nvectors, padded_ndims);
 
     // ================================ main loop
 
@@ -473,12 +445,7 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
                 if (g > 0 || b > 0) { // if not at very beginning of data
                     const uint8_t* inptr = dest - ndims;
                     uint32_t ncopies = length * block_sz;
-
-
-                    // memset(dest, 0, ndims * ncopies); // TODO rm once delta coding
-                    memrep(dest, inptr, ndims * elem_sz, ncopies); // TODO uncomment once delta coding again
-
-
+                    memrep(dest, inptr, ndims * elem_sz, ncopies);
                     dest += ndims * ncopies;
                 } else { // deltas of 0 at very start -> all zeros
                     size_t num_zeros = length * block_sz * ndims;
@@ -490,8 +457,6 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
                 src++;
                 src += (high_byte > 0); // if 0, wasn't used for run length
 
-                // masks += nstripes;
-                // bitwidths += nstripes;
                 continue;
             }
 
@@ -499,18 +464,13 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
 
             // uint8_t* delta_buff = deltas + (dim * block_sz);
             for (uint16_t dim = 0; dim < ndims; dim++) {
-                // uint8_t* inptr = src + (dim * block_sz);
                 uint8_t* outptr = deltas + (dim * block_sz);
-                // uint8_t nbits = headers[dim + (ndims * b)];
                 uint8_t nbits = header_ptr[dim];
-                // nbits += nbits == 7;  // map 7 to 8
                 uint64_t mask = kBitpackMasks8[nbits];
                 *((uint64_t*)outptr) = _pdep_u64(*(uint64_t*)src, mask);
                 // printf("%d.%d-%d: nbits=%d\t", (int)g, b, dim, nbits);
                 // // printf("src:   "); dump_bytes(src, 8, false);
                 // // printf(" -> dest:   "); dump_bytes(outptr, 8);
-                // printf("src:   "); dump_bits(src, 8, false);
-                // printf(" -> dest:   "); dump_bits(outptr, 8);
                 src += (nbits + (nbits == 7)) * elem_sz; // assumes block_sz == 8
             }
 
@@ -528,17 +488,11 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
                 case 3: transpose_3x8_8b(deltas, deltas); break;
                 case 4: transpose_4x8_8b(deltas, deltas); break;
                 default:
-                    printf("ERROR: received invalid ndims! %d\n", ndims);
+                    printf("ERROR: received invalid ndims: %d\n", ndims);
             }
-
-            // if (debug)
-            // printf("transposed deltas: "); dump_bytes(deltas, block_sz * ndims);
-
 
             __m256i raw_vdeltas = _mm256_loadu_si256((const __m256i*)deltas);
             __m256i vdeltas = mm256_zigzag_decode_epi8(raw_vdeltas);
-
-            // printf("vdeltas: "); dump_m256i<int8_t>(vdeltas);
 
             // vars that would have been initialized in various cases
             __m256i swapped128_vdeltas = _mm256_permute2x128_si256(
@@ -550,6 +504,9 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
             uint8_t prev_val = prev_vals_ar[0];
             switch (ndims) {
 
+            // can't just use a loop because _mm256_srli_si256 demands that
+            // the shift amount be a compile-time constant (which it is
+            // if the loop is unrolled, but apparently this isn't good enough)
     #define LOOP_BODY(I, SHIFT, DELTA_ARRAY)                                \
         { __m256i shifted_deltas = _mm256_srli_si256(DELTA_ARRAY, SHIFT);   \
         vals = _mm256_add_epi8(prev_vals, shifted_deltas);                  \
@@ -566,30 +523,13 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
                 prev_vals_ar[0] = prev_val;
                 break;
             case 2: // everything fits in lower 128b
-                // can't just use a loop because _mm256_srli_si256 demands that
-                // the shift amount be a compile-time constant (which it is
-                // if the loop is unrolled, but apparently not good enough)
-                // #define LOOP_BODY(i)                                                \
-                //     { __m256i shifted_deltas = _mm256_srli_si256(vdeltas, i * 2);   \
-                //     vals = _mm256_add_epi8(prev_vals, shifted_deltas);              \
-                //     _mm256_storeu_si256((__m256i*)(dest + i * ndims), vals);        \
-                //     prev_vals = vals; }
                 LOOP_BODY(0, 0, vdeltas); LOOP_BODY(1, 2, vdeltas);
                 LOOP_BODY(2, 4, vdeltas); LOOP_BODY(3, 6, vdeltas);
                 LOOP_BODY(4, 8, vdeltas); LOOP_BODY(5, 10, vdeltas);
                 LOOP_BODY(6, 12, vdeltas); LOOP_BODY(7, 14, vdeltas);
-                // #undef LOOP_BODY
-                // for (uint8_t i = 0; i < block_sz; i++) {
-                //     const int shift = i * 2;
-                //     __m256i shifted_deltas = _mm256_bsrli_epi128(vdeltas, shift);
-                //     vals = _mm256_add_epi8(prev_vals, shifted_deltas);
-                //     _mm256_storeu_si256((__m256i*)(dest + i * ndims), vals);
-                //     prev_vals = vals;
-                // }
                 _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
                 break;
             case 3:
-                // printf("shifted vdeltas: "); dump_m256i<int8_t>(shifted15_vdeltas);
                 LOOP_BODY(0, 0, vdeltas);
                 LOOP_BODY(1, 3, vdeltas);
                 LOOP_BODY(2, 6, vdeltas);
@@ -601,11 +541,6 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
                 _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
                 break;
             case 4:
-                // #define LOOP_BODY(i, SHIFT, DELTA_ARRAY)                                \
-                //     { __m256i shifted_deltas = _mm256_srli_si256(DELTA_ARRAY, SHIFT);   \
-                //     vals = _mm256_add_epi8(prev_vals, shifted_deltas);                  \
-                //     _mm256_storeu_si256((__m256i*)(dest + i * ndims), vals);            \
-                //     prev_vals = vals; }
                 LOOP_BODY(0, 0, vdeltas);
                 LOOP_BODY(1, 4, vdeltas);
                 LOOP_BODY(2, 8, vdeltas);
@@ -619,56 +554,7 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
 
     #undef LOOP_BODY
             }
-
-            // for (uint8_t i = 0; i < block_sz; i++) {
-            //         uint32_t in_offset = i * padded_ndims + vstripe_start;
-            //         uint32_t out_offset = i * ndims + vstripe_start;
-
-            //         // __m256i raw_vdeltas = _mm256_loadu_si256(
-            //             // (const __m256i*)(deltas + in_offset));
-            //         // __m256i vdeltas = mm256_zigzag_decode_epi8(raw_vdeltas);
-            //         vals = _mm256_add_epi8(prev_vals, vdeltas);
-
-            //         printf("vdeltas: "); dump_m256i<int8_t>(vdeltas);
-            //         // printf("vals: "); dump_m256i<int8_t>(vals);
-
-            //         _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
-            //         prev_vals = vals;
-            //     }
-            // _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
-
-
-            // for (int32_t v = nvectors - 1; v >= 0; v--) {
-            //     uint32_t vstripe_start = v * vector_sz;
-            //     uint32_t prev_vals_offset = block_sz * padded_ndims
-            //         + vstripe_start;
-            //     __m256i prev_vals = _mm256_loadu_si256(
-            //         (const __m256i*)prev_vals_ar);
-            //     __m256i vals = _mm256_setzero_si256();
-            //     for (uint8_t i = 0; i < block_sz; i++) {
-            //         uint32_t in_offset = i * padded_ndims + vstripe_start;
-            //         uint32_t out_offset = i * ndims + vstripe_start;
-
-            //         __m256i raw_vdeltas = _mm256_loadu_si256(
-            //             (const __m256i*)(deltas + in_offset));
-            //         __m256i vdeltas = mm256_zigzag_decode_epi8(raw_vdeltas);
-            //         vals = _mm256_add_epi8(prev_vals, vdeltas);
-
-            //         printf("vdeltas: "); dump_m256i<int8_t>(vdeltas);
-            //         // printf("vals: "); dump_m256i<int8_t>(vals);
-
-            //         _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
-            //         prev_vals = vals;
-            //     }
-            //     _mm256_storeu_si256((__m256i*)(deltas+prev_vals_offset), vals);
-            // }
-
-            // src += block_sz * in_row_nbytes;
             dest += block_sz * ndims;
-            // printf("crap in header ptr: "); dump_bits(header_ptr, group_sz_blocks - b);
-            // header_ptr += ndims;
-            // masks += nstripes;
-            // bitwidths += nstripes;
         } // for each block
     } // for each group
 
@@ -678,13 +564,12 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
 
     memcpy(dest, src, remaining_len);
 
-    if (debug) {
+    if (debug > 2) {
         size_t dest_sz = dest + remaining_len - orig_dest;
         printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz);
     }
     // // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, ndims);
     // // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, 16);
-    // // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, ndims * 2, 4);
 
     return dest + remaining_len - orig_dest;
 }
