@@ -290,7 +290,7 @@ TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta]") {
 TEST_CASE("compress8b_rowmajor_delta_rle_lowdims", "[rowmajor][delta][rle][dbg]") {
     printf("executing rowmajor delta test\n");
 
-    // int ndims = 1;
+    // int ndims = 3;
     // auto ndims_list = ar::range(ndims, ndims + 1);
     auto ndims_list = ar::range(1, 4 + 1);
     for (auto _ndims : ndims_list) {
@@ -304,13 +304,15 @@ TEST_CASE("compress8b_rowmajor_delta_rle_lowdims", "[rowmajor][delta][rle][dbg]"
             return decompress8b_rowmajor_delta_rle_lowdim(src, dest);
         };
 
-        #define COMP_FUNC comp
-        #define DECOMP_FUNC decomp
+        // #define COMP_FUNC comp
+        // #define DECOMP_FUNC decomp
 
         // size_t SZ = 128;
         // Vec_u8 raw(SZ);
         // {
-        //     for (int i = 0; i < SZ; i++) { raw(i) = i % 64; }
+        //     // for (int i = 0; i < SZ; i++) { raw(i) = i % 64; }
+        //     // for (int i = 0; i < SZ; i++) { raw(i) = (i % 8) * (i % 8); }
+        //     for (int i = 0; i < SZ; i++) { raw(i) = (i % 6) * (i % 6); }
         //     // for (int i = 0; i < SZ; i++) { raw(i) = 6; }
         //     TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);
         // }

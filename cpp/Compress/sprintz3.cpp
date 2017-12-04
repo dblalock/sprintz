@@ -29,6 +29,7 @@ static const __m256i nbits_to_mask = _mm256_setr_epi8(
 static const int kDefaultGroupSzBlocks = 2;
 
 static const bool debug = false;
+// static const bool debug = true;
 
 // ------------------------------------------------ delta + rle low ndims
 
@@ -140,9 +141,9 @@ int64_t compress8b_rowmajor_delta_rle_lowdim(const uint8_t* src, size_t len,
                     uint32_t in_offset = (i * ndims) + dim; // rowmajor
                     uint32_t out_offset = (dim * block_sz) + i; // colmajor
                     uint8_t val = src[in_offset];
-                    // int8_t delta = (int8_t)(val - prev_val);
-                    // uint8_t bits = zigzag_encode_i8(delta);
-                    uint8_t bits = val;
+                    int8_t delta = (int8_t)(val - prev_val);
+                    uint8_t bits = zigzag_encode_i8(delta);
+                    // uint8_t bits = val;
                     mask |= bits;
                     deltas[out_offset] = bits;
                     prev_val = val;
@@ -365,9 +366,9 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
     if (debug) {
         int64_t min_orig_len = ngroups * group_sz_blocks * block_sz * ndims;
         printf("-------- decompression (orig_len = %lld)\n", (int64_t)min_orig_len);
+        printf("saw compressed data (with possible missing data if runs):\n");
+        dump_bytes(src, min_orig_len + 8);
     }
-    // printf("saw compressed data (with possible missing data if runs):\n");
-    // dump_bytes(src, min_orig_len + 8);
     // // dump_bits(src, 32);
 
     // ------------------------ stats derived from ndims
@@ -414,7 +415,8 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
 
     // extra row in deltas is to store last decoded values
     // TODO just special case very first row
-    uint8_t* deltas = (uint8_t*)calloc((block_sz + 1) * padded_ndims, 1);
+    uint8_t* deltas = (uint8_t*)calloc(block_sz * padded_ndims, 1);
+    uint8_t* prev_vals_ar = (uint8_t*)calloc(padded_ndims, 1);
 
     // printf("nvectors, padded_ndims = %d, %d\n", nvectors, padded_ndims);
 
@@ -473,8 +475,8 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
                     uint32_t ncopies = length * block_sz;
 
 
-                    memset(dest, 0, ndims * ncopies); // TODO rm once delta coding
-                    // memrep(dest, inptr, ndims * elem_sz, ncopies); // TODO uncomment once delta coding again
+                    // memset(dest, 0, ndims * ncopies); // TODO rm once delta coding
+                    memrep(dest, inptr, ndims * elem_sz, ncopies); // TODO uncomment once delta coding again
 
 
                     dest += ndims * ncopies;
@@ -516,25 +518,132 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
 
             switch (ndims) {
                 // no zigzag or delta coding
-                case 1: memcpy(dest, deltas, ndims*block_sz*elem_sz); break;
-                case 2: transpose_2x8_8b(deltas, dest); break;
-                case 3: transpose_3x8_8b(deltas, dest); break;
-                case 4: transpose_4x8_8b(deltas, dest); break;
+                // case 1: memcpy(dest, deltas, ndims*block_sz*elem_sz); break;
+                // case 2: transpose_2x8_8b(deltas, dest); break;
+                // case 3: transpose_3x8_8b(deltas, dest); break;
+                // case 4: transpose_4x8_8b(deltas, dest); break;
 
-                // case 1: break;
-                // case 2: transpose_2x8_8b(deltas, deltas); break;
-                // case 3: transpose_3x8_8b(deltas, deltas); break;
-                // case 4: transpose_4x8_8b(deltas, deltas); break;
+                case 1: break;
+                case 2: transpose_2x8_8b(deltas, deltas); break;
+                case 3: transpose_3x8_8b(deltas, deltas); break;
+                case 4: transpose_4x8_8b(deltas, deltas); break;
                 default:
                     printf("ERROR: received invalid ndims! %d\n", ndims);
             }
+
+            // if (debug)
+            // printf("transposed deltas: "); dump_bytes(deltas, block_sz * ndims);
+
+
+            __m256i raw_vdeltas = _mm256_loadu_si256((const __m256i*)deltas);
+            __m256i vdeltas = mm256_zigzag_decode_epi8(raw_vdeltas);
+
+            // printf("vdeltas: "); dump_m256i<int8_t>(vdeltas);
+
+            // vars that would have been initialized in various cases
+            __m256i swapped128_vdeltas = _mm256_permute2x128_si256(
+                vdeltas, vdeltas, 0x01);
+            __m256i shifted15_vdeltas = _mm256_alignr_epi8(
+                swapped128_vdeltas, vdeltas, 15);
+            __m256i vals = _mm256_setzero_si256();
+            __m256i prev_vals = _mm256_loadu_si256((__m256i*)prev_vals_ar);
+            uint8_t prev_val = prev_vals_ar[0];
+            switch (ndims) {
+
+    #define LOOP_BODY(I, SHIFT, DELTA_ARRAY)                                \
+        { __m256i shifted_deltas = _mm256_srli_si256(DELTA_ARRAY, SHIFT);   \
+        vals = _mm256_add_epi8(prev_vals, shifted_deltas);                  \
+        _mm256_storeu_si256((__m256i*)(dest + I * ndims), vals);            \
+        prev_vals = vals; }
+
+            case 1:
+                for (uint8_t i = 0; i < block_sz; i++) {
+                    int8_t delta = _mm256_extract_epi8(vdeltas, i);
+                    uint8_t val = prev_val + delta;
+                    dest[i] = val;
+                    prev_val = val;
+                }
+                prev_vals_ar[0] = prev_val;
+                break;
+            case 2: // everything fits in lower 128b
+                // can't just use a loop because _mm256_srli_si256 demands that
+                // the shift amount be a compile-time constant (which it is
+                // if the loop is unrolled, but apparently not good enough)
+                // #define LOOP_BODY(i)                                                \
+                //     { __m256i shifted_deltas = _mm256_srli_si256(vdeltas, i * 2);   \
+                //     vals = _mm256_add_epi8(prev_vals, shifted_deltas);              \
+                //     _mm256_storeu_si256((__m256i*)(dest + i * ndims), vals);        \
+                //     prev_vals = vals; }
+                LOOP_BODY(0, 0, vdeltas); LOOP_BODY(1, 2, vdeltas);
+                LOOP_BODY(2, 4, vdeltas); LOOP_BODY(3, 6, vdeltas);
+                LOOP_BODY(4, 8, vdeltas); LOOP_BODY(5, 10, vdeltas);
+                LOOP_BODY(6, 12, vdeltas); LOOP_BODY(7, 14, vdeltas);
+                // #undef LOOP_BODY
+                // for (uint8_t i = 0; i < block_sz; i++) {
+                //     const int shift = i * 2;
+                //     __m256i shifted_deltas = _mm256_bsrli_epi128(vdeltas, shift);
+                //     vals = _mm256_add_epi8(prev_vals, shifted_deltas);
+                //     _mm256_storeu_si256((__m256i*)(dest + i * ndims), vals);
+                //     prev_vals = vals;
+                // }
+                _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
+                break;
+            case 3:
+                // printf("shifted vdeltas: "); dump_m256i<int8_t>(shifted15_vdeltas);
+                LOOP_BODY(0, 0, vdeltas);
+                LOOP_BODY(1, 3, vdeltas);
+                LOOP_BODY(2, 6, vdeltas);
+                LOOP_BODY(3, 9, vdeltas);
+                LOOP_BODY(4, 12, vdeltas);
+                LOOP_BODY(5, 0, shifted15_vdeltas);
+                LOOP_BODY(6, 3, shifted15_vdeltas);
+                LOOP_BODY(7, 6, shifted15_vdeltas);
+                _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
+                break;
+            case 4:
+                // #define LOOP_BODY(i, SHIFT, DELTA_ARRAY)                                \
+                //     { __m256i shifted_deltas = _mm256_srli_si256(DELTA_ARRAY, SHIFT);   \
+                //     vals = _mm256_add_epi8(prev_vals, shifted_deltas);                  \
+                //     _mm256_storeu_si256((__m256i*)(dest + i * ndims), vals);            \
+                //     prev_vals = vals; }
+                LOOP_BODY(0, 0, vdeltas);
+                LOOP_BODY(1, 4, vdeltas);
+                LOOP_BODY(2, 8, vdeltas);
+                LOOP_BODY(3, 12, vdeltas);
+                LOOP_BODY(4, 0, swapped128_vdeltas);
+                LOOP_BODY(5, 4, swapped128_vdeltas);
+                LOOP_BODY(6, 8, swapped128_vdeltas);
+                LOOP_BODY(7, 12, swapped128_vdeltas);
+                _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
+                break;
+
+    #undef LOOP_BODY
+            }
+
+            // for (uint8_t i = 0; i < block_sz; i++) {
+            //         uint32_t in_offset = i * padded_ndims + vstripe_start;
+            //         uint32_t out_offset = i * ndims + vstripe_start;
+
+            //         // __m256i raw_vdeltas = _mm256_loadu_si256(
+            //             // (const __m256i*)(deltas + in_offset));
+            //         // __m256i vdeltas = mm256_zigzag_decode_epi8(raw_vdeltas);
+            //         vals = _mm256_add_epi8(prev_vals, vdeltas);
+
+            //         printf("vdeltas: "); dump_m256i<int8_t>(vdeltas);
+            //         // printf("vals: "); dump_m256i<int8_t>(vals);
+
+            //         _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
+            //         prev_vals = vals;
+            //     }
+            // _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
+
 
             // for (int32_t v = nvectors - 1; v >= 0; v--) {
             //     uint32_t vstripe_start = v * vector_sz;
             //     uint32_t prev_vals_offset = block_sz * padded_ndims
             //         + vstripe_start;
-            //     __m256i prev_vals = _mm256_loadu_si256((const __m256i*)
-            //         (deltas + prev_vals_offset));
+            //     __m256i prev_vals = _mm256_loadu_si256(
+            //         (const __m256i*)prev_vals_ar);
             //     __m256i vals = _mm256_setzero_si256();
             //     for (uint8_t i = 0; i < block_sz; i++) {
             //         uint32_t in_offset = i * padded_ndims + vstripe_start;
@@ -544,6 +653,9 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
             //             (const __m256i*)(deltas + in_offset));
             //         __m256i vdeltas = mm256_zigzag_decode_epi8(raw_vdeltas);
             //         vals = _mm256_add_epi8(prev_vals, vdeltas);
+
+            //         printf("vdeltas: "); dump_m256i<int8_t>(vdeltas);
+            //         // printf("vals: "); dump_m256i<int8_t>(vals);
 
             //         _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
             //         prev_vals = vals;
@@ -561,6 +673,8 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
     } // for each group
 
     free(headers);
+    free(deltas);
+    free(prev_vals_ar);
 
     memcpy(dest, src, remaining_len);
 
