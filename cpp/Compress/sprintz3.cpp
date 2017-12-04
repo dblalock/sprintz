@@ -28,6 +28,8 @@ static const __m256i nbits_to_mask = _mm256_setr_epi8(
 
 static const int kDefaultGroupSzBlocks = 2;
 
+static const bool debug = false;
+
 // ------------------------------------------------ delta + rle low ndims
 
 int64_t compress8b_rowmajor_delta_rle_lowdim(const uint8_t* src, size_t len,
@@ -45,7 +47,7 @@ int64_t compress8b_rowmajor_delta_rle_lowdim(const uint8_t* src, size_t len,
     // derived consts
     static const size_t min_data_size = 8 * block_sz * group_sz_blocks;
 
-    // const uint8_t* orig_src = src;
+    const uint8_t* orig_src = src;
     int8_t* orig_dest = dest;
     const uint8_t* src_end = src + len;
 
@@ -79,8 +81,10 @@ int64_t compress8b_rowmajor_delta_rle_lowdim(const uint8_t* src, size_t len,
         dest += length_header_nbytes;
     }
 
-    // printf("------------ comp (len = %lld)\n", (int64_t)len);
-    // printf("saw original data:\n"); dump_bytes(src, len);
+    if (debug) {
+        printf("------------ comp (len = %lld)\n", (int64_t)len);
+        printf("saw original data:\n"); dump_bytes(src, len);
+    }
     // // printf("saw original data:\n"); dump_bytes(src, len, ndims);
     // // printf("saw original data:\n"); dump_bytes(src, len, ndims * 2, 4);
     // // printf("saw original data:\n"); dump_bytes(src, len, 16);
@@ -146,7 +150,7 @@ int64_t compress8b_rowmajor_delta_rle_lowdim(const uint8_t* src, size_t len,
                 // write out value for delta encoding of next block
                 prev_vals_ar[dim] = prev_val;
 
-                mask = NBITS_MASKS_U8[255];  // TODO rm
+                // mask = NBITS_MASKS_U8[255];  // TODO rm
                 // mask = NBITS_MASKS_U8[mask];
                 // if (mask > 0) { mask = NBITS_MASKS_U8[255]; } // TODO rm
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
@@ -172,7 +176,7 @@ do_rle:
                     // just increment addr at which to write next time
                     header_bit_offset += ndims * nbits_sz_bits;
 
-                    // printf("aborting and compressing rle block of length %d ending at src offset %d\n", run_length_nblocks, (int)(src - orig_src));
+                    if (debug) { printf("aborting and compressing rle block of length %d ending at src offset %d\n", run_length_nblocks, (int)(src - orig_src)); }
 
                     b++; // we're finishing off this block
 
@@ -201,7 +205,7 @@ do_rle:
             }
 
             if (run_length_nblocks > 0) { // just finished a run
-                // printf("compressing rle block of length %d ending at offset %d\n", run_length_nblocks, (int)(src - orig_src));
+                if (debug) { printf("compressing rle block of length %d ending at offset %d\n", run_length_nblocks, (int)(src - orig_src)); }
                 // printf("initial header bit offset: %d\n", header_bit_offset);
                 b++;
 
@@ -252,6 +256,8 @@ do_rle:
             }
 
             // ------------------------ write out header bits for this block
+
+            if (debug) { printf("%d.%d nbits: ", (int)ngroups - 1, b); dump_bytes(dims_nbits, ndims); }
 
             for (uint16_t dim = 0; dim < ndims; dim++) {
                 uint16_t byte_offset = header_bit_offset >> 3;
@@ -356,14 +362,13 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
         return 0;
     }
 
-    // printf(">>>> ---- decomp: saw original ngroups, ndims = %llu, %d\n", ngroups, ndims);
-    // printf("saw compressed data (or at least some of it):\n");
-    // // dump_bytes(src, 12);
-
-    // int64_t min_orig_len = ngroups * group_sz_blocks * block_sz * ndims;
-    // printf("-------- decompression (orig_len = %lld)\n", (int64_t)min_orig_len);
-    // printf("saw compressed data (with possible extra at end):\n");
+    if (debug) {
+        int64_t min_orig_len = ngroups * group_sz_blocks * block_sz * ndims;
+        printf("-------- decompression (orig_len = %lld)\n", (int64_t)min_orig_len);
+    }
+    // printf("saw compressed data (with possible missing data if runs):\n");
     // dump_bytes(src, min_orig_len + 8);
+    // // dump_bits(src, 32);
 
     // ------------------------ stats derived from ndims
     // header stats
@@ -443,13 +448,18 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
         uint64_t header = _pdep_u64(packed_header, kHeaderUnpackMask);
         *header_write_ptr = header;
 
+        // printf("unpacked header: "); dump_bits(headers, ndims * group_sz_blocks);
+
         // ------------------------ inner loop; decompress each block
+        // uint8_t* header_ptr = headers;
         for (int b = 0; b < group_sz_blocks; b++) { // for each block in group
+            uint8_t* header_ptr = headers + (b * ndims);
+            if (debug) { printf("%d.%d nbits: ", (int)g, b); dump_bytes(header_ptr); }
 
             // run-length decode if necessary
             bool all_zeros = true;
             for (uint16_t dim = 0; dim < ndims; dim++) {
-                all_zeros = all_zeros && (headers[dim] == 0);
+                all_zeros = all_zeros && (header_ptr[dim] == 0);
             }
             if (all_zeros) {
                 int8_t low_byte = (int8_t)*src;
@@ -461,14 +471,19 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
                 if (g > 0 || b > 0) { // if not at very beginning of data
                     const uint8_t* inptr = dest - ndims;
                     uint32_t ncopies = length * block_sz;
-                    memrep(dest, inptr, ndims * elem_sz, ncopies);
+
+
+                    memset(dest, 0, ndims * ncopies); // TODO rm once delta coding
+                    // memrep(dest, inptr, ndims * elem_sz, ncopies); // TODO uncomment once delta coding again
+
+
                     dest += ndims * ncopies;
                 } else { // deltas of 0 at very start -> all zeros
                     size_t num_zeros = length * block_sz * ndims;
                     memset(dest, 0, num_zeros * elem_sz);
                     dest += num_zeros;
                 }
-                // printf("decompressed rle block of length %d at offset %d\n", length, (int)(dest - orig_dest));
+                if (debug) { printf("decompressed rle block of length %d at offset %d\n", length, (int)(dest - orig_dest)); }
 
                 src++;
                 src += (high_byte > 0); // if 0, wasn't used for run length
@@ -484,11 +499,17 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
             for (uint16_t dim = 0; dim < ndims; dim++) {
                 // uint8_t* inptr = src + (dim * block_sz);
                 uint8_t* outptr = deltas + (dim * block_sz);
-                uint8_t nbits = headers[dim + (ndims * b)];
-                nbits += nbits == 7;  // map 7 to 8
+                // uint8_t nbits = headers[dim + (ndims * b)];
+                uint8_t nbits = header_ptr[dim];
+                // nbits += nbits == 7;  // map 7 to 8
                 uint64_t mask = kBitpackMasks8[nbits];
-                *((uint64_t*)outptr) = _pext_u64(*(uint64_t*)src, mask);
-                src += nbits * elem_sz; // assumes block_sz == 8
+                *((uint64_t*)outptr) = _pdep_u64(*(uint64_t*)src, mask);
+                // printf("%d.%d-%d: nbits=%d\t", (int)g, b, dim, nbits);
+                // // printf("src:   "); dump_bytes(src, 8, false);
+                // // printf(" -> dest:   "); dump_bytes(outptr, 8);
+                // printf("src:   "); dump_bits(src, 8, false);
+                // printf(" -> dest:   "); dump_bits(outptr, 8);
+                src += (nbits + (nbits == 7)) * elem_sz; // assumes block_sz == 8
             }
 
             // ------------------------ transpose
@@ -532,36 +553,24 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(const int8_t* src, uint8_t* dest)
 
             // src += block_sz * in_row_nbytes;
             dest += block_sz * ndims;
+            // printf("crap in header ptr: "); dump_bits(header_ptr, group_sz_blocks - b);
+            // header_ptr += ndims;
             // masks += nstripes;
             // bitwidths += nstripes;
         } // for each block
-        // printf("will now write to dest at offset %lld\n", (uint64_t)(dest - orig_dest));
     } // for each group
 
-    // free(headers_tmp);
     free(headers);
-    // free(data_masks);
-    // free(stripe_bitwidths);
-    // free(stripe_bitoffsets);
 
-    // printf("bytes read: %lld\n", (uint64_t)(src - orig_src));
-
-    // size_t remaining_len = orig_len - (dest - orig_dest);
-
-    // copy over trailing data
-    // size_t remaining_len = orig_len % group_sz;
-    // size_t remaining_len = orig_len - (src - orig_src);
-    // printf("remaining len: %d\n", (int)remaining_len);
-    // printf("read bytes: %lu\n", remaining_len);
-    // printf("remaining data: "); ar::print(src, remaining_len);
     memcpy(dest, src, remaining_len);
 
-    // size_t dest_sz = dest + remaining_len - orig_dest;
+    if (debug) {
+        size_t dest_sz = dest + remaining_len - orig_dest;
+        printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz);
+    }
     // // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, ndims);
     // // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, 16);
-    // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz);
     // // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, ndims * 2, 4);
 
-    // printf("reached end of decomp\n");
     return dest + remaining_len - orig_dest;
 }

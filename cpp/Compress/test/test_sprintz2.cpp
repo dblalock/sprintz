@@ -292,7 +292,6 @@ TEST_CASE("compress8b_rowmajor_delta_rle_lowdims", "[rowmajor][delta][rle][dbg]"
 
     // int ndims = 1;
     // auto ndims_list = ar::range(ndims, ndims + 1);
-    // auto ndims_list = ar::range(1, 129 + 1);
     auto ndims_list = ar::range(1, 4 + 1);
     for (auto _ndims : ndims_list) {
         auto ndims = (uint16_t)_ndims;
@@ -305,11 +304,43 @@ TEST_CASE("compress8b_rowmajor_delta_rle_lowdims", "[rowmajor][delta][rle][dbg]"
             return decompress8b_rowmajor_delta_rle_lowdim(src, dest);
         };
 
+        #define COMP_FUNC comp
+        #define DECOMP_FUNC decomp
+
+        // size_t SZ = 128;
+        // Vec_u8 raw(SZ);
+        // {
+        //     for (int i = 0; i < SZ; i++) { raw(i) = i % 64; }
+        //     // for (int i = 0; i < SZ; i++) { raw(i) = 6; }
+        //     TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);
+        // }
+
+    // auto SZ = 128;
+    // srand(1234);
+    // Vec_u8 orig((SZ));
+    // Vec_u8 raw((SZ));
+    // orig.setRandom();
+    // {
+    //     raw = orig / 200;
+    //     TEST_COMPRESSOR((SZ), COMP_FUNC, DECOMP_FUNC);
+    // }
+    // // {
+    // //     raw = orig / 250;
+    // //     TEST_COMPRESSOR((SZ), COMP_FUNC, DECOMP_FUNC);
+    // // }
+    // // {
+    // //     raw = orig / 254;
+    // //     TEST_COMPRESSOR((SZ), COMP_FUNC, DECOMP_FUNC);
+    // // }
+
         // TEST_SQUARES_INPUT(128, comp, decomp);
         // TEST_SQUARES_INPUT(ndims * 16, comp, decomp);
         // TEST_SIMPLE_INPUTS(ndims * 16, comp, decomp);
         // TEST_KNOWN_INPUT(ndims * 16, comp, decomp);
         // TEST_KNOWN_INPUT(ndims * 32, comp, decomp);
+        // TEST_ZEROS(65536, comp, decomp);
+        // TEST_SPARSE(1 << 10, comp, decomp);
         TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
+        // TEST_COMP_DECOMP_PAIR(comp, decomp);
     }
 }
