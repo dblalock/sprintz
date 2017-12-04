@@ -54,6 +54,10 @@ class HouseRecording(object):
         self.sampleTimes = data[:, 0]
         self.data = data[:, 1:]  # XXX have to use all cols after the first
 
+        # if 'power' in self.name:
+        #     print "initial sample times: ", self.sampleTimes[:50]
+        #     print
+
         # hack to deal with DWW water not having inst_rate
         # self.col_names = self.col_names[:self.data.shape[1]]
         self.data = self.data[:, :len(self.col_names)]
@@ -87,6 +91,17 @@ def all_weather_recordings():
     return [WeatherRecording()]  # just one data file, so just one recording
 
 
+def all_timestamp_recordings():
+    all_recordings = all_power_recordings() + all_gas_recordings() + \
+        all_water_recordings() + all_weather_recordings()
+    # all_recordings = all_weather_recordings() # TODO rm
+    for r in all_recordings:
+        r.data = r.sampleTimes.astype(np.float64)
+        r.name += '_timestamps'
+
+    return all_recordings
+
+
 # ================================================================ private
 
 # def _read_file(path, cols=None):
@@ -96,7 +111,7 @@ def _read_file(path):
     # if cols is not None and len(cols) > 0:
     #     timestamps = df[df.columns[0]]
     # return df.values.astype(np.int32)
-    return df.values.astype(np.float32)
+    return df.values.astype(np.float64)  # need f64 to not lose timestamps
 
 
 @_memory.cache

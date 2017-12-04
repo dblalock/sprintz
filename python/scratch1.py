@@ -2,26 +2,30 @@
 
 import itertools
 import os
-import matplotlib as mpl
+# import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sb
+from scipy.ndimage import filters
 
 # from .datasets import ucr
 # from . import datasets as ds
-from .datasets import ucr
-from .utils import files
-from .utils import sliding_window as window
+from python.datasets import ucr
+from python.utils import files
+from python.utils import sliding_window as window
 
-from . import compress
-from . import hashing
-from . import learning
-from . import learning2
+from python import compress
+from python import hashing
+from python import learning
+from python import learning2
 
 from .scratch2 import sort_transform, mixfix_encode, mixfix_cost, zigzag_encode
 from .scratch2 import prefix_lut_transform
 
-SAVE_DIR = 'figs/ucr/'
+from python.datasets import compress_bench  # for some preproc
+
+FIG_SAVE_DIR = 'figs/'
+# SAVE_DIR = 'figs/ucr/'
 
 
 def imshow_better(X, ax=None, cmap=None):
@@ -45,11 +49,26 @@ def name_from_dir(datasetDir):
 # def save_current_plot(datasetName, suffix='.pdf', subdir=''):
 def save_current_plot(datasetName, suffix='.png', subdir=''):
     # datasetName = name_from_dir(datasetDir)
-    saveDir = os.path.join(os.path.expanduser(SAVE_DIR), subdir)
+    saveDir = os.path.join(os.path.expanduser(FIG_SAVE_DIR), subdir)
     files.ensure_dir_exists(saveDir)
     fileName = os.path.join(saveDir, datasetName) + suffix
     plt.savefig(fileName)
     plt.close()
+
+
+def filter_rows(X, filt_len, kind='hamming', scale_filter_how='sum1'):
+    if kind == 'hamming':
+        filt = np.hamming(filt_len)
+    elif kind == 'flat':
+        filt = np.ones(filt_len)
+    else:
+        raise RuntimeError("Unknown/unsupported filter type {}".format(kind))
+    if scale_filter_how == 'max1':
+        filt /= np.max(filt)
+    elif scale_filter_how == 'sum1':
+        filt /= np.sum(filt)
+
+    return filters.convolve1d(X, weights=filt, axis=1, mode='constant')
 
 
 def create_perm_lut():
@@ -513,12 +532,28 @@ def convert_to_blocks(diffs):
     return blocks.reshape((-1, 8))
 
 
-def quantize(X, numbits, keep_nrows=-1):
-    keep_nrows = keep_nrows if keep_nrows > 0 else len(X)
+def quantize(X, numbits, keep_nrows=-1, stitch_ends=True):
+    if keep_nrows > 0 and keep_nrows < len(X):
+        np.random.seed(123)
+        which_idxs = np.random.choice(len(X), keep_nrows, replace=False)
+        X = X[which_idxs]
+
+    if stitch_ends:
+        for i in range(1, len(X)):
+            jump = X[i, 0] - X[i-1, -1]
+            X[i] -= jump
+
     maxval = (1 << numbits) - 1
-    X = X[:keep_nrows]
+    np.random.seed(123)
     X = X - np.min(X)
-    X = (maxval / float(np.max(X)) * X).astype(np.int32)
+
+    print "X shape: ", X.shape
+    print "X min, max: ", X.min(), X.max()
+    dtype = np.int32 if numbits <= 32 else np.int64
+    X = (maxval / float(np.max(X)) * X).astype(dtype)
+    print "quantized X min, max: ", X.min(), X.max()
+    # print "initial quantized data: "
+    # print X.ravel()[:25]
 
     # diffs = X[:, 1:] - X[:, :-1]
     # blocks = convert_to_blocks(diffs)
@@ -923,6 +958,9 @@ def apply_transforms(X, blocks, transform_names, k=-1, side=None,
             offsetBlocks = learning2.sub_online_regress(
                 offsetBlocks, method='exact', numbits=numbits, **kwargs)
 
+        # if name == 'downsample2':  # breaks everything
+        #     offsetBlocks = offsetBlocks[:, ::2]
+
         transform_names = transform_names[1:]  # pop first transform
 
     # "examples" stitched together from blocks with vals subbed off
@@ -964,13 +1002,23 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     # NOTE: blocks used to be blocks of diffs
     # X, diffs, blocks = quantize(d.X, numbits, keep_nrows=n)
     X = quantize(d.X, numbits, keep_nrows=n)
-    blocks = convert_to_blocks(X)
+    X_left = X
+    X_right = X
+    while left_transforms[0] == 'smooth':
+        X_left = filter_rows(X_left, 8)
+        left_transforms = left_transforms[1:]
+    while right_transforms[0] == 'smooth':
+        X_right = filter_rows(X_right, 8)
+        right_transforms = right_transforms[1:]
+
+    blocks_left = convert_to_blocks(X_left)
+    blocks_right = convert_to_blocks(X_right)
 
     transform_kwargs.update({'numbits': numbits})
     offsetBlocksLeft, errs_left = apply_transforms(
-        X, blocks, left_transforms, side='left', **transform_kwargs)
+        X_left, blocks_left, left_transforms, side='left', **transform_kwargs)
     offsetBlocksRight, errs_right = apply_transforms(
-        X, blocks, right_transforms, side='right', **transform_kwargs)
+        X_right, blocks_right, right_transforms, side='right', **transform_kwargs)
 
     # ------------------------ compute where overflows are
 
@@ -1280,7 +1328,10 @@ def main():
     # left_transforms = None
     # left_transforms = 'sub_mean'
     # left_transforms = 'dyn_filt'
-    left_transforms = 'delta'
+    # left_transforms = 'delta'
+    # left_transforms = ['smooth', 'delta']
+    left_transforms = ['smooth', 'smooth', 'delta']
+    # left_transforms = 'double_delta'
     # left_transforms = 'online_regress'
     # left_transforms = 'global_regress'
     # left_transforms = 'VAR'
@@ -1302,7 +1353,10 @@ def main():
     # right_transforms = 'dyn_filt'
     # right_transforms = 'online_regress'
     # right_transforms = 'global_regress'
-    right_transforms = 'online_gd'
+    # right_transforms = 'online_gd'
+    # right_transforms = ['smooth', 'online_gd']
+    right_transforms = ['smooth', 'smooth', 'online_gd']
+    # right_transforms = ['downsample2', 'blocklen=8', 'online_gd']
     # right_transforms = 'online_linreg'
     # right_transforms = 'VAR'
     # right_transforms = 'hash'
@@ -1358,6 +1412,8 @@ def main():
     # right_transforms = ['delta', 'dyn_filt']
     # right_transforms = ['delta', 'split_dyn_filt']
 
+    # numbits = 60  # 63 and 64 break our quantization somehow
+    # numbits = 24
     numbits = 16
     # numbits = 12
     # numbits = 8
@@ -1409,10 +1465,10 @@ def main():
     n = 200
     # n = 500
 
-    # chunk_sz = -1
+    chunk_sz = -1
     # chunk_sz = 8
     # chunk_sz = 16
-    chunk_sz = 64
+    # chunk_sz = 64
     # chunk_sz = 256
 
     save = True
@@ -1424,7 +1480,54 @@ def main():
     #   -actually, prolly bake this into nbits_cost cuz otherwise leading 0s
     #   and more than one leading 1 will make it underestimate costs
 
-    dsets = ucr.smallUCRDatasets() if small else ucr.origUCRDatasets()
+    # from python.datasets import uci_gas
+    # dsets = uci_gas.all_recordings()
+    # base_save_dir = 'uci_gas'
+
+    # from python.datasets import pamap
+    # dsets = pamap.all_recordings()
+    # base_save_dir = 'pamap'
+
+    from python.datasets import msrc
+    # dsets = msrc.all_recordings(idxs=np.arange(30))
+    dsets = msrc.all_recordings(idxs=np.arange(10, 30))
+    base_save_dir = 'msrc'
+
+    # from python.datasets import ampds
+    # base_save_dir = 'ampds'
+    # # dsets = ampds.all_power_recordings()
+    # # dsets = ampds.all_gas_recordings()
+    # # dsets = ampds.all_water_recordings()
+    # # dsets = ampds.all_weather_recordings()
+    # dsets = ampds.all_timestamp_recordings(); numbits = 24  # noqa
+
+    # have to uncomment this for multivariate datasets
+    for ds in dsets:
+        subseq_len = 500
+        flat_data = ds.data.T.ravel()
+        keep_len = int(len(flat_data) / subseq_len) * subseq_len
+        flat_data = flat_data[:keep_len]
+        ds.X = flat_data.reshape(-1, subseq_len)
+        ds.X -= np.mean(ds.X, axis=1, keepdims=True)  # mean norm for better plotting
+        # ds.X = compress_bench.concat_and_interpolate(ds.X)
+        print "{} raveled data shape: {}".format(ds.name, ds.X.shape)
+        print np.max(ds.X)
+
+    # dsets = ucr.smallUCRDatasets() if small else ucr.origUCRDatasets()
+    # base_save_dir = 'ucr'
+
+    # ds = dsets[0]
+    # print "first ds: ", ds.name
+    # print "original data:"
+    # print ds.X.ravel()[:50]
+    # print "quantized data:"
+    # print quantize(ds.X, numbits=16, keep_nrows=1)[:50]
+    # return
+
+    # return
+    # data_mats = [r.data for r in uci_gas.all_recordings()]
+    # data_mat = np.hstack(data_mats)
+    # dsets =
 
     # ------------------------ name output dir based on params
     suffix = ""
@@ -1450,6 +1553,7 @@ def main():
     transforms_str = "{}-vs-{}".format(name_transforms(left_transforms),
                                        name_transforms(right_transforms))
     subdir = '{}{}b_{}{}'.format(prefix, numbits, transforms_str, suffix)
+    subdir = os.path.join(base_save_dir, subdir)
     print "saving to subdir: {}".format(subdir)
 
     # ------------------------ main loop
@@ -1550,8 +1654,9 @@ def main():
     # for d in dslist[1:2]:  # adiac
     # for d in dslist[4:6]:
     # for d in dslist[3:4]: # CBF
-    # for d in dslist[:31]:
-    for d in (dslist[26], dslist[27], dslist[30], dslist[1], dslist[14]):
+    # for d in dslist:
+    # for d in (dslist[26], dslist[27], dslist[30], dslist[1], dslist[14]):
+    for d in dslist[:31]:
         print "------------------------ {}".format(d.name)
         # continue # TODO rm
         plot_dset(d, numbits=numbits, n=n,

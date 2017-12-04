@@ -158,7 +158,7 @@ def binary_search(array, val):
 class OnlineRegressor(object):
 
     def __init__(self, block_sz=8, verbose=0, method='linreg',
-                 shifts=SHIFTS, shift_coeffs=SHIFT_COEFFS, numbits=8):
+                 shifts=SHIFTS, shift_coeffs=SHIFT_COEFFS, numbits=8, ntaps=1):
         # self.prev0 = 0
         # self.prev1 = 0
         # self.mod = 1 << nbits
@@ -170,19 +170,24 @@ class OnlineRegressor(object):
         self.shifts = shifts
         self.shift_coeffs = shift_coeffs
         self.numbits = numbits
+        self.ntaps = ntaps
 
         self.last_val = 0
         self.last_delta = 0
         self.coef = 0
-        # self.coef = 256
-        self.counter = 0
-        # self.counter = 256
+        self.coef = 256
+        # self.counter = 0
+        self.counter = 256 << (1 + self.numbits - 8)  # TODO indirect to learning rate, not just 1 # noqa
         # self.counter = 8 << 1  # equivalent to adding 8 to round to nearest?
         # self.counter = self.coef
         self.t = 0
         self.grad_counter = 0
         self.offset = 0
         self.offset_counter = 0
+
+        shift_by = (1 + self.numbits - 8)
+        self.coeffs = np.zeros(self.ntaps, dtype=np.int32) + 256
+        self.counters = np.zeros(self.ntaps, dtype=np.int32) + (256 << shift_by)
 
         # self.approx_256_over_x = 1
 
@@ -285,204 +290,202 @@ class OnlineRegressor(object):
             # learning_rate_shift = 4  # learning rate of 2^(-learning_rate_shift)
             # learning_rate_shift = 2  # learning rate of 2^(-learning_rate_shift)
 
-            # if self.t == 0:
-            #     x0 = x[1:]  # initial delta is raw value, which wrecks things
-            #     y0 = y[1:]
-            #     Sxy = np.sum(x0 * y0)
-            #     Sxx = np.sum(x0 * x0)
-            #     # print "x, y dtypes: ", x.dtype, y.dtype
-            #     # print "Sxx, Sxy dtypes: ", Sxx.dtype, Sxy.dtype
-            #     self.coef = int((Sxy << 8) / Sxx)  # shift to mirror what we'll need to do in C
-            #     self.counter = self.coef << (learning_rate_shift + self.numbits - 8)
-
-            #     print "initial coeff, counter = ", self.coef, self.counter
-
-            # let counter = 48 (for example)
-            # for each delta: // 2 instructions
-            #     val = counter >> 2
-            #     counter += delta
-            #     <do stuff with val>
-
-            # if self.numbits <= 8:
-            #     predictions = (x * self.coef) >> self.numbits
-            # else:
-            #     # predictions = ((x >> 8) * self.coef)
-            #     predictions = (x * self.coef) >> 8
-            #     # predictions = (x * 256) >> 8
-            #     # predictions = x  # TODO rm
-            #     # predictions = np.zeros_like(x)  # TODO rm
             predictions = (x * self.coef) >> int(min(self.numbits, 8))
+            for tap_idx in range(1, self.ntaps):
+                predictions[tap_idx:] += (x[:-tap_idx] * self.coeffs[tap_idx])
             predictions += self.offset
             errs = y - predictions
 
-            # only update based on a few values for efficiency
-            start_idx = 0 if self.t > 0 else 8
-            # which_idxs = np.arange(start_idx, len(x), 8)
-            # which_idxs = np.arange(start_idx, len(x))
-            # which_idxs = np.arange(start_idx, len(x), 2)
-            which_idxs = np.arange(start_idx, len(x), 4)
-            grads = 0
-            # offsets = 0
-            for idx in which_idxs:
-                xval = x[idx]
-                # xval = x[idx] >> (self.numbits - 8)
-                # grad = int(-errs[idx] * x[idx]) >> 8
-                # grad = int(-errs[idx] * x[idx]) // 256
-                # y0 = np.abs(self.approx_256_over_x) * np.sign(xval)
-                # y0 = 1 + (256 - xval) >> 8
-                # y0 = 3 - ((3 * xval) >> 8)
-                # grad = int(-(errs[idx] << 8) / xval) if xval != 0 else 0  # works great
-                # self.counter -= grad  # equivalent to above two lines
-                # if self.t % 100 == 0:
-                #     print "grad:", grad
-                # continue
+            for b in range(8):  # for each block
+                # only update based on a few values for efficiency
+                which_idxs = 8 * b + np.array([3, 7])  # downsample by 4
+                # which_idxs = 8 * b + np.array([1, 3, 5, 7])  # downsample by 2
+                grads = 0
+                # grads = np.zeros(self.ntaps)
+                # offsets = 0
+                for idx in which_idxs:
+                    xval = x[idx]
+                    # xval = x[idx] >> (self.numbits - 8)
+                    # grad = int(-errs[idx] * x[idx]) >> 8
+                    # grad = int(-errs[idx] * x[idx]) // 256
+                    # y0 = np.abs(self.approx_256_over_x) * np.sign(xval)
+                    # y0 = 1 + (256 - xval) >> 8
+                    # y0 = 3 - ((3 * xval) >> 8)
+                    # grad = int(-(errs[idx] << 8) / xval) if xval != 0 else 0  # works great
+                    # self.counter -= grad  # equivalent to above two lines
+                    # if self.t % 100 == 0:
+                    #     print "grad:", grad
+                    # continue
 
-                # # xabs = self.t # TODO rm
-                # xabs = np.abs(xval)
-                # if xabs == 0:
-                #     lzcnt = self.numbits
-                # else:
-                #     lzcnt = self.numbits - 1 - int(np.log2(xabs))
-                # lzcnt = max(0, lzcnt - 1)  # round up to nearest power of 2
-                # # lzcnt = min(15, lzcnt + 1)  # round up to nearest power of 2
-                # # numerator = 1 << self.numbits
-                # # recip = 1 << (lzcnt - 8) if lzcnt >= 8 else
-                # # recip = np.sign(xval) << (8 + lzcnt)
-                # shift_amt = max(0, lzcnt - (self.numbits - 8))  # usually 0, maybe 1 sometimes
-                # recip = (1 << shift_amt) * np.sign(xval)
-                # grad = int(-errs[idx] * recip)
-                # # grad = int(grad / len(which_idxs))
+                    # # xabs = self.t # TODO rm
+                    # xabs = np.abs(xval)
+                    # if xabs == 0:
+                    #     lzcnt = self.numbits
+                    # else:
+                    #     lzcnt = self.numbits - 1 - int(np.log2(xabs))
+                    # lzcnt = max(0, lzcnt - 1)  # round up to nearest power of 2
+                    # # lzcnt = min(15, lzcnt + 1)  # round up to nearest power of 2
+                    # # numerator = 1 << self.numbits
+                    # # recip = 1 << (lzcnt - 8) if lzcnt >= 8 else
+                    # # recip = np.sign(xval) << (8 + lzcnt)
+                    # shift_amt = max(0, lzcnt - (self.numbits - 8))  # usually 0, maybe 1 sometimes
+                    # recip = (1 << shift_amt) * np.sign(xval)
+                    # grad = int(-errs[idx] * recip)
+                    # # grad = int(grad / len(which_idxs))
 
-                # normal grad descent
-                # grad = int(-errs[idx] * np.sign(xval))  # div by sqrt(hessian)
-                # grad = int(-errs[idx] * xval) >> self.numbits  # true gradient
+                    # normal grad descent
+                    # grad = int(-errs[idx] * np.sign(xval))  # div by sqrt(hessian)
+                    # grad = int(-errs[idx] * xval) >> self.numbits  # true gradient
 
-                # approx newton step for log(nbits)
-                err = errs[idx]
-                # if False:  # TODO rm
-                # if self.numbits > 8:
-                #     grad = int(-(1 + err)) if err > 0 else int(-(err - 1))
-                # else:
-                #     grad = int(-err)  # don't add 1
-                # self.grad_counter += (grad - (self.grad_counter >> 8))
+                    # approx newton step for log(nbits)
+                    err = errs[idx]
+                    # if False:  # TODO rm
+                    # if self.numbits > 8:
+                    #     grad = int(-(1 + err)) if err > 0 else int(-(err - 1))
+                    # else:
+                    #     grad = int(-err)  # don't add 1
+                    # self.grad_counter += (grad - (self.grad_counter >> 8))
 
-                # wtf this works so well for 16b, despite ignoring sign of x...
-                # (when also only shifting counter by learning rate, not
-                # an additional 8)
-                # grad = -err
+                    # wtf this works so well for 16b, despite ignoring sign of x...
+                    # (when also only shifting counter by learning rate, not
+                    # an additional 8)
+                    # grad = -err
 
-                # grad = -(err + np.sign(err)) * np.sign(xval)
-                # grad = -err * np.sign(xval)
+                    # grad = -(err + np.sign(err)) * np.sign(xval)
+                    # grad = -err * np.sign(xval)
 
-                # these both seem to work pretty well; prolly need to directly
-                # compare them
-                # grad = -err * np.sign(xval)
-                grad = -np.sign(err) * xval  # significantly better than prev line
-                # ^ duh; above is minimizer for L1 loss
+                    # these both seem to work pretty well; prolly need to directly
+                    # compare them
+                    # grad = -err * np.sign(xval)
+                    grad = -np.sign(err) * xval  # significantly better than prev line
+                    # ^ duh; above is minimizer for L1 loss
 
-                grads += grad
+                    grads += int(grad)
+                    # grads += grad >> 1  # does this help with overflow?
 
-                # simulate int8 overflow, adjusted for fact that we do 8 blocks
-                # per group (so 1024, 2048 instead of 128, 256)
-                # grads = ((grads + 1024) % 2048) - 1024  # wrecks accuracy
-                # grads = ((grads + 8192) % 16384) - 8192  # no effect
+                    # simulate int8 overflow, adjusted for fact that we do 8 blocks
+                    # per group (so 1024, 2048 instead of 128, 256)
+                    mod = int(1 << self.numbits)
+                    offset = mod // 2
+                    grads = ((grads + offset) % mod) - offset
+                    # grads = ((grads + 1024) % 2048) - 1024  # wrecks accuracy
+                    # grads = ((grads + 8192) % 16384) - 8192  # no effect
 
-                self.errs.append(err)
+                    self.errs.append(err)
 
-                # offsets += np.sign(err)  # optimize bias for l1 loss
+                    # offsets += np.sign(err)  # optimize bias for l1 loss
 
-                # this is the other one we should actually consider doing
+                    # this is the other one we should actually consider doing
+                    #
+                    # grad = int(-errs[idx] * np.sign(xval))
+
+                    # # approximation of what we'd end up doing with a LUT
+                    # shift_to_just_4b = self.numbits - 4
+                    # # y0 = ((xval >> shift_to_just_4b) + 1) << shift_to_just_4b
+                    # shifted_xval = xval >> shift_to_just_4b
+                    # if shifted_xval != 0:
+                    #     y0 = int(256. / shifted_xval) << shift_to_just_4b
+                    # else:
+                    #     y0 = 16*np.sign(xval) << shift_to_just_4b
+                    # # y0 = y0 * int(2 - (xval * y0 / 256))  # diverges
+                    # y0 = int(256. / xval) if xval else 0
+
+                    # y0 = (1 << int(8 - np.floor(np.log2(xval)))) * np.sign(xval)
+                    # y0 = 4 * np.sign(xval)
+                    # self.approx_256_over_x = int( y0*(2 - (int(xval*y0) >> 8)) ) # noqa # doesn't work
+                    # grad = int(-errs[idx] * self.approx_256_over_x)
+                    # grad = int(-errs[idx] * y0)
+                    # grad = int(-errs[idx] * xval) # works
+                    # grad = int(-errs[idx] * 2*np.sign(xval))
+
+                    # this_best_coef = self.coef - grad
+                    # self.counter += this_best_coef - self.coef
+                    # self.counter -= grad  # equivalent to above two lines
+                    # self.counter -= grad >> learning_rate_shift
+                    # if self.t < 8:
+                    # if self.t % 50 == 0:
+                # if (self.t < 5 == 0) and (b == 0):
+                # if (self.t % 50 == 0) and (b == 0):
+                #     # print "errs: ", errs[-7], errs[-5], errs[-3], errs[-1]
+                #     print "t, b = ", self.t, b
+                #     print "errs: ", errs[-10:]
+                #     print "xs:   ", x[-10:]
+                #     # print "sum(|xs|)", np.sum(np.abs(x))
+                #     print "grads: ", grads
+                #     print "counter:", self.counter
+                #     # print "grad counter:", self.grad_counter
+                #     #     # print "recip, grad: ", recip, grad
+                # self.coef = self.counter >> min(self.t, learning_rate_shift)
+                # self.coef = self.counter >> learning_rate_shift
+
+                learning_rate_shift = 1
+                # learning_rate_shift = 4
+                # grad_learning_shift = 1
+                # grad_learning_shift = 4
+                # offset_learning_shift = 4
+
+                # compute average gradient for batch
+                # grad = int(4 * grads / len(which_idxs))  # div by 16
+                grad = int(grads / len(which_idxs))  # div by 64
+                # grad = grads
+
+                # self.grad_counter += grad - (self.grad_counter >> grad_learning_shift)
+                # self.grad_counter += grad
+
                 #
-                # grad = int(-errs[idx] * np.sign(xval))
+                # this is the pair of lines that we know works well for UCR
+                #
+                self.counter -= grad
+                self.coef = self.counter >> (learning_rate_shift + (self.numbits - 8))
 
-                # # approximation of what we'd end up doing with a LUT
-                # shift_to_just_4b = self.numbits - 4
-                # # y0 = ((xval >> shift_to_just_4b) + 1) << shift_to_just_4b
-                # shifted_xval = xval >> shift_to_just_4b
-                # if shifted_xval != 0:
-                #     y0 = int(256. / shifted_xval) << shift_to_just_4b
-                # else:
-                #     y0 = 16*np.sign(xval) << shift_to_just_4b
-                # # y0 = y0 * int(2 - (xval * y0 / 256))  # diverges
-                # y0 = int(256. / xval) if xval else 0
+                # self.coef = self.counter >> learning_rate_shift
+                # self.coef -= (self.grad_counter >> grad_learning_shift) >> learning_rate_shift
+                # learn_shift = int(min(learning_rate_shift, np.log2(self.t + 1)))
+                # self.coef = self.counter >> (learn_shift + (self.numbits - 8))
+                # self.coef = self.counter >> learn_shift  # for use with l1 loss
+                # self.coef -= (self.grad_counter >> grad_learning_shift) >> learn_shift
+                # self.coef -= (self.grad_counter >> grad_learning_shift) >> learning_rate_shift
+                # self.coef = 192  # global soln for olive oil
 
-                # y0 = (1 << int(8 - np.floor(np.log2(xval)))) * np.sign(xval)
-                # y0 = 4 * np.sign(xval)
-                # self.approx_256_over_x = int( y0*(2 - (int(xval*y0) >> 8)) ) # noqa # doesn't work
-                # grad = int(-errs[idx] * self.approx_256_over_x)
-                # grad = int(-errs[idx] * y0)
-                # grad = int(-errs[idx] * xval) # works
-                # grad = int(-errs[idx] * 2*np.sign(xval))
+                # quantize coeff by rounding to nearest 16; this seems to help
+                # quite a bit, at least for stuff that really should be double
+                # delta coded (starlight curves, presumably timestamps)
+                # self.coef = ((self.coef + 8) >> 4) << 4
+                self.coef = (self.coef >> 4) << 4  # just round towards 0
+                # self.coef = (self.coef >> 5) << 5  # just round towards 0
 
-                # this_best_coef = self.coef - grad
-                # self.counter += this_best_coef - self.coef
-                # self.counter -= grad  # equivalent to above two lines
-                # self.counter -= grad >> learning_rate_shift
+                # like above, but use sign since shift and unshift round towards 0
+                # EDIT: no apparent difference, though perhaps cuz almost nothing
+                # actually wants a negative coef
+                # self.coef = ((self.coef + 8 * np.sign(self.coef)) >> 4) << 4
+
+                # offset = int(offsets / len(which_idxs))  # div by 64
+                # self.offset_counter += offset
+                # # self.offset = self.offset_counter >> offset_learning_shift
+                # self.offset = 0  # offset doesn't seem to help at all
+
+                # self.coef = 0  # why are estimates biased? TODO rm
+                # self.coef = 256
+
+                # self.coef = self.counter
+                # self.coef = np.clip(self.coef, -256, 256)  # apparently important
+                # self.coef = np.clip(self.coef, -128, 256)  # apparently important
+
                 # if self.t < 8:
-                # if self.t % 50 == 0:
-                #     print "grad: ", grad
-                #     # print "recip, grad: ", recip, grad
-            # self.coef = self.counter >> min(self.t, learning_rate_shift)
-            # self.coef = self.counter >> learning_rate_shift
+                # if self.t % 100 == 0:
+                #     print "----- t = {}".format(self.t)
+                #     print "offset, offset counter: ", self.offset, self.offset_counter
+                #     # print "grad, grads sum:   ", grad, grads
+                #     # print "learn shift: ", learn_shift
+                #     # print "errs[:10]:        ", errs[:16]
+                #     # print "-grads[:10]: ", errs[:16] * x[:16]
+                #     # print "signed errs[:10]: ", errs[:16] * np.sign(x[:16])
+                #     print "new coeff, grad_counter, counter = ", self.coef, self.grad_counter, self.counter
+                #     # print "new coeff, grad counter = ", self.coef, self.grad_counter
 
-            learning_rate_shift = 1
-            # grad_learning_shift = 1
-            # offset_learning_shift = 4
-
-            # compute average gradient for batch
-            # grad = int(4 * grads / len(which_idxs))  # div by 16
-            grad = int(grads / len(which_idxs))  # div by 64
-            self.counter -= grad
-
-            # self.grad_counter += grad - (self.grad_counter >> grad_learning_shift)
-
-            self.coef = self.counter >> (learning_rate_shift + (self.numbits - 8))
-            # self.coef = self.counter >> learning_rate_shift
-            # self.coef -= (self.grad_counter >> grad_learning_shift) >> learning_rate_shift
-            # learn_shift = int(min(learning_rate_shift, np.log2(self.t + 1)))
-            # self.coef = self.counter >> (learn_shift + (self.numbits - 8))
-            # self.coef = self.counter >> learn_shift  # for use with l1 loss
-            # self.coef -= (self.grad_counter >> grad_learning_shift) >> learn_shift
-            # self.coef = 192  # global soln for olive oil
-
-            # quantize coeff by rounding to nearest 16; this seems to help
-            # quite a bit, at least for stuff that really should be double
-            # delta coded (starlight curves, presumably timestamps)
-            # self.coef = ((self.coef + 8) >> 4) << 4
-            self.coef = (self.coef >> 4) << 4  # just round towards 0
-
-            # like above, but use sign since shift and unshift rounds towards 0
-            # EDIT: no apparent difference, though perhaps cuz almost nothing
-            # actually wants a negative coef
-            # self.coef = ((self.coef + 8 * np.sign(self.coef)) >> 4) << 4
-
-            # offset = int(offsets / len(which_idxs))  # div by 64
-            # self.offset_counter += offset
-            # # self.offset = self.offset_counter >> offset_learning_shift
-            # self.offset = 0  # offset doesn't seem to help at all
-
-            # self.coef = 0  # why are estimates biased? TODO rm
-            # self.coef = 256
-
-            # self.coef = self.counter
-            # self.coef = np.clip(self.coef, -256, 256)  # apparently important
-            # self.coef = np.clip(self.coef, -128, 256)  # apparently important
-
-            # if self.t < 8:
-            # if self.t % 100 == 0:
-            #     print "----- t = {}".format(self.t)
-            #     print "offset, offset counter: ", self.offset, self.offset_counter
-            #     # print "grad, grads sum:   ", grad, grads
-            #     # print "learn shift: ", learn_shift
-            #     # print "errs[:10]:        ", errs[:16]
-            #     # print "-grads[:10]: ", errs[:16] * x[:16]
-            #     # print "signed errs[:10]: ", errs[:16] * np.sign(x[:16])
-            #     print "new coeff, grad_counter, counter = ", self.coef, self.grad_counter, self.counter
-            #     # print "new coeff, grad counter = ", self.coef, self.grad_counter
-
-            # self.best_idx_counts[self.coef] += 1  # for logging
-            self.best_coef_counts[self.coef] += 1
-            self.best_offset_counts[self.offset] += 1
+                # self.best_idx_counts[self.coef] += 1  # for logging
+                self.best_coef_counts[self.coef] += 1
+                self.best_offset_counts[self.offset] += 1
 
             # errs -= self.offset  # do this at the end to not mess up training
 
