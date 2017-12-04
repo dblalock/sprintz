@@ -31,5 +31,11 @@ int64_t compress8b_rowmajor_xff_rle_lowdim(const uint8_t* src, size_t len,
     int8_t* dest, uint16_t ndims, bool write_size=true);
 int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest);
 
+// TODO move this to an impl file
+static inline int8_t copysign_i8(int8_t sign_of, int8_t val) {
+    int8_t mask = sign_of >> 7; // technically UB, but sane compilers do this
+    int8_t maybe_negated = (val ^ mask) - mask;
+    return sign_of != 0 ? maybe_negated : 0; // let compiler optimize this
+}
 
 #endif

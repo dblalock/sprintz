@@ -15,7 +15,7 @@
 #include "bitpack.h"
 #include "transpose.h"
 
-#include "sprintz2.h"  // TODO give this its own header
+#include "sprintz_xff.h"
 
 static constexpr uint64_t kHeaderMask8b = TILE_BYTE(0x07); // 3 ones
 
@@ -38,15 +38,18 @@ int64_t compress8b_rowmajor_xff_rle_lowdim(const uint8_t* src, size_t len,
     int8_t* dest, uint16_t ndims, bool write_size)
 {
     // constants that could, in principle, be changed (but not in this impl)
-    static const int block_sz = 8;
+    static const uint8_t log2_block_sz = 3;
     // static const int stripe_sz = 8;
     static const int nbits_sz_bits = 3;
     // constants that could actually be changed in this impl
     static const int group_sz_blocks = kDefaultGroupSzBlocks;
     static const int length_header_nbytes = 8;
+    static const uint8_t log2_learning_downsample = 1;
     static const uint16_t max_run_nblocks = 0x7fff; // 15 bit counter
-    // static const uint16_t max_run_nblocks = 8; // TODO rm
+    static const uint8_t learning_shift = 1;
     // derived consts
+    static const int block_sz = 8;
+    static const uint8_t learning_downsample = 1 << log2_learning_downsample;
     static const size_t min_data_size = 8 * block_sz * group_sz_blocks;
 
     const uint8_t* orig_src = src;
@@ -102,8 +105,10 @@ int64_t compress8b_rowmajor_xff_rle_lowdim(const uint8_t* src, size_t len,
     uint8_t* header_bytes = (uint8_t*)calloc(total_header_bytes_padded, 1);
 
     // extra row is for storing previous values
-    int8_t* deltas = (int8_t*)calloc(1, (block_sz + 1) * ndims);
-    uint8_t* prev_vals_ar = (uint8_t*)(deltas + block_sz * ndims);
+    int8_t*  errs             = (int8_t* )calloc(1, (block_sz + 4) * ndims);
+    uint8_t* prev_vals_ar     = (uint8_t*)(errs + (block_sz + 0) * ndims);
+    int8_t*  prev_deltas_ar   = (int8_t* )(errs + (block_sz + 1) * ndims);
+    int16_t* coef_counters_ar = (int16_t*)(errs + (block_sz + 2) * ndims);
 
     // ================================ main loop
 
@@ -126,35 +131,41 @@ int64_t compress8b_rowmajor_xff_rle_lowdim(const uint8_t* src, size_t len,
         int b = 0;
         while (b < group_sz_blocks) { // for each block
 
-            // ------------------------ zero stripe info from previous iter
-            // memset(stripe_bitwidths, 0, nstripes * sizeof(stripe_bitwidths[0]));
-            // memset(stripe_masks,     0, nstripes * sizeof(stripe_masks[0]));
-            // memset(stripe_headers,   0, nstripes * sizeof(stripe_headers[0]));
-
             // ------------------------ compute info for each stripe
             uint32_t total_dims_nbits = 0;
             for (uint16_t dim = 0; dim < ndims; dim++) {
                 // compute maximum number of bits used by any value of this dim,
-                // while simultaneously computing deltas
+                // while simultaneously computing errs
                 uint8_t mask = 0;
                 uint8_t prev_val = prev_vals_ar[dim];
+                int8_t prev_delta = prev_deltas_ar[dim];
+
+                int16_t coef = (coef_counters_ar[dim] >> (learning_shift + 4)) << 4;
+                int8_t grad_sum = 0;
+
                 for (uint8_t i = 0; i < block_sz; i++) {
                     uint32_t in_offset = (i * ndims) + dim; // rowmajor
                     uint32_t out_offset = (dim * block_sz) + i; // colmajor
                     uint8_t val = src[in_offset];
                     int8_t delta = (int8_t)(val - prev_val);
+                    int8_t prediction = (((int16_t)prev_delta) * coef) >> 8;
+                    int8_t err = delta - prediction;
                     uint8_t bits = zigzag_encode_i8(delta);
-                    // uint8_t bits = val;
+
+                    if (i % learning_downsample == learning_downsample - 1) {
+                        grad_sum += copysign_i8(err, prev_delta);
+                    }
+
                     mask |= bits;
-                    deltas[out_offset] = bits;
+                    errs[out_offset] = bits;
                     prev_val = val;
+                    prev_delta = delta;
                 }
                 // write out value for delta encoding of next block
                 prev_vals_ar[dim] = prev_val;
 
-                // mask = NBITS_MASKS_U8[255];  // TODO rm
-                // mask = NBITS_MASKS_U8[mask];
-                // if (mask > 0) { mask = NBITS_MASKS_U8[255]; } // TODO rm
+                // mask = 255;  // TODO rm
+                // if (mask > 0) { mask = 255; } // TODO rm
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
                 max_nbits += max_nbits == 7; // map 7 to 8
 
@@ -284,7 +295,7 @@ do_rle:
             uint32_t data_sz = total_dims_nbits; // assumes block_sz == 8
             memset(dest, 0, data_sz);
 
-            uint64_t* delta_buff_u64 = (uint64_t*)deltas;
+            uint64_t* delta_buff_u64 = (uint64_t*)errs;
             for (uint16_t dim = 0; dim < ndims; dim++) {
                 uint8_t nbits = dims_nbits[dim];
                 uint64_t mask = kBitpackMasks8[nbits];
@@ -299,7 +310,7 @@ do_rle:
 
 main_loop_end:
 
-    free(deltas);
+    free(errs);
     free(dims_nbits);
     free(header_bytes);
 
@@ -316,15 +327,20 @@ main_loop_end:
 
 int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
     // constants that could, in principle, be changed (but not in this impl)
-    static const uint8_t block_sz = 8;
+    static const uint8_t log2_block_sz = 3;
+    // static const uint8_t block_sz = 8;
     static const uint8_t vector_sz = 32;
     static const uint8_t stripe_sz = 8;
     static const uint8_t nbits_sz_bits = 3;
     // constants that could actually be changed in this impl
     static const uint8_t group_sz_blocks = kDefaultGroupSzBlocks;
+    static const uint8_t learning_shift = 1;
+    static const uint8_t log2_learning_downsample = 1;
     // derived constants
+    static const uint8_t block_sz = 1 << log2_block_sz;
     static const int group_sz_per_dim = block_sz * group_sz_blocks;
     const uint8_t elem_sz = sizeof(*src);
+    static const uint8_t learning_downsample = 1 << log2_learning_downsample;
     static const uint8_t stripe_header_sz = nbits_sz_bits * stripe_sz / 8;
     static const uint8_t nbits_sz_mask = (1 << nbits_sz_bits) - 1;
     static const uint64_t kHeaderUnpackMask = TILE_BYTE(nbits_sz_mask);
@@ -385,10 +401,15 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
     // that we can store directly after sad_epu8)
     uint8_t*  headers = (uint8_t*) calloc(1, group_header_sz);
 
-    // extra row in deltas is to store last decoded values
+    // extra row in errs is to store last decoded values
     // TODO just special case very first row
-    uint8_t* deltas = (uint8_t*)calloc(block_sz * padded_ndims, 1);
-    uint8_t* prev_vals_ar = (uint8_t*)calloc(padded_ndims, 1);
+    // uint8_t* errs = (uint8_t*)calloc(block_sz * padded_ndims, 1);
+    // uint8_t* prev_vals_ar = (uint8_t*)calloc(padded_ndims, 1);
+    int8_t* errs_ar = (int8_t*)calloc((block_sz + 4) * padded_ndims, 1);
+    uint8_t* prev_vals_ar = (uint8_t*)(errs_ar + (block_sz + 0) * padded_ndims);
+    int8_t* prev_deltas_ar = (int8_t*)(errs_ar + (block_sz + 1) * padded_ndims);
+    int8_t* coeffs_ar_even = (int8_t*)(errs_ar + (block_sz + 2) * padded_ndims);
+    int8_t* coeffs_ar_odd =  (int8_t*)(errs_ar + (block_sz + 3) * padded_ndims);
 
     // ================================ main loop
 
@@ -445,7 +466,31 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
                     uint32_t ncopies = length * block_sz;
                     memrep(dest, inptr, ndims * elem_sz, ncopies);
                     dest += ndims * ncopies;
-                } else { // deltas of 0 at very start -> all zeros
+
+                    uint8_t prev_val = prev_vals_ar[0];
+                    __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar);
+                    __m256i* prev_deltas_ptr = (__m256i*)(prev_deltas_ar);
+                    __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
+                    __m256i prev_deltas = _mm256_loadu_si256(prev_deltas_ptr);
+                    __m256i vals = _mm256_setzero_si256();
+
+                    __m256i* even_counters_ptr = (__m256i*)(coeffs_ar_even);
+                    __m256i* odd_counters_ptr = (__m256i*)(coeffs_ar_odd);
+                    __m256i coef_counters_even = _mm256_loadu_si256(
+                        (const __m256i*)even_counters_ptr);
+                    __m256i coef_counters_odd = _mm256_loadu_si256(
+                        (const __m256i*)odd_counters_ptr);
+
+                    // set coef[i] to ((counter[i] >> learn_shift) >> 4) << 4)
+                    __m256i filter_coeffs_even  = _mm256_srai_epi16(
+                        coef_counters_even, learning_shift + 4);
+                    __m256i filter_coeffs_odd  = _mm256_srai_epi16(
+                        coef_counters_odd, learning_shift + 4);
+                    filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 4);
+                    filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 4);
+
+
+                } else { // errs of 0 at very start -> all zeros
                     size_t num_zeros = length * block_sz * ndims;
                     memset(dest, 0, num_zeros * elem_sz);
                     dest += num_zeros;
@@ -460,9 +505,9 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
 
             // ------------------------ unpack data for each dim
 
-            // uint8_t* delta_buff = deltas + (dim * block_sz);
+            // uint8_t* delta_buff = errs + (dim * block_sz);
             for (uint16_t dim = 0; dim < ndims; dim++) {
-                uint8_t* outptr = deltas + (dim * block_sz);
+                int8_t* outptr = errs_ar + (dim * block_sz);
                 uint8_t nbits = header_ptr[dim];
                 uint64_t mask = kBitpackMasks8[nbits];
                 *((uint64_t*)outptr) = _pdep_u64(*(uint64_t*)src, mask);
@@ -474,46 +519,69 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
 
             // ------------------------ transpose
 
+            uint8_t* errs_bytes = (uint8_t*)errs_ar;
             switch (ndims) {
                 // no zigzag or delta coding
-                // case 1: memcpy(dest, deltas, ndims*block_sz*elem_sz); break;
-                // case 2: transpose_2x8_8b(deltas, dest); break;
-                // case 3: transpose_3x8_8b(deltas, dest); break;
-                // case 4: transpose_4x8_8b(deltas, dest); break;
+                // case 1: memcpy(dest, errs, ndims*block_sz*elem_sz); break;
+                // case 2: transpose_2x8_8b(errs, dest); break;
+                // case 3: transpose_3x8_8b(errs, dest); break;
+                // case 4: transpose_4x8_8b(errs, dest); break;
 
                 case 1: break;
-                case 2: transpose_2x8_8b(deltas, deltas); break;
-                case 3: transpose_3x8_8b(deltas, deltas); break;
-                case 4: transpose_4x8_8b(deltas, deltas); break;
+                case 2: transpose_2x8_8b(errs_bytes, errs_bytes); break;
+                case 3: transpose_3x8_8b(errs_bytes, errs_bytes); break;
+                case 4: transpose_4x8_8b(errs_bytes, errs_bytes); break;
                 default:
                     printf("ERROR: received invalid ndims: %d\n", ndims);
             }
 
-            __m256i raw_vdeltas = _mm256_loadu_si256((const __m256i*)deltas);
-            __m256i vdeltas = mm256_zigzag_decode_epi8(raw_vdeltas);
+            __m256i raw_verrs = _mm256_loadu_si256((const __m256i*)errs_ar);
+            __m256i verrs = mm256_zigzag_decode_epi8(raw_verrs);
 
             // vars that would have been initialized in various cases
-            __m256i swapped128_vdeltas = _mm256_permute2x128_si256(
-                vdeltas, vdeltas, 0x01);
-            __m256i shifted15_vdeltas = _mm256_alignr_epi8(
-                swapped128_vdeltas, vdeltas, 15);
-            __m256i vals = _mm256_setzero_si256();
-            __m256i prev_vals = _mm256_loadu_si256((__m256i*)prev_vals_ar);
+            __m256i swapped128_verrs = _mm256_permute2x128_si256(
+                verrs, verrs, 0x01);
+            __m256i shifted15_verrs = _mm256_alignr_epi8(
+                swapped128_verrs, verrs, 15);
+
             uint8_t prev_val = prev_vals_ar[0];
+            __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar);
+            __m256i* prev_deltas_ptr = (__m256i*)(prev_deltas_ar);
+            __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
+            __m256i prev_deltas = _mm256_loadu_si256(prev_deltas_ptr);
+            __m256i vals = _mm256_setzero_si256();
+
+            __m256i* even_counters_ptr = (__m256i*)(coeffs_ar_even);
+            __m256i* odd_counters_ptr = (__m256i*)(coeffs_ar_odd);
+            __m256i coef_counters_even = _mm256_loadu_si256(
+                (const __m256i*)even_counters_ptr);
+            __m256i coef_counters_odd = _mm256_loadu_si256(
+                (const __m256i*)odd_counters_ptr);
+
+            // set coef[i] to ((counter[i] >> learn_shift) >> 4) << 4)
+            __m256i filter_coeffs_even  = _mm256_srai_epi16(
+                coef_counters_even, learning_shift + 4);
+            __m256i filter_coeffs_odd  = _mm256_srai_epi16(
+                coef_counters_odd, learning_shift + 4);
+            filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 4);
+            filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 4);
+
+            __m256i gradients_sum = _mm256_setzero_si256();
+
             switch (ndims) {
 
             // can't just use a loop because _mm256_srli_si256 demands that
             // the shift amount be a compile-time constant (which it is
-            // if the loop is unrolled, but apparently this isn't good enough)
+            // if the loop is unrolled, but apparently that's insufficient)
     #define LOOP_BODY(I, SHIFT, DELTA_ARRAY)                                \
-        { __m256i shifted_deltas = _mm256_srli_si256(DELTA_ARRAY, SHIFT);   \
-        vals = _mm256_add_epi8(prev_vals, shifted_deltas);                  \
+        { __m256i shifted_errs = _mm256_srli_si256(DELTA_ARRAY, SHIFT);   \
+        vals = _mm256_add_epi8(prev_vals, shifted_errs);                  \
         _mm256_storeu_si256((__m256i*)(dest + I * ndims), vals);            \
         prev_vals = vals; }
 
             case 1:
                 for (uint8_t i = 0; i < block_sz; i++) {
-                    int8_t delta = _mm256_extract_epi8(vdeltas, i);
+                    int8_t delta = _mm256_extract_epi8(verrs, i);
                     uint8_t val = prev_val + delta;
                     dest[i] = val;
                     prev_val = val;
@@ -521,32 +589,32 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
                 prev_vals_ar[0] = prev_val;
                 break;
             case 2: // everything fits in lower 128b
-                LOOP_BODY(0, 0, vdeltas); LOOP_BODY(1, 2, vdeltas);
-                LOOP_BODY(2, 4, vdeltas); LOOP_BODY(3, 6, vdeltas);
-                LOOP_BODY(4, 8, vdeltas); LOOP_BODY(5, 10, vdeltas);
-                LOOP_BODY(6, 12, vdeltas); LOOP_BODY(7, 14, vdeltas);
+                LOOP_BODY(0, 0, verrs); LOOP_BODY(1, 2, verrs);
+                LOOP_BODY(2, 4, verrs); LOOP_BODY(3, 6, verrs);
+                LOOP_BODY(4, 8, verrs); LOOP_BODY(5, 10, verrs);
+                LOOP_BODY(6, 12, verrs); LOOP_BODY(7, 14, verrs);
                 _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
                 break;
             case 3:
-                LOOP_BODY(0, 0, vdeltas);
-                LOOP_BODY(1, 3, vdeltas);
-                LOOP_BODY(2, 6, vdeltas);
-                LOOP_BODY(3, 9, vdeltas);
-                LOOP_BODY(4, 12, vdeltas);
-                LOOP_BODY(5, 0, shifted15_vdeltas);
-                LOOP_BODY(6, 3, shifted15_vdeltas);
-                LOOP_BODY(7, 6, shifted15_vdeltas);
+                LOOP_BODY(0, 0, verrs);
+                LOOP_BODY(1, 3, verrs);
+                LOOP_BODY(2, 6, verrs);
+                LOOP_BODY(3, 9, verrs);
+                LOOP_BODY(4, 12, verrs);
+                LOOP_BODY(5, 0, shifted15_verrs);
+                LOOP_BODY(6, 3, shifted15_verrs);
+                LOOP_BODY(7, 6, shifted15_verrs);
                 _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
                 break;
             case 4:
-                LOOP_BODY(0, 0, vdeltas);
-                LOOP_BODY(1, 4, vdeltas);
-                LOOP_BODY(2, 8, vdeltas);
-                LOOP_BODY(3, 12, vdeltas);
-                LOOP_BODY(4, 0, swapped128_vdeltas);
-                LOOP_BODY(5, 4, swapped128_vdeltas);
-                LOOP_BODY(6, 8, swapped128_vdeltas);
-                LOOP_BODY(7, 12, swapped128_vdeltas);
+                LOOP_BODY(0, 0, verrs);
+                LOOP_BODY(1, 4, verrs);
+                LOOP_BODY(2, 8, verrs);
+                LOOP_BODY(3, 12, verrs);
+                LOOP_BODY(4, 0, swapped128_verrs);
+                LOOP_BODY(5, 4, swapped128_verrs);
+                LOOP_BODY(6, 8, swapped128_verrs);
+                LOOP_BODY(7, 12, swapped128_verrs);
                 _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
                 break;
 
@@ -557,8 +625,8 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
     } // for each group
 
     free(headers);
-    free(deltas);
-    free(prev_vals_ar);
+    free(errs_ar);
+    // free(prev_vals_ar);
 
     memcpy(dest, src, remaining_len);
 

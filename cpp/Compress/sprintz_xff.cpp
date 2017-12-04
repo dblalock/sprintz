@@ -12,6 +12,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "sprintz_xff.h"
+
 #include "bitpack.h"
 #include "util.h" // for memrep
 
@@ -28,13 +30,6 @@ static const int kDefaultGroupSzBlocks = 2;
 
 // ========================================================== rowmajor xff
 
-// #define SIGN(x) ((x) > 0) - ((x) < 0)
-
-inline int8_t copysign_i8(int8_t sign_of, int8_t val) {
-    int8_t mask = sign_of >> 7; // technically UB, but sane compilers do this
-    int8_t maybe_negated = (val ^ mask) - mask;
-    return sign_of != 0 ? maybe_negated : 0; // let compiler optimize this
-}
 
 int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len, int8_t* dest,
                             uint16_t ndims, bool write_size)
