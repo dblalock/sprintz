@@ -14,7 +14,7 @@
 #include "compress_testing.hpp"
 
 // #include "array_utils.hpp"
-#include "sprintz2.h"
+#include "sprintz_delta.h"
 // #include "bitpack.h"
 #include "test_utils.hpp"
 
@@ -200,7 +200,7 @@ TEST_CASE("compress8b_rowmajor_delta", "[rowmajor][delta]") {
 
 // ============================================================ rowmajor delta rle
 
-TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta]") {
+TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][rle]") {
     printf("executing rowmajor delta rle test\n");
 
     // int ndims = 64;
