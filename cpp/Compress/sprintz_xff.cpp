@@ -1479,9 +1479,9 @@ int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
                     __m256i verrs = mm256_zigzag_decode_epi8(raw_verrs);
 
                     // compute gradients, but downsample for speed
+                        // __m256i gradients = _mm256_setzero_si256(); // TODO rm
                     if (i % learning_downsample == learning_downsample - 1) {
                         __m256i gradients = _mm256_sign_epi8(prev_deltas, verrs);
-                        // __m256i gradients = _mm256_setzero_si256(); // TODO rm
                         gradients_sum = _mm256_add_epi8(gradients_sum, gradients);
                     }
 

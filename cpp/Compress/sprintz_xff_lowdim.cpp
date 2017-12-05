@@ -150,7 +150,8 @@ int64_t compress8b_rowmajor_xff_rle_lowdim(const uint8_t* src, size_t len,
                     int8_t delta = (int8_t)(val - prev_val);
                     int8_t prediction = (((int16_t)prev_delta) * coef) >> 8;
                     int8_t err = delta - prediction;
-                    uint8_t bits = zigzag_encode_i8(delta);
+                    // uint8_t bits = zigzag_encode_i8(delta);
+                    uint8_t bits = zigzag_encode_i8(err);
 
                     if (i % learning_downsample == learning_downsample - 1) {
                         grad_sum += copysign_i8(err, prev_delta);
@@ -163,6 +164,7 @@ int64_t compress8b_rowmajor_xff_rle_lowdim(const uint8_t* src, size_t len,
                 }
                 // write out value for delta encoding of next block
                 prev_vals_ar[dim] = prev_val;
+                prev_deltas_ar[dim] = prev_delta;
 
                 // mask = 255;  // TODO rm
                 // if (mask > 0) { mask = 255; } // TODO rm
@@ -578,6 +580,7 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
                 swapped128_verrs, verrs, 15);
 
             uint8_t prev_val = prev_vals_ar[0];
+            uint8_t prev_delta = prev_deltas_ar[0];
             __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar);
             __m256i* prev_deltas_ptr = (__m256i*)(prev_deltas_ar);
             __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
@@ -643,6 +646,7 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
                     prev_val = val;
                 }
                 prev_vals_ar[0] = prev_val;
+                prev_deltas_ar[0] = prev_delta;
                 break;
             case 2: // everything fits in lower 128b
                 LOOP_BODY(0, 0, verrs); LOOP_BODY(1, 2, verrs);
@@ -682,6 +686,19 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
 
     #undef LOOP_BODY
             }
+
+            // mean of gradients in block, for even and odd indices
+            const uint8_t rshift = 8 + log2_block_sz - log2_learning_downsample;
+            __m256i even_grads = _mm256_srai_epi16(
+                _mm256_slli_epi16(gradients_sum, 8), rshift);
+            __m256i odd_grads = _mm256_srai_epi16(gradients_sum, rshift);
+
+            // store updated coefficients (or, technically, the counters)
+            coef_counters_even = _mm256_add_epi16(coef_counters_even, even_grads);
+            coef_counters_odd = _mm256_add_epi16(coef_counters_odd, odd_grads);
+            _mm256_storeu_si256(even_counters_ptr, coef_counters_even);
+            _mm256_storeu_si256(odd_counters_ptr, coef_counters_odd);
+
             dest += block_sz * ndims;
         } // for each block
     } // for each group
