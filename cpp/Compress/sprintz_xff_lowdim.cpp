@@ -30,7 +30,7 @@ static const int kDefaultGroupSzBlocks = 2;
 // static const int kDefaultGroupSzBlocks = 8;  // slight pareto improvement
 
 static const int debug = 0;
-// static const int debug = 1;
+// static const int debug = 3;
 
 // ------------------------------------------------ delta + rle low ndims
 
@@ -332,6 +332,7 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
     static const uint8_t vector_sz = 32;
     static const uint8_t stripe_sz = 8;
     static const uint8_t nbits_sz_bits = 3;
+    static const __m256i low_mask = _mm256_set1_epi16(0xff);
     // constants that could actually be changed in this impl
     static const uint8_t group_sz_blocks = kDefaultGroupSzBlocks;
     static const uint8_t learning_shift = 1;
@@ -374,7 +375,7 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
     if (debug) {
         int64_t min_orig_len = ngroups * group_sz_blocks * block_sz * ndims;
         printf("-------- decompression (orig_len = %lld)\n", (int64_t)min_orig_len);
-        if (debug > 2) {
+        if (debug > 3) {
             printf("saw compressed data (with possible missing data if runs):\n");
             dump_bytes(src, min_orig_len + 8);
         }
@@ -462,17 +463,13 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
 
                 // write out the run
                 if (g > 0 || b > 0) { // if not at very beginning of data
-                    const uint8_t* inptr = dest - ndims;
-                    uint32_t ncopies = length * block_sz;
-                    memrep(dest, inptr, ndims * elem_sz, ncopies);
-                    dest += ndims * ncopies;
+                    // const uint8_t* inptr = dest - ndims;
+                    // uint32_t ncopies = length * block_sz;
+                    // memrep(dest, inptr, ndims * elem_sz, ncopies);
+                    // dest += ndims * ncopies;
 
-                    uint8_t prev_val = prev_vals_ar[0];
                     __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar);
                     __m256i* prev_deltas_ptr = (__m256i*)(prev_deltas_ar);
-                    __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
-                    __m256i prev_deltas = _mm256_loadu_si256(prev_deltas_ptr);
-                    __m256i vals = _mm256_setzero_si256();
 
                     __m256i* even_counters_ptr = (__m256i*)(coeffs_ar_even);
                     __m256i* odd_counters_ptr = (__m256i*)(coeffs_ar_odd);
@@ -489,7 +486,43 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
                     filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 4);
                     filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 4);
 
+                    for (int32_t bb = 0; bb < length; bb++) {
+                        // uint8_t prev_val = prev_vals_ar[0];
+                        __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
+                        __m256i prev_deltas = _mm256_loadu_si256(prev_deltas_ptr);
+                        __m256i vals = _mm256_setzero_si256();
 
+                        __m256i even_prev_deltas = _mm256_srai_epi16(
+                            _mm256_slli_epi16(prev_deltas, 8), 8);
+                        __m256i odd_prev_deltas = _mm256_srai_epi16(
+                            prev_deltas, 8);
+
+                        for (uint8_t i = 0; i < block_sz; i++) {
+                            __m256i even_predictions = _mm256_mullo_epi16(
+                                even_prev_deltas, filter_coeffs_even);
+                            __m256i odd_predictions = _mm256_mullo_epi16(
+                                odd_prev_deltas, filter_coeffs_odd);
+                            __m256i vpredictions = _mm256_blendv_epi8(odd_predictions,
+                                _mm256_srli_epi16(even_predictions, 8), low_mask);
+
+                            // since 0 err, predictions equal true deltas
+                            __m256i vdeltas = vpredictions;
+                            vals = _mm256_add_epi8(prev_vals, vdeltas);
+
+                            _mm256_storeu_si256((__m256i*)(dest + i * ndims), vals);
+
+                            even_prev_deltas = _mm256_srai_epi16(
+                                even_predictions, 8);
+                            odd_prev_deltas = _mm256_srai_epi16(
+                                odd_predictions, 8);
+                            prev_deltas = vdeltas;
+                            prev_vals = vals;
+                        } // for each row
+                        _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
+                        _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
+
+                        dest += ndims * block_sz;
+                    }
                 } else { // errs of 0 at very start -> all zeros
                     size_t num_zeros = length * block_sz * ndims;
                     memset(dest, 0, num_zeros * elem_sz);
@@ -573,12 +606,35 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
             // can't just use a loop because _mm256_srli_si256 demands that
             // the shift amount be a compile-time constant (which it is
             // if the loop is unrolled, but apparently that's insufficient)
+/*
     #define LOOP_BODY(I, SHIFT, DELTA_ARRAY)                                \
         { __m256i shifted_errs = _mm256_srli_si256(DELTA_ARRAY, SHIFT);   \
         vals = _mm256_add_epi8(prev_vals, shifted_errs);                  \
         _mm256_storeu_si256((__m256i*)(dest + I * ndims), vals);            \
         prev_vals = vals; }
-
+/*/
+    #define LOOP_BODY(I, SHIFT, DELTA_ARRAY)                                \
+    {   __m256i shifted_errs = _mm256_srli_si256(DELTA_ARRAY, SHIFT);       \
+        __m256i even_prev_deltas = _mm256_srai_epi16(                       \
+            _mm256_slli_epi16(prev_deltas, 8), 8);                          \
+        __m256i odd_prev_deltas = _mm256_srai_epi16(                        \
+            prev_deltas, 8);                                                \
+                                                                            \
+        __m256i even_predictions = _mm256_mullo_epi16(                      \
+            even_prev_deltas, filter_coeffs_even);                          \
+        __m256i odd_predictions = _mm256_mullo_epi16(                       \
+            odd_prev_deltas, filter_coeffs_odd);                            \
+        __m256i vpredictions = _mm256_blendv_epi8(odd_predictions,          \
+            _mm256_srli_epi16(even_predictions, 8), low_mask);              \
+                                                                            \
+        __m256i vdeltas = _mm256_add_epi8(shifted_errs, vpredictions);      \
+        vals = _mm256_add_epi8(prev_vals, vdeltas);                         \
+                                                                            \
+        _mm256_storeu_si256((__m256i*)(dest + I * ndims), vals);            \
+        prev_deltas = vdeltas;                                              \
+        prev_vals = vals;                                                   \
+    }
+//*/
             case 1:
                 for (uint8_t i = 0; i < block_sz; i++) {
                     int8_t delta = _mm256_extract_epi8(verrs, i);
@@ -593,7 +649,9 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
                 LOOP_BODY(2, 4, verrs); LOOP_BODY(3, 6, verrs);
                 LOOP_BODY(4, 8, verrs); LOOP_BODY(5, 10, verrs);
                 LOOP_BODY(6, 12, verrs); LOOP_BODY(7, 14, verrs);
-                _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
+                // _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
+                _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
+                _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
                 break;
             case 3:
                 LOOP_BODY(0, 0, verrs);
@@ -604,7 +662,9 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
                 LOOP_BODY(5, 0, shifted15_verrs);
                 LOOP_BODY(6, 3, shifted15_verrs);
                 LOOP_BODY(7, 6, shifted15_verrs);
-                _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
+                // _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
+                _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
+                _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
                 break;
             case 4:
                 LOOP_BODY(0, 0, verrs);
@@ -615,7 +675,9 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
                 LOOP_BODY(5, 4, swapped128_verrs);
                 LOOP_BODY(6, 8, swapped128_verrs);
                 LOOP_BODY(7, 12, swapped128_verrs);
-                _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
+                // _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
+                _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
+                _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
                 break;
 
     #undef LOOP_BODY
