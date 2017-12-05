@@ -12,15 +12,15 @@
 		721AECE31FAEB9120005B793 /* test_predict.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 721AECE21FAEB9120005B793 /* test_predict.cpp */; };
 		725E207D1FAAADD2007B2797 /* delta.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 725E207B1FAAADD2007B2797 /* delta.cpp */; };
 		725E207F1FAAADE8007B2797 /* test_delta.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 725E207E1FAAADE8007B2797 /* test_delta.cpp */; };
-		726D10641F6E027F00080495 /* sprintz.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 726D10631F6E027F00080495 /* sprintz.cpp */; };
-		726D11D41F6E046900080495 /* test_sprintz.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 726D11D11F6E046800080495 /* test_sprintz.cpp */; };
+		726D11D41F6E046900080495 /* test_univariate_8b.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 726D11D11F6E046800080495 /* test_univariate_8b.cpp */; };
 		726D11D71F74404000080495 /* test_bitpack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 726D11D61F74404000080495 /* test_bitpack.cpp */; };
 		727B03301FCC9265004F07D4 /* test_sprintz_xff.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 727B032E1FCC9265004F07D4 /* test_sprintz_xff.cpp */; };
 		727B03311FCC9265004F07D4 /* sprintz_xff.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 727B032F1FCC9265004F07D4 /* sprintz_xff.cpp */; };
-		727B03331FD36758004F07D4 /* sprintz3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 727B03321FD36758004F07D4 /* sprintz3.cpp */; };
-		72B1E6381F7D405F00649F43 /* sprintz2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72B1E6371F7D405F00649F43 /* sprintz2.cpp */; };
 		72B1E63A1F7D8D4700649F43 /* test_sprintz2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72B1E6391F7D8D4700649F43 /* test_sprintz2.cpp */; };
 		72C2D0AB1FD6013100D6740B /* sprintz_xff_lowdim.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C2D0AA1FD6013000D6740B /* sprintz_xff_lowdim.cpp */; };
+		72C2D0B01FD6456200D6740B /* univariate_8b.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C2D0AF1FD6456200D6740B /* univariate_8b.cpp */; };
+		72C2D0B41FD6460100D6740B /* sprintz_delta.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C2D0B11FD6460100D6740B /* sprintz_delta.cpp */; };
+		72C2D0B51FD6460100D6740B /* sprintz_delta_lowdim.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C2D0B31FD6460100D6740B /* sprintz_delta_lowdim.cpp */; };
 		72CD9A851F9FFDD600736C6A /* entropy.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72CD9A831F9FFDD600736C6A /* entropy.cpp */; };
 		72E01C691EB554200038A2B9 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72E01C681EB554200038A2B9 /* main.cpp */; };
 /* End PBXBuildFile section */
@@ -49,7 +49,6 @@
 		725E207E1FAAADE8007B2797 /* test_delta.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = test_delta.cpp; sourceTree = "<group>"; };
 		725E20801FAAC0E8007B2797 /* delta.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = delta.h; sourceTree = "<group>"; };
 		726D10581F6DCDD200080495 /* bitpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bitpack.h; sourceTree = "<group>"; };
-		726D10631F6E027F00080495 /* sprintz.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz.cpp; sourceTree = "<group>"; };
 		726D10651F6E046800080495 /* array_utils.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = array_utils.hpp; path = test/array_utils.hpp; sourceTree = "<group>"; };
 		726D10661F6E046800080495 /* catch.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = catch.hpp; path = test/catch.hpp; sourceTree = "<group>"; };
 		726D10681F6E046800080495 /* Cholesky */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Cholesky; sourceTree = "<group>"; };
@@ -374,23 +373,24 @@
 		726D11CD1F6E046800080495 /* SuperLUSupport */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = SuperLUSupport; sourceTree = "<group>"; };
 		726D11CE1F6E046800080495 /* SVD */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = SVD; sourceTree = "<group>"; };
 		726D11CF1F6E046800080495 /* UmfPackSupport */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = UmfPackSupport; sourceTree = "<group>"; };
-		726D11D11F6E046800080495 /* test_sprintz.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = test_sprintz.cpp; path = test/test_sprintz.cpp; sourceTree = "<group>"; };
+		726D11D11F6E046800080495 /* test_univariate_8b.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = test_univariate_8b.cpp; path = test/test_univariate_8b.cpp; sourceTree = "<group>"; };
 		726D11D21F6E046800080495 /* timing_utils.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = timing_utils.hpp; path = test/timing_utils.hpp; sourceTree = "<group>"; };
 		726D11D51F743FE000080495 /* test_utils.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = test_utils.hpp; path = test/test_utils.hpp; sourceTree = "<group>"; };
 		726D11D61F74404000080495 /* test_bitpack.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = test_bitpack.cpp; path = test/test_bitpack.cpp; sourceTree = "<group>"; };
 		727B032D1FCC9265004F07D4 /* sprintz_xff.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sprintz_xff.h; sourceTree = "<group>"; };
 		727B032E1FCC9265004F07D4 /* test_sprintz_xff.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = test_sprintz_xff.cpp; path = test/test_sprintz_xff.cpp; sourceTree = "<group>"; };
 		727B032F1FCC9265004F07D4 /* sprintz_xff.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz_xff.cpp; sourceTree = "<group>"; };
-		727B03321FD36758004F07D4 /* sprintz3.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz3.cpp; sourceTree = "<group>"; };
-		72B1E6371F7D405F00649F43 /* sprintz2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz2.cpp; sourceTree = "<group>"; };
 		72B1E6391F7D8D4700649F43 /* test_sprintz2.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = test_sprintz2.cpp; path = test/test_sprintz2.cpp; sourceTree = "<group>"; };
-		72B1E63B1F7DA2B000649F43 /* sprintz2.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = sprintz2.h; sourceTree = "<group>"; };
 		72C2D0AA1FD6013000D6740B /* sprintz_xff_lowdim.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz_xff_lowdim.cpp; sourceTree = "<group>"; };
+		72C2D0AE1FD6456200D6740B /* univariate_8b.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = univariate_8b.h; sourceTree = "<group>"; };
+		72C2D0AF1FD6456200D6740B /* univariate_8b.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = univariate_8b.cpp; sourceTree = "<group>"; };
+		72C2D0B11FD6460100D6740B /* sprintz_delta.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz_delta.cpp; sourceTree = "<group>"; };
+		72C2D0B21FD6460100D6740B /* sprintz_delta.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sprintz_delta.h; sourceTree = "<group>"; };
+		72C2D0B31FD6460100D6740B /* sprintz_delta_lowdim.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz_delta_lowdim.cpp; sourceTree = "<group>"; };
 		72CD9A831F9FFDD600736C6A /* entropy.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = entropy.cpp; sourceTree = "<group>"; };
 		72CD9A841F9FFDD600736C6A /* entropy.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = entropy.hpp; sourceTree = "<group>"; };
 		72E01C651EB554200038A2B9 /* Compress */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Compress; sourceTree = BUILT_PRODUCTS_DIR; };
 		72E01C681EB554200038A2B9 /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
-		72E980591F0AB132006E1F9B /* sprintz.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = sprintz.h; sourceTree = "<group>"; };
 		72E9805A1F0AB147006E1F9B /* debug_utils.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = debug_utils.hpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -1068,11 +1068,11 @@
 				7217C2FF1F929D820059CFA6 /* transpose.h */,
 				726D10581F6DCDD200080495 /* bitpack.h */,
 				721AECE11FAEB88F0005B793 /* util.h */,
-				72E980591F0AB132006E1F9B /* sprintz.h */,
-				726D10631F6E027F00080495 /* sprintz.cpp */,
-				72B1E63B1F7DA2B000649F43 /* sprintz2.h */,
-				72B1E6371F7D405F00649F43 /* sprintz2.cpp */,
-				727B03321FD36758004F07D4 /* sprintz3.cpp */,
+				72C2D0AF1FD6456200D6740B /* univariate_8b.cpp */,
+				72C2D0AE1FD6456200D6740B /* univariate_8b.h */,
+				72C2D0B31FD6460100D6740B /* sprintz_delta_lowdim.cpp */,
+				72C2D0B11FD6460100D6740B /* sprintz_delta.cpp */,
+				72C2D0B21FD6460100D6740B /* sprintz_delta.h */,
 				727B032D1FCC9265004F07D4 /* sprintz_xff.h */,
 				727B032F1FCC9265004F07D4 /* sprintz_xff.cpp */,
 				72C2D0AA1FD6013000D6740B /* sprintz_xff_lowdim.cpp */,
@@ -1084,7 +1084,7 @@
 				725E207E1FAAADE8007B2797 /* test_delta.cpp */,
 				721AECE21FAEB9120005B793 /* test_predict.cpp */,
 				7217C3001F929D9D0059CFA6 /* test_transpose.cpp */,
-				726D11D11F6E046800080495 /* test_sprintz.cpp */,
+				726D11D11F6E046800080495 /* test_univariate_8b.cpp */,
 				72B1E6391F7D8D4700649F43 /* test_sprintz2.cpp */,
 				721C6D6A1F8BE94300DFDE0B /* compress_testing.hpp */,
 				726D11D61F74404000080495 /* test_bitpack.cpp */,
@@ -1153,19 +1153,19 @@
 			buildActionMask = 2147483647;
 			files = (
 				725E207F1FAAADE8007B2797 /* test_delta.cpp in Sources */,
-				726D11D41F6E046900080495 /* test_sprintz.cpp in Sources */,
+				726D11D41F6E046900080495 /* test_univariate_8b.cpp in Sources */,
 				7217C3011F929D9D0059CFA6 /* test_transpose.cpp in Sources */,
+				72C2D0B01FD6456200D6740B /* univariate_8b.cpp in Sources */,
 				727B03311FCC9265004F07D4 /* sprintz_xff.cpp in Sources */,
 				72B1E63A1F7D8D4700649F43 /* test_sprintz2.cpp in Sources */,
-				726D10641F6E027F00080495 /* sprintz.cpp in Sources */,
 				726D11D71F74404000080495 /* test_bitpack.cpp in Sources */,
+				72C2D0B51FD6460100D6740B /* sprintz_delta_lowdim.cpp in Sources */,
 				72CD9A851F9FFDD600736C6A /* entropy.cpp in Sources */,
 				721AECE31FAEB9120005B793 /* test_predict.cpp in Sources */,
 				721AECDF1FAEB8110005B793 /* predict.cpp in Sources */,
-				72B1E6381F7D405F00649F43 /* sprintz2.cpp in Sources */,
 				727B03301FCC9265004F07D4 /* test_sprintz_xff.cpp in Sources */,
+				72C2D0B41FD6460100D6740B /* sprintz_delta.cpp in Sources */,
 				725E207D1FAAADD2007B2797 /* delta.cpp in Sources */,
-				727B03331FD36758004F07D4 /* sprintz3.cpp in Sources */,
 				72E01C691EB554200038A2B9 /* main.cpp in Sources */,
 				72C2D0AB1FD6013100D6740B /* sprintz_xff_lowdim.cpp in Sources */,
 			);

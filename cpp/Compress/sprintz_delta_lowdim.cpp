@@ -15,7 +15,7 @@
 #include "bitpack.h"
 #include "transpose.h"
 
-#include "sprintz2.h"  // TODO give this its own header
+#include "sprintz_delta.h"  // TODO give this its own header
 
 static constexpr uint64_t kHeaderMask8b = TILE_BYTE(0x07); // 3 ones
 

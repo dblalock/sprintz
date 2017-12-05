@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 #include "compress_testing.hpp"
-#include "sprintz.h"
+#include "univariate_8b.h"
 #include "bitpack.h"
 #include "test_utils.hpp"
 
