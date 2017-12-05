@@ -6,6 +6,8 @@
 //  Copyright © 2017 D Blalock. All rights reserved.
 //
 
+#include "sprintz_xff.h"
+
 #include <stdio.h>
 
 #include <assert.h>
@@ -13,9 +15,9 @@
 #include <string.h>
 
 #include "bitpack.h"
+#include "format.h"
 #include "transpose.h"
-
-#include "sprintz_xff.h"
+#include "util.h" // for copysign
 
 static constexpr uint64_t kHeaderMask8b = TILE_BYTE(0x07); // 3 ones
 
@@ -34,7 +36,7 @@ static const int debug = 0;
 
 // ------------------------------------------------ delta + rle low ndims
 
-int64_t compress8b_rowmajor_xff_rle_lowdim(const uint8_t* src, size_t len,
+int64_t compress8b_rowmajor_xff_rle_lowdim(const uint8_t* src, uint32_t len,
     int8_t* dest, uint16_t ndims, bool write_size)
 {
     // constants that could, in principle, be changed (but not in this impl)
@@ -50,7 +52,7 @@ int64_t compress8b_rowmajor_xff_rle_lowdim(const uint8_t* src, size_t len,
     // derived consts
     static const int block_sz = 8;
     static const uint8_t learning_downsample = 1 << log2_learning_downsample;
-    static const size_t min_data_size = 8 * block_sz * group_sz_blocks;
+    static const uint32_t min_data_size = 8 * block_sz * group_sz_blocks;
 
     const uint8_t* orig_src = src;
     int8_t* orig_dest = dest;
@@ -74,10 +76,11 @@ int64_t compress8b_rowmajor_xff_rle_lowdim(const uint8_t* src, size_t len,
         if (write_size) {
             // XXX: ((group_size_blocks * ndims * (block_sz - 1)) must fit
             // in 16 bits; for group size, block_sz = 8, need ndims < 1024
-            *(uint32_t*)dest = 0; // 0 groups
-            *(uint16_t*)(dest + 4) = (uint16_t)len;
-            *(uint16_t*)(dest + 6) = ndims;
-            dest += length_header_nbytes;
+            // *(uint32_t*)dest = 0; // 0 groups
+            // *(uint16_t*)(dest + 4) = (uint16_t)len;
+            // *(uint16_t*)(dest + 6) = ndims;
+            // dest += length_header_nbytes;
+            dest += write_metadata_rle(dest, ndims, 0, (uint16_t)len);
         }
         memcpy(dest, src, len);
         return (dest - orig_dest) + len;
@@ -327,7 +330,12 @@ main_loop_end:
     return dest + remaining_len - orig_dest;
 }
 
-int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
+// int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
+// int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src,
+SPRINTZ_FORCE_INLINE int64_t decompress8b_rowmajor_xff_rle_lowdim(
+    const int8_t* src, uint8_t* dest, uint16_t ndims, uint64_t ngroups,
+    uint16_t remaining_len)
+{
     // constants that could, in principle, be changed (but not in this impl)
     static const uint8_t log2_block_sz = 3;
     // static const uint8_t block_sz = 8;
@@ -353,16 +361,6 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
     // const int8_t* orig_src = src;
 
     // ================================ one-time initialization
-
-    // ------------------------ read original data size, ndims
-
-    static const size_t len_nbytes = 4;
-    uint64_t one = 1; // make next line legible
-    uint64_t len_mask = (one << (8 * len_nbytes)) - 1;
-    uint64_t ngroups = (*(uint64_t*)src) & len_mask;
-    uint16_t remaining_len = (*(uint16_t*)(src + len_nbytes));
-    uint16_t ndims = (*(uint16_t*)(src + len_nbytes + 2));
-    src += 8;
 
     bool just_cpy = (ngroups == 0) && remaining_len < min_data_size;
     if (just_cpy) { // if data was too small or failed to compress
@@ -717,4 +715,13 @@ int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
     // // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, 16);
 
     return dest + remaining_len - orig_dest;
+}
+
+int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
+    uint16_t ndims;
+    uint64_t ngroups;
+    uint16_t remaining_len;
+    src += read_metadata_rle(src, &ndims, &ngroups, &remaining_len);
+    return decompress8b_rowmajor_xff_rle_lowdim(
+        src, dest, ndims, ngroups, remaining_len);
 }

@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include "bitpack.h"
+#include "format.h"
 #include "util.h" // for memrep
 
 // #include "debug_utils.hpp" // TODO rm
@@ -29,32 +30,6 @@ static const __m256i nbits_to_mask = _mm256_setr_epi8(
 
 
 static const int kDefaultGroupSzBlocks = 2;
-
-// ------------------------------------------------ helper funcs
-
-static const uint16_t kMetaDataLenBytesRle = 8;
-
-uint16_t write_metadata_rle(int8_t* orig_dest, uint16_t ndims,
-    uint32_t ngroups, uint16_t remaining_len)
-{
-    *(uint32_t*)orig_dest = ngroups;
-    *(uint16_t*)(orig_dest + 4) = (uint16_t)remaining_len;
-    *(uint16_t*)(orig_dest + 6) = ndims;
-    return kMetaDataLenBytesRle;
-}
-
-uint16_t read_metadata_rle(const int8_t* src, uint16_t* p_ndims,
-    uint64_t* p_ngroups, uint16_t* p_remaining_len)
-{
-    static const uint32_t len_nbytes = 4;
-    uint64_t one = 1; // make next line legible
-    uint64_t len_mask = (one << (8 * len_nbytes)) - 1;
-    *p_ngroups = (*(uint64_t*)src) & len_mask;
-    *p_remaining_len = (*(uint16_t*)(src + len_nbytes));
-    *p_ndims = (*(uint16_t*)(src + len_nbytes + 2));
-
-    return kMetaDataLenBytesRle; // bytes taken up by metadata
-}
 
 // ------------------------------------------------ row-major, no delta or RLE
 
@@ -1140,10 +1115,11 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, uint64_t len,
         if (write_size) {
             // XXX: ((group_size_blocks * ndims * (block_sz - 1)) must fit
             // in 16 bits; for group size, block_sz = 8, need ndims < 1024
-            *(uint32_t*)dest = 0; // 0 groups
-            *(uint16_t*)(dest + 4) = (uint16_t)len;
-            *(uint16_t*)(dest + 6) = ndims;
-            dest += length_header_nbytes;
+            // *(uint32_t*)dest = 0; // 0 groups
+            // *(uint16_t*)(dest + 4) = (uint16_t)len;
+            // *(uint16_t*)(dest + 6) = ndims;
+            // dest += length_header_nbytes;
+            dest += write_metadata_rle(dest, ndims, 0, (uint16_t)len);
         }
         memcpy(dest, src, len);
         return (dest - orig_dest) + len;

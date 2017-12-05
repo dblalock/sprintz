@@ -6,16 +6,17 @@
 //  Copyright © 2017 D Blalock. All rights reserved.
 //
 
+#include "sprintz_xff.h"
+
 #include <stdio.h>
 
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
 
-#include "sprintz_xff.h"
-
 #include "bitpack.h"
-#include "util.h" // for memrep
+#include "format.h"
+#include "util.h" // for copysign
 
 // byte shuffle values to construct data masks; note that nbits == 7 yields
 // a byte of all ones (0xff); also note that rows 1 and 3 below are unused
@@ -31,7 +32,7 @@ static const int kDefaultGroupSzBlocks = 2;
 // ========================================================== rowmajor xff
 
 
-int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len, int8_t* dest,
+int64_t compress8b_rowmajor_xff(const uint8_t* src, uint64_t len, int8_t* dest,
                             uint16_t ndims, bool write_size)
 {
     // constants that could, in principle, be changed (but not in this impl)
@@ -69,7 +70,7 @@ int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len, int8_t* dest,
     // handle low dims and low length; we'd read way past the end of the
     // input in this case
     if (len < 8 * block_sz * group_sz_blocks) {
-        size_t remaining_len = len - (src - orig_src);
+        uint32_t remaining_len = (uint32_t)(len - (src - orig_src));
         memcpy(dest, src, remaining_len);
         return dest + remaining_len - orig_dest;
     }
@@ -208,7 +209,7 @@ int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len, int8_t* dest,
 
             // compute start offsets of each stripe (in bits)
             stripe_bitoffsets[0] = 0;
-            for (size_t stripe = 1; stripe < nstripes; stripe++) {
+            for (uint32_t stripe = 1; stripe < nstripes; stripe++) {
                 stripe_bitoffsets[stripe] = stripe_bitoffsets[stripe - 1] +
                     stripe_bitwidths[stripe - 1];
             }
@@ -219,7 +220,7 @@ int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len, int8_t* dest,
                 (row_width_bits >> 3) + ((row_width_bits % 8) > 0);
 
             // ------------------------ write out header bits for this block
-            for (size_t stripe = 0; stripe < nstripes; stripe++) {
+            for (uint32_t stripe = 0; stripe < nstripes; stripe++) {
                 uint16_t byte_offset = header_bit_offset >> 3;
                 uint16_t bit_offset = header_bit_offset & 0x07;
                 // Note: this write will get more complicated when upper byte
@@ -297,7 +298,7 @@ main_loop_end:
     free(stripe_headers);
     free(errs);
 
-    size_t remaining_len = len - (src - orig_src);
+    uint32_t remaining_len = (uint32_t)(len - (src - orig_src));
     memcpy(dest, src, remaining_len);
     return dest + remaining_len - orig_dest;
 }
@@ -330,7 +331,7 @@ int64_t decompress8b_rowmajor_xff(const int8_t* src, uint8_t* dest) {
     // ================================ one-time initialization
 
     // ------------------------ read original data size, ndims
-    static const size_t len_nbytes = 6;
+    static const uint8_t len_nbytes = 6;
     uint64_t one = 1; // make next line legible
     uint64_t len_mask = (one << (8 * len_nbytes)) - 1;
     uint64_t orig_len = (*(uint64_t*)src) & len_mask;
@@ -340,7 +341,7 @@ int64_t decompress8b_rowmajor_xff(const int8_t* src, uint8_t* dest) {
     bool just_cpy = orig_len < 8 * block_sz * group_sz_blocks;
     // just_cpy = just_cpy || orig_len & (((uint64_t)1) << 47);
     if (just_cpy) { // if data was too small or failed to compress
-        memcpy(dest, src, (size_t)orig_len);
+        memcpy(dest, src, (uint32_t)orig_len);
         return orig_len;
     }
     if (ndims == 0) {
@@ -628,7 +629,7 @@ int64_t decompress8b_rowmajor_xff(const int8_t* src, uint8_t* dest) {
 
 // ================================================================ xff + rle
 
-int64_t compress8b_rowmajor_xff_rle(const uint8_t* src, size_t len,
+int64_t compress8b_rowmajor_xff_rle(const uint8_t* src, uint32_t len,
     int8_t* dest, uint16_t ndims, bool write_size)
 {
     // constants that could, in principle, be changed (but not in this impl)
@@ -668,10 +669,11 @@ int64_t compress8b_rowmajor_xff_rle(const uint8_t* src, size_t len,
         if (write_size) {
             // XXX: ((group_size_blocks * ndims * (block_sz - 1)) must fit
             // in 16 bits; for group size, block_sz = 8, need ndims < 1024
-            *(uint32_t*)dest = 0; // 0 groups
-            *(uint16_t*)(dest + 4) = (uint16_t)len;
-            *(uint16_t*)(dest + 6) = ndims;
-            dest += length_header_nbytes;
+            // *(uint32_t*)dest = 0; // 0 groups
+            // *(uint16_t*)(dest + 4) = (uint16_t)len;
+            // *(uint16_t*)(dest + 6) = ndims;
+            // dest += length_header_nbytes;
+            dest += write_metadata_rle(dest, ndims, 0, (uint16_t)len);
         }
         memcpy(dest, src, len);
         return (dest - orig_dest) + len;
@@ -1048,7 +1050,11 @@ main_loop_end:
     return dest + remaining_len - orig_dest;
 }
 
-int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
+// int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
+SPRINTZ_FORCE_INLINE int64_t decompress8b_rowmajor_xff_rle(
+    const int8_t* src, uint8_t* dest, uint16_t ndims, uint64_t ngroups,
+    uint16_t remaining_len)
+{
     // constants that could, in principle, be changed (but not in this impl)
     static const uint8_t log2_block_sz = 3;
     static const __m256i low_mask = _mm256_set1_epi16(0xff);
@@ -1072,7 +1078,7 @@ int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
     assert(vector_sz >= stripe_sz);
 
     uint8_t* orig_dest = dest;
-    // const int8_t* orig_src = src;
+    const int8_t* orig_src = src;
 
     // ================================ one-time initialization
 
@@ -1082,14 +1088,14 @@ int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
     // uint64_t len_mask = (one << (8 * len_nbytes)) - 1;
     // uint64_t orig_len = (*(uint64_t*)src) & len_mask;
     // uint16_t ndims = (*(uint16_t*)(src + len_nbytes));
-    static const size_t len_nbytes = 4;
-    uint64_t one = 1; // make next line legible
-    uint64_t len_mask = (one << (8 * len_nbytes)) - 1;
-    uint64_t ngroups = (*(uint64_t*)src) & len_mask;
-    uint16_t remaining_len = (*(uint16_t*)(src + len_nbytes));
-    uint16_t ndims = (*(uint16_t*)(src + len_nbytes + 2));
-    src += 8;
-    const int8_t* orig_src = src;
+    // static const size_t len_nbytes = 4;
+    // uint64_t one = 1; // make next line legible
+    // uint64_t len_mask = (one << (8 * len_nbytes)) - 1;
+    // uint64_t ngroups = (*(uint64_t*)src) & len_mask;
+    // uint16_t remaining_len = (*(uint16_t*)(src + len_nbytes));
+    // uint16_t ndims = (*(uint16_t*)(src + len_nbytes + 2));
+    // src += 8;
+    // const int8_t* orig_src = src;
 
     // bool just_cpy = orig_len < min_data_size;
     bool just_cpy = (ngroups == 0) && remaining_len < min_data_size;
@@ -1543,4 +1549,13 @@ int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
     // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, ndims * 4);
 
     return dest + remaining_len - orig_dest;
+}
+
+int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest) {
+    uint16_t ndims;
+    uint64_t ngroups;
+    uint16_t remaining_len;
+    src += read_metadata_rle(src, &ndims, &ngroups, &remaining_len);
+    return decompress8b_rowmajor_xff_rle(
+        src, dest, ndims, ngroups, remaining_len);
 }

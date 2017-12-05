@@ -11,6 +11,8 @@
 
 #include <stdint.h>
 
+#include "macros.h"
+
 #define USE_X86_INTRINSICS
 #define USE_AVX2
 
@@ -19,23 +21,40 @@
     #define USE_X86_INTRINSICS
 #endif
 
-int64_t compress8b_rowmajor_xff(const uint8_t* src, size_t len,
+// ------------------------ just xff
+
+int64_t compress8b_rowmajor_xff(const uint8_t* src, uint64_t len,
     int8_t* dest, uint16_t ndims, bool write_size=true);
+
 int64_t decompress8b_rowmajor_xff(const int8_t* src, uint8_t* dest);
 
-int64_t compress8b_rowmajor_xff_rle(const uint8_t* src, size_t len,
+// ------------------------ xff + run length encoding
+
+int64_t compress8b_rowmajor_xff_rle(const uint8_t* src, uint32_t len,
     int8_t* dest, uint16_t ndims, bool write_size=true);
+
+SPRINTZ_FORCE_INLINE int64_t decompress8b_rowmajor_xff_rle(
+    const int8_t* src, uint8_t* dest, uint16_t ndims, uint64_t ngroups,
+    uint16_t remaining_len);
+
 int64_t decompress8b_rowmajor_xff_rle(const int8_t* src, uint8_t* dest);
 
-int64_t compress8b_rowmajor_xff_rle_lowdim(const uint8_t* src, size_t len,
+// ------------------------ xff + rle low dimensional
+
+int64_t compress8b_rowmajor_xff_rle_lowdim(const uint8_t* src, uint32_t len,
     int8_t* dest, uint16_t ndims, bool write_size=true);
+
+SPRINTZ_FORCE_INLINE int64_t decompress8b_rowmajor_xff_rle_lowdim(
+    const int8_t* src, uint8_t* dest, uint16_t ndims, uint64_t ngroups,
+    uint16_t remaining_len);
+
 int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest);
 
-// TODO move this to an impl file
-static inline int8_t copysign_i8(int8_t sign_of, int8_t val) {
-    int8_t mask = sign_of >> 7; // technically UB, but sane compilers do this
-    int8_t maybe_negated = (val ^ mask) - mask;
-    return sign_of != 0 ? maybe_negated : 0; // let compiler optimize this
-}
+
+
+// SELF: pick up by writing the wrapper decomp funcs, then writing overall
+// wrapper func in sprintz_8b.cpp
+
+
 
 #endif

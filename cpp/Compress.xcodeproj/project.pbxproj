@@ -22,6 +22,7 @@
 		72C2D0B41FD6460100D6740B /* sprintz_delta.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C2D0B11FD6460100D6740B /* sprintz_delta.cpp */; };
 		72C2D0B51FD6460100D6740B /* sprintz_delta_lowdim.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C2D0B31FD6460100D6740B /* sprintz_delta_lowdim.cpp */; };
 		72C2D0B81FD6481B00D6740B /* sprintz_8b.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C2D0B61FD6481B00D6740B /* sprintz_8b.cpp */; };
+		72C2D0BB1FD7279C00D6740B /* format.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C2D0B91FD7279C00D6740B /* format.cpp */; };
 		72CD9A851F9FFDD600736C6A /* entropy.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72CD9A831F9FFDD600736C6A /* entropy.cpp */; };
 		72E01C691EB554200038A2B9 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72E01C681EB554200038A2B9 /* main.cpp */; };
 /* End PBXBuildFile section */
@@ -390,6 +391,8 @@
 		72C2D0B31FD6460100D6740B /* sprintz_delta_lowdim.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz_delta_lowdim.cpp; sourceTree = "<group>"; };
 		72C2D0B61FD6481B00D6740B /* sprintz_8b.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz_8b.cpp; sourceTree = "<group>"; };
 		72C2D0B71FD6481B00D6740B /* sprintz.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = sprintz.h; sourceTree = "<group>"; };
+		72C2D0B91FD7279C00D6740B /* format.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = format.cpp; sourceTree = "<group>"; };
+		72C2D0BA1FD7279C00D6740B /* format.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = format.h; sourceTree = "<group>"; };
 		72CD9A831F9FFDD600736C6A /* entropy.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = entropy.cpp; sourceTree = "<group>"; };
 		72CD9A841F9FFDD600736C6A /* entropy.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = entropy.hpp; sourceTree = "<group>"; };
 		72E01C651EB554200038A2B9 /* Compress */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Compress; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1084,6 +1087,8 @@
 				726D10671F6E046800080495 /* eigen */,
 				726D10661F6E046800080495 /* catch.hpp */,
 				727B032E1FCC9265004F07D4 /* test_sprintz_xff.cpp */,
+				72C2D0B91FD7279C00D6740B /* format.cpp */,
+				72C2D0BA1FD7279C00D6740B /* format.h */,
 				725E207E1FAAADE8007B2797 /* test_delta.cpp */,
 				721AECE21FAEB9120005B793 /* test_predict.cpp */,
 				7217C3001F929D9D0059CFA6 /* test_transpose.cpp */,
@@ -1161,6 +1166,7 @@
 				726D11D41F6E046900080495 /* test_univariate_8b.cpp in Sources */,
 				7217C3011F929D9D0059CFA6 /* test_transpose.cpp in Sources */,
 				72C2D0B01FD6456200D6740B /* univariate_8b.cpp in Sources */,
+				72C2D0BB1FD7279C00D6740B /* format.cpp in Sources */,
 				727B03311FCC9265004F07D4 /* sprintz_xff.cpp in Sources */,
 				72B1E63A1F7D8D4700649F43 /* test_sprintz_delta.cpp in Sources */,
 				726D11D71F74404000080495 /* test_bitpack.cpp in Sources */,

@@ -56,12 +56,5 @@ SPRINTZ_FORCE_INLINE int64_t decompress8b_rowmajor_delta_rle_lowdim(
 int64_t decompress8b_rowmajor_delta_rle_lowdim(
     const int8_t* src, uint8_t* dest);
 
-// ------------------------ misc
-
-uint16_t write_metadata_rle(int8_t* dest, uint16_t ndims, uint32_t ngroups,
-    uint16_t remaining_len);
-
-uint16_t read_metadata_rle(const int8_t* src, uint16_t* p_ndims,
-    uint64_t* p_ngroups, uint16_t* p_remaining_len);
 
 #endif

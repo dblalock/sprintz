@@ -148,7 +148,7 @@ TEST_CASE("xff_rle_rowmajor_8b (with compression)", "[rowmajor][xff][rle]") {
     }
 }
 
-TEST_CASE("xff_rle_rowmajor_lowdim_8b (with compression)", "[rowmajor][xff][rle][dbg]") {
+TEST_CASE("xff_rle_rowmajor_lowdim_8b (with compression)", "[rowmajor][xff][rle][lowdim]") {
     printf("executing rowmajor compress xff + rle lowdim test\n");
 
     // int ndims = 4;

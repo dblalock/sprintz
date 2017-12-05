@@ -31,6 +31,12 @@ static CONSTEXPR inline T round_up_to_multiple(T x, T2 multipleof) {
     return remainder ? (x + multipleof - remainder) : x;
 }
 
+static inline int8_t copysign_i8(int8_t sign_of, int8_t val) {
+    int8_t mask = sign_of >> 7; // technically UB, but sane compilers do this
+    int8_t maybe_negated = (val ^ mask) - mask;
+    return sign_of != 0 ? maybe_negated : 0; // let compiler optimize this
+}
+
 inline void memrep(uint8_t* dest, const uint8_t* src, int32_t in_nbytes,
                     int32_t ncopies)
 {

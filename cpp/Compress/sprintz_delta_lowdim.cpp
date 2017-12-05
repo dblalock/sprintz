@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include "bitpack.h"
+#include "format.h"
 #include "transpose.h"
 
 static constexpr uint64_t kHeaderMask8b = TILE_BYTE(0x07); // 3 ones
@@ -71,10 +72,11 @@ int64_t compress8b_rowmajor_delta_rle_lowdim(const uint8_t* src, uint64_t len,
         if (write_size) {
             // XXX: ((group_size_blocks * ndims * (block_sz - 1)) must fit
             // in 16 bits; for group size, block_sz = 8, need ndims < 1024
-            *(uint32_t*)dest = 0; // 0 groups
-            *(uint16_t*)(dest + 4) = (uint16_t)len;
-            *(uint16_t*)(dest + 6) = ndims;
-            dest += length_header_nbytes;
+            // *(uint32_t*)dest = 0; // 0 groups
+            // *(uint16_t*)(dest + 4) = (uint16_t)len;
+            // *(uint16_t*)(dest + 6) = ndims;
+            // dest += length_header_nbytes;
+            dest += write_metadata_rle(dest, ndims, 0, (uint16_t)len);
         }
         memcpy(dest, src, len);
         return (dest - orig_dest) + len;
