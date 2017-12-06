@@ -14,7 +14,8 @@
 
 #include "immintrin.h"
 
-#include "debug_utils.hpp" // TODO rm
+// #include "debug_utils.hpp" // TODO rm
+#include "format.h"
 #include "util.h"
 
 uint32_t encode_delta_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
@@ -33,12 +34,11 @@ uint32_t encode_delta_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
 
     uint8_t* prev_vals_ar = (uint8_t*)calloc(vector_sz, nvectors);
 
+    uint16_t metadata_len = 0;
     if (write_size) {
-        *(uint32_t*)dest = len;
-        dest += 4;
-        *(uint16_t*)dest = ndims;
-        dest += 2;
-        orig_dest = dest; // NOTE: we don't do this in any other function
+        metadata_len = write_metadata_simple(dest, ndims, len);
+        dest += metadata_len;
+        orig_dest = dest;
     }
 
     // printf("-------- compression (len = %lld, ndims = %d)\n", (int64_t)len, ndims);
@@ -76,8 +76,6 @@ uint32_t encode_delta_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
                 __m256i vals = _mm256_loadu_si256((__m256i*)in_ptr);
                 __m256i vdeltas = _mm256_sub_epi8(vals, prev_vals);
                 _mm256_storeu_si256((__m256i*)out_ptr, vdeltas);
-                // hacky move instruction
-                // prev_vals = _mm256_xor_si256(vals, _mm256_setzero_si256());
                 prev_vals = vals;
             }
             _mm256_storeu_si256((__m256i*)(prev_vals_ptr), prev_vals);
@@ -101,8 +99,7 @@ uint32_t encode_delta_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
     }
 
     free(prev_vals_ar);
-    if (write_size) { return len + 6; }
-    return len;
+    return len + metadata_len;
 }
 
 template<int ndims>
@@ -321,10 +318,13 @@ uint32_t decode_delta_rowmajor_inplace(uint8_t* buff, uint32_t len,
 }
 
 uint32_t decode_delta_rowmajor(const int8_t* src, uint8_t* dest) {
-    uint32_t len = *(uint32_t*)src;
-    src += 4;
-    uint16_t ndims = *(uint16_t*)src;
-    src += 2;
+    // uint32_t len = *(uint32_t*)src;
+    // src += 4;
+    // uint16_t ndims = *(uint16_t*)src;
+    // src += 2;
+    uint16_t ndims;
+    uint32_t len;
+    src += read_metadata_simple(src, &ndims, &len);
     return decode_delta_rowmajor(src, len, dest, ndims);
 }
 
@@ -618,11 +618,10 @@ uint32_t encode_doubledelta_rowmajor(const uint8_t* src, uint32_t len,
     uint8_t* prev_vals_ar = (uint8_t*)calloc(2 * vector_sz, nvectors);
     int8_t* prev_deltas_ar = (int8_t*)prev_vals_ar + vector_sz * nvectors;
 
+    uint16_t metadata_len = 0;
     if (write_size) {
-        *(uint32_t*)dest = len;
-        dest += 4;
-        *(uint16_t*)dest = ndims;
-        dest += 2;
+        metadata_len = write_metadata_simple(dest, ndims, len);
+        dest += metadata_len;
         orig_dest = dest; // NOTE: we don't do this in any other function
     }
 
@@ -687,8 +686,9 @@ uint32_t encode_doubledelta_rowmajor(const uint8_t* src, uint32_t len,
     // }
 
     free(prev_vals_ar);
-    if (write_size) { return len + 6; }
-    return len;
+    // if (write_size) { return len + metadata_len; }
+    // return len;
+    return len + metadata_len;
 }
 
 uint32_t decode_doubledelta_rowmajor(const int8_t* src, uint32_t len,
@@ -768,10 +768,13 @@ uint32_t decode_doubledelta_rowmajor_inplace(uint8_t* buff, uint32_t len,
     return sz;
 }
 uint32_t decode_doubledelta_rowmajor(const int8_t* src, uint8_t* dest) {
-    uint32_t len = *(uint32_t*)src;
-    src += 4;
-    uint16_t ndims = *(uint16_t*)src;
-    src += 2;
+    // uint32_t len = *(uint32_t*)src;
+    // src += 4;
+    // uint16_t ndims = *(uint16_t*)src;
+    // src += 2;
+    uint16_t ndims;
+    uint32_t len;
+    src += read_metadata_simple(src, &ndims, &len);
     return decode_doubledelta_rowmajor(src, len, dest, ndims);
 }
 

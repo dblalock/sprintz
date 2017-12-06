@@ -358,7 +358,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress8b_rowmajor_delta_rle_lowdim(
         return remaining_len;
     }
     if (ndims == 0) {
-        perror("ERROR: Received ndims of 0!");
+        perror("ERROR: decompress8b_rowmajor_delta_rle_lowdim: Received ndims of 0!");
         return 0;
     }
 
@@ -493,7 +493,8 @@ SPRINTZ_FORCE_INLINE int64_t decompress8b_rowmajor_delta_rle_lowdim(
                 case 3: transpose_3x8_8b(deltas, deltas); break;
                 case 4: transpose_4x8_8b(deltas, deltas); break;
                 default:
-                    printf("ERROR: received invalid ndims: %d\n", ndims);
+                    printf("ERROR: decompress8b_rowmajor_delta_rle_lowdim: "
+                        "received invalid ndims: %d\n", ndims);
             }
 
             __m256i raw_vdeltas = _mm256_loadu_si256((const __m256i*)deltas);

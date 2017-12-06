@@ -11,6 +11,8 @@
 
 #include <stdint.h>
 
+// ------------------------------------------------ 8b
+
 // delta coding
 uint32_t encode_delta_rowmajor(const uint8_t* src, uint32_t len, int8_t* dest,
     uint16_t ndims, bool write_size=true);
@@ -43,5 +45,27 @@ uint32_t decode_doubledelta_rowmajor(const int8_t* src, uint8_t* dest);
 //     int8_t* prev_deltas=nullptr);
 // inline int32_t decode_doubledelta_serial(const int8_t* src, uint32_t len,
 //     uint8_t* dest, uint16_t lag, int8_t* prev_deltas=nullptr);
+
+// ------------------------------------------------ 16b
+
+// delta coding
+uint32_t encode_delta_rowmajor_16b(const uint16_t* src, uint32_t len, int16_t* dest,
+    uint16_t ndims, bool write_size=true);
+uint32_t decode_delta_rowmajor_16b(const int16_t* src, uint32_t len, uint16_t* dest,
+    uint16_t ndims);
+uint32_t decode_delta_rowmajor_inplace_16b(uint16_t* buff, uint32_t len,
+    uint16_t ndims);
+uint32_t decode_delta_rowmajor_16b(const int16_t* src, uint16_t* dest);
+
+// // double delta coding
+// uint32_t encode_doubledelta_rowmajor(const uint8_t* src, uint32_t len,
+//     int8_t* dest, uint16_t ndims, bool write_size=true);
+// uint32_t decode_doubledelta_rowmajor(const int8_t* src, uint32_t len,
+//     uint8_t* dest, uint16_t ndims);
+// uint32_t decode_doubledelta_rowmajor_inplace(uint8_t* buff, uint32_t len,
+//     uint16_t ndims);
+// uint32_t decode_doubledelta_rowmajor(const int8_t* src, uint8_t* dest);
+
+
 
 #endif /* delta_hpp */

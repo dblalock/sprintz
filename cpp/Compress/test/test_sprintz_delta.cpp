@@ -182,19 +182,14 @@ TEST_CASE("compress8b_rowmajor_delta", "[rowmajor][delta]") {
         auto ndims = (uint16_t)_ndims;
         printf("---- ndims = %d\n", ndims);
         CAPTURE(ndims);
-        auto comp = [ndims](uint8_t* src, size_t len, int8_t* dest) {
+        auto comp = [ndims](const uint8_t* src, size_t len, int8_t* dest) {
             return compress8b_rowmajor_delta(src, len, dest, ndims);
         };
         auto decomp = [](int8_t* src, uint8_t* dest) {
             return decompress8b_rowmajor_delta(src, dest);
         };
-
-        // TEST_SQUARES_INPUT(128, comp, decomp);
-        // TEST_SQUARES_INPUT(ndims * 16, comp, decomp);
-        // TEST_SIMPLE_INPUTS(ndims * 16, comp, decomp);
-        // TEST_KNOWN_INPUT(ndims * 16, comp, decomp);
-        // TEST_KNOWN_INPUT(ndims * 32, comp, decomp);
-       TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
+        // test_codec<1>(comp, decomp);
+        TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
     }
 }
 
@@ -212,78 +207,14 @@ TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][rle]") {
         auto ndims = (uint16_t)_ndims;
         printf("---- ndims = %d\n", ndims);
         CAPTURE(ndims);
-        auto comp = [ndims](uint8_t* src, size_t len, int8_t* dest) {
+        auto comp = [ndims](const uint8_t* src, size_t len, int8_t* dest) {
             return compress8b_rowmajor_delta_rle(src, len, dest, ndims);
         };
         auto decomp = [](int8_t* src, uint8_t* dest) {
             return decompress8b_rowmajor_delta_rle(src, dest);
         };
-
-        // TEST_SQUARES_INPUT(128, comp, decomp);
-        // TEST_SQUARES_INPUT(ndims * 16, comp, decomp);
-        // TEST_SIMPLE_INPUTS(ndims * 16, comp, decomp);
-        // TEST_KNOWN_INPUT(ndims * 16, comp, decomp);
-        // TEST_KNOWN_INPUT(ndims * 32, comp, decomp);
+        // test_codec<1>(comp, decomp);
         TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
-        // TEST_ZEROS(128, comp, decomp);
-        // TEST_ZEROS(4096, comp, decomp);
-        // TEST_ZEROS(65535 * 8, comp, decomp);
-        // TEST_FUZZ((ndims * 8000), comp, decomp);
-        // TEST_FUZZ((1024 * 1024 + 7), comp, decomp);
-        // TEST_SPARSE(1024 * 1024 + 13, comp, decomp);
-        // TEST_SPARSE(512, comp, decomp);
-        // TEST_SPARSE(4096, comp, decomp);
-
-        // auto SZ = 1024 * 1024 + 7;
-        // srand(123);
-        // // Vec_u8 orig(SZ);
-        // Vec_u8 raw(SZ);
-        // raw.setRandom();
-        // raw /= 254;
-        // // orig.setRandom();
-        // // raw = orig / 254;
-        // TEST_COMPRESSOR(SZ, comp, decomp);
-
-        // // Vec_u8 raw(SZ);
-        // // for (int i = 0; i < SZ; i++) {
-        // //     if ((i / 16) % 2 || (i / 32) % 2) {
-        // //         raw(i) = 0;
-        // //     } else {
-        // //         raw(i) = 1;
-        // //     }
-        // //  }
-        // TEST_COMPRESSOR(SZ, comp, decomp);
-
-
-        // #define COMP_FUNC comp
-        // #define DECOMP_FUNC decomp
-
-        // vector<int64_t> sizes {1, 2, 7, 8, 15, 16, 17, 31, 32, 33, 63, 64,
-        //     66, 71, 72, 73, 127, 128, 129, 135, 136, 137, 4096, 4096 + 17};
-        // // {
-        // //     for (auto sz : sizes) {
-        // //         TEST_KNOWN_INPUT(sz, COMP_FUNC, DECOMP_FUNC);
-        // //     }
-        // // }
-        // // {
-        // //     for (auto sz : sizes) {
-        // //         TEST_ZEROS(sz, COMP_FUNC, DECOMP_FUNC);
-        // //     }
-        // // }
-        // // {
-        // //     for (auto sz : sizes) {
-        // //         TEST_FUZZ(sz, COMP_FUNC, DECOMP_FUNC);
-        // //     }
-        // // }
-        // // {
-        // //     TEST_FUZZ(1024 * 1024 + 7, COMP_FUNC, DECOMP_FUNC);
-        // // }
-        // {
-        //     for (auto sz : sizes) {
-        //         TEST_SPARSE(sz, COMP_FUNC, DECOMP_FUNC);
-        //     }
-        // }
-
     }
 }
 

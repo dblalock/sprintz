@@ -9,6 +9,7 @@
 #include "format.h"
 
 static const uint16_t kMetaDataLenBytesRle = 8;
+static const uint16_t kMetaDataLenBytesSimple = 6;
 
 uint16_t write_metadata_rle(int8_t* orig_dest, uint16_t ndims,
     uint32_t ngroups, uint16_t remaining_len)
@@ -30,4 +31,20 @@ uint16_t read_metadata_rle(const int8_t* src, uint16_t* p_ndims,
     *p_ndims = (*(uint16_t*)(src + len_nbytes + 2));
 
     return kMetaDataLenBytesRle; // bytes taken up by metadata
+}
+
+uint16_t write_metadata_simple(void* dest, uint16_t ndims, uint32_t len) {
+    uint8_t* _dest = (uint8_t*)dest;
+    *(uint32_t*)_dest = len;
+    *(uint16_t*)(_dest + 4) = ndims;
+    return kMetaDataLenBytesSimple;
+}
+
+uint16_t read_metadata_simple(const void* src, uint16_t* p_ndims,
+    uint32_t* p_len)
+{
+    uint8_t* _src = (uint8_t*)src;
+    *p_len = *(uint32_t*)_src;
+    *p_ndims = *(uint16_t*)(_src + 4);
+    return kMetaDataLenBytesSimple;
 }

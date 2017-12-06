@@ -31,6 +31,14 @@ static CONSTEXPR inline T round_up_to_multiple(T x, T2 multipleof) {
     return remainder ? (x + multipleof - remainder) : x;
 }
 
+template<typename T, typename T2>
+static CONSTEXPR inline auto div_round_up(T x, T2 y) -> decltype(x + y) {
+    return (x / y) + ((x % y) > 0);
+    // T remainder = x % multipleof;
+    // return remainder ? (x + multipleof - remainder) : x;
+}
+
+
 static inline int8_t copysign_i8(int8_t sign_of, int8_t val) {
     int8_t mask = sign_of >> 7; // technically UB, but sane compilers do this
     int8_t maybe_negated = (val ^ mask) - mask;
