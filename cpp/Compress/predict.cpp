@@ -482,6 +482,7 @@ uint32_t decode_xff_rowmajor(const int_t* src, uint32_t len, uint_t* dest,
     }
 
     free(prev_vals_ar);
+    free(coeffs_ar_even);
     return len;
 }
 uint32_t decode_xff_rowmajor_8b(const int8_t* src, uint32_t len, uint8_t* dest,
