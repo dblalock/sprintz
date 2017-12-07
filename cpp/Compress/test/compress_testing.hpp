@@ -375,9 +375,10 @@ static inline void test_codec_many_ndims(CompF f_comp, DecompF f_decomp,
 {
     using uint_t = typename elemsize_traits<ElemSz>::uint_t;
     using int_t = typename elemsize_traits<ElemSz>::int_t;
-    auto ndims_list = ar::range(min_ndims, max_ndims + 1);
-    for (auto _ndims : ndims_list) {
-        auto ndims = (uint16_t)_ndims;
+    // auto ndims_list = ar::range(min_ndims, max_ndims + 1);
+    // for (auto _ndims : ndims_list) {
+        // auto ndims = (uint16_t)_ndims;
+    for (uint16_t ndims = min_ndims; ndims <= max_ndims; ndims++) {
         printf("---- ndims = %d\n", ndims);
         CAPTURE(ndims);
         auto comp = [ndims, &f_comp](const uint_t* src, size_t len, int_t* dest) {
@@ -386,7 +387,7 @@ static inline void test_codec_many_ndims(CompF f_comp, DecompF f_decomp,
         // auto decomp = [](int8_t* src, uint8_t* dest) {
         //     return f_decomp(src, dest);
         // };
-        test_codec<1>(comp, f_decomp);
+        test_codec<ElemSz>(comp, f_decomp);
     }
 }
 
@@ -405,7 +406,8 @@ static inline void test_codec_many_ndims(CompF f_comp, DecompF f_decomp,
         auto decomp = [](int_t* src, uint_t* dest) {                         \
             return F_DECOMP(src, dest);                                      \
         };                                                                   \
-        return test_codec_many_ndims<1>(comp, decomp, MIN_NDIMS, MAX_NDIMS); \
+        return test_codec_many_ndims<ELEM_SZ>(                               \
+            comp, decomp, MIN_NDIMS, MAX_NDIMS);                             \
     }
 
 #define TEST_CODEC_MANY_NDIMS(ELEM_SZ, F_COMP, F_DECOMP)    \

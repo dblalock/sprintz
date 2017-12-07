@@ -1119,7 +1119,7 @@ int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, uint64_t len,
             // *(uint16_t*)(dest + 4) = (uint16_t)len;
             // *(uint16_t*)(dest + 6) = ndims;
             // dest += length_header_nbytes;
-            dest += write_metadata_rle(dest, ndims, 0, (uint16_t)len);
+            dest += write_metadata_rle_8b(dest, ndims, 0, (uint16_t)len);
         }
         memcpy(dest, src, len);
         return (dest - orig_dest) + len;
@@ -1412,7 +1412,7 @@ main_loop_end:
 
     uint32_t remaining_len = (uint32_t)(src_end - src);
     if (write_size) {
-        write_metadata_rle(orig_dest, ndims, ngroups, remaining_len);
+        write_metadata_rle_8b(orig_dest, ndims, ngroups, remaining_len);
         // *(uint32_t*)orig_dest = ngroups;
         // *(uint16_t*)(orig_dest + 4) = (uint16_t)remaining_len;
         // *(uint16_t*)(orig_dest + 6) = ndims;
@@ -1741,7 +1741,7 @@ int64_t decompress8b_rowmajor_delta_rle(const int8_t* src,uint8_t* dest) {
     uint16_t ndims;
     uint64_t ngroups;
     uint16_t remaining_len;
-    src += read_metadata_rle(src, &ndims, &ngroups, &remaining_len);
+    src += read_metadata_rle_8b(src, &ndims, &ngroups, &remaining_len);
     return decompress8b_rowmajor_delta_rle(
         src, dest, ndims, ngroups, remaining_len);
 }
