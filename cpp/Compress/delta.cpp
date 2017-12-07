@@ -19,16 +19,23 @@
 #include "util.h"
 
 
-#define ASSERT_UINT_INT_SAME_SIZE                           \
-    static_assert(sizeof(uint_t) == sizeof(int_t),          \
-        "uint type and int type sizes must be the same!");
+// #define CHECK_INT_UINT_TYPES_VALID(uint_t, int_t)                           \
+//     static_assert(sizeof(uint_t) == sizeof(int_t),          \
+//         "uint type and int type sizes must be the same!");
+
+
+#define CHECK_INT_UINT_TYPES_VALID(int_t, uint_t)               \
+    static_assert(sizeof(uint_t) == sizeof(int_t),              \
+        "uint type and int type sizes must be the same!");      \
+    static_assert(sizeof(uint_t) == 1 || sizeof(uint_t) == 2,   \
+        "Only element sizes of 1 and 2 bytes are supported!");  \
 
 
 template<typename uint_t, typename int_t>
 uint32_t encode_delta_rowmajor(const uint_t* src, uint32_t len,
     int_t* dest, uint16_t ndims, bool write_size)
 {
-    ASSERT_UINT_INT_SAME_SIZE;
+    CHECK_INT_UINT_TYPES_VALID(int_t, uint_t);
     static const uint8_t elem_sz = sizeof(uint_t);
     static const uint8_t vector_sz = 32 / elem_sz;
     static const uint8_t block_sz = 8;
@@ -127,7 +134,7 @@ template<int ndims, typename int_t, typename uint_t>
 uint32_t decode_delta_rowmajor_small_ndims(const int_t* src, uint32_t len,
     uint_t* dest)
 {
-    ASSERT_UINT_INT_SAME_SIZE;
+    CHECK_INT_UINT_TYPES_VALID(int_t, uint_t);
 
     uint_t* orig_dest = dest;
 
@@ -146,7 +153,7 @@ template<typename int_t, typename uint_t>
 inline int64_t decode_delta_serial(const int_t* src, uint_t* dest,
     const uint_t* dest_end, uint16_t lag, bool needs_initial_cpy)
 {
-    ASSERT_UINT_INT_SAME_SIZE;
+    CHECK_INT_UINT_TYPES_VALID(int_t, uint_t);
 
     int64_t len = (int64_t)(dest_end - dest);
     if (len < 1) { return -1; }
@@ -169,7 +176,7 @@ template<typename int_t, typename uint_t>
 uint32_t decode_delta_rowmajor_large_ndims(const int_t* src, uint32_t len,
     uint_t* dest, uint16_t ndims)
 {
-    ASSERT_UINT_INT_SAME_SIZE;
+    CHECK_INT_UINT_TYPES_VALID(int_t, uint_t);
     static const uint8_t elem_sz = sizeof(int_t);
     static const uint8_t vector_sz = 32 / elem_sz;
     static const uint8_t block_sz = 8;
@@ -226,7 +233,7 @@ uint32_t decode_delta_rowmajor_large_ndims(const int_t* src, uint32_t len,
 // TODO same body as prev func; maybe put in macro?
 template<int ndims, typename int_t, typename uint_t>
 uint32_t decode_delta_rowmajor(const int_t* src, uint32_t len, uint_t* dest) {
-    ASSERT_UINT_INT_SAME_SIZE;
+    CHECK_INT_UINT_TYPES_VALID(int_t, uint_t);
     static const uint8_t elem_sz = sizeof(int_t);
     static const uint8_t vector_sz = 32 / elem_sz;
     static const uint8_t block_sz = 8;
@@ -400,7 +407,7 @@ inline int64_t encode_doubledelta_serial(const uint_t* src, uint32_t len,
     int_t* dest, uint16_t lag, const uint_t* prev_vals,
     int_t* prev_deltas)
 {
-    ASSERT_UINT_INT_SAME_SIZE;
+    CHECK_INT_UINT_TYPES_VALID(int_t, uint_t);
     static const uint8_t elem_sz = sizeof(int_t);
 
     if (len < 1) { return -1; }
@@ -461,7 +468,7 @@ template<typename uint_t, typename int_t>
 inline int32_t decode_doubledelta_serial(const int_t* src, uint32_t len,
     uint_t* dest, uint16_t lag, const uint_t* prev_vals, int_t* prev_deltas)
 {
-    ASSERT_UINT_INT_SAME_SIZE;
+    CHECK_INT_UINT_TYPES_VALID(int_t, uint_t);
     static const uint8_t elem_sz = sizeof(int_t);
 
     if (len < 1) { return -1; }
@@ -526,7 +533,7 @@ template<typename uint_t, typename int_t>
 uint32_t encode_doubledelta_rowmajor(const uint_t* src, uint32_t len,
     int_t* dest, uint16_t ndims, bool write_size)
 {
-    ASSERT_UINT_INT_SAME_SIZE;
+    CHECK_INT_UINT_TYPES_VALID(int_t, uint_t);
     static const uint8_t elem_sz = sizeof(int_t);
     static const uint8_t vector_sz = 32 / elem_sz;
     static const uint8_t block_sz = 8;
@@ -617,7 +624,7 @@ template<typename int_t, typename uint_t>
 uint32_t decode_doubledelta_rowmajor(const int_t* src, uint32_t len,
     uint_t* dest, uint16_t ndims)
 {
-    ASSERT_UINT_INT_SAME_SIZE;
+    CHECK_INT_UINT_TYPES_VALID(int_t, uint_t);
     static const uint8_t elem_sz = sizeof(uint_t);
     static const uint8_t vector_sz = 32 / elem_sz;
     static const uint8_t block_sz = 8;
@@ -701,7 +708,7 @@ uint32_t decode_doubledelta_rowmajor_inplace(uint_t* buff, uint32_t len,
                                        uint16_t ndims)
 {
     uint_t* tmp = (uint_t*)malloc(len * sizeof(*buff));
-    uint32_t sz = decode_doubledelta_rowmajor<int_t>((int_t*)buff, len, tmp, ndims);
+    uint32_t sz = decode_doubledelta_rowmajor((int_t*)buff, len, tmp, ndims);
     memcpy(buff, tmp, sz * sizeof(buff));
     free(tmp);
     return sz;
