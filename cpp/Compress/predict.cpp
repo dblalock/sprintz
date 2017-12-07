@@ -18,23 +18,14 @@
 #include "format.h"
 #include "util.h"
 
+static const int debug = 0;
+
 #define CHECK_INT_UINT_TYPES_VALID(int_t, uint_t)               \
     static_assert(sizeof(uint_t) == sizeof(int_t),              \
         "uint type and int type sizes must be the same!");      \
     static_assert(sizeof(uint_t) == 1 || sizeof(uint_t) == 2,   \
         "Only element sizes of 1 and 2 bytes are supported!");  \
 
-// typedef struct _shift_pair {
-//     uint8_t pos_shift;
-//     uint8_t neg_shift;
-// } ShiftPair;
-// const ShiftPair kShiftPairs[16] = {
-//     {7, 1}, {3, 1}, {2, 1}, {4, 2}, {3, 2}, {4, 3}, {0, 0}, {3, 4},
-//     {2, 3}, {2, 4}, {1, 2}, {1, 3}, {0, 1}, {0, 2}, {0, 3}, {0, 7}
-// };
-// const int16_t kShiftCoeffs[16] = {
-//     -126, -96, -64, -48, -32, -16,  0,  16,
-//       32,  48,  64,  96, 128, 192,224, 254};
 
 // TODO serial xff encoding instead
 template<typename int_t, typename uint_t>
@@ -87,11 +78,11 @@ uint32_t encode_xff_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
     uint16_t nvectors = padded_ndims / vector_sz + ((padded_ndims % vector_sz) > 0);
 
     // allocate these three arrays contiguously
-    uint32_t row_width = nvectors * elem_sz * vector_sz;
-    uint_t* prev_vals_ar   = (uint_t*)calloc(2 * row_width, 1);
-    int_t*  prev_deltas_ar = (int_t* )prev_vals_ar + row_width;
-    uint8_t* coeffs_ar_even = (uint8_t*)calloc(2 * row_width, 1);
-    uint8_t* coeffs_ar_odd = coeffs_ar_even + row_width;
+    uint32_t row_sz = nvectors * vector_sz;
+    uint_t* prev_vals_ar   = (uint_t*)calloc(2 * row_sz * elem_sz, 1);
+    int_t*  prev_deltas_ar = (int_t* )prev_vals_ar + row_sz;
+    uint_t* coeffs_ar_even = (uint_t*)calloc(2 * row_sz * elem_sz, 1);
+    uint_t* coeffs_ar_odd = coeffs_ar_even + row_sz;
 
     uint16_t metadata_len = 0;
     if (write_size) {
@@ -100,9 +91,11 @@ uint32_t encode_xff_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
         orig_dest = dest; // NOTE: we don't do this in any other function
     }
 
-    // printf("-------- compression (len = %lld, ndims = %d)\n", (int64_t)len, ndims);
-    // printf("saw original data:\n"); dump_bytes(src, len, ndims);
-    // printf("saw original data:\n"); dump_bytes(src, ndims * 8, ndims);
+    if (debug > 2) {
+        printf("-------- compression (len = %lld, ndims = %d)\n", (int64_t)len, ndims);
+        printf("saw original data:\n"); dump_bytes(src, len, ndims);
+        // printf("saw original data:\n"); dump_bytes(src, ndims * 8, ndims);
+    }
 
     // ensure we don't write past the end of the output
     uint16_t overrun_ndims = vector_sz - (ndims % vector_sz);
@@ -271,7 +264,10 @@ uint32_t encode_xff_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
         src++;
     }
 
+    // printf("got thru encoding without dying\n");
+
     free(prev_vals_ar);
+    free(coeffs_ar_even);
     return len + metadata_len;
     // if (write_size) { return len + 6; }
     // return len;
@@ -319,13 +315,18 @@ uint32_t decode_xff_rowmajor(const int_t* src, uint32_t len, uint_t* dest,
     // uint8_t* coeffs_ar_even = (uint8_t*)prev_vals_ar + vector_sz * 2 * nvectors;
     // uint8_t* coeffs_ar_odd  = (uint8_t*)prev_vals_ar + vector_sz * 3 * nvectors;
 
-    uint_t* prev_vals_ar   = (uint_t*)calloc(4 * nvectors * elem_sz, vector_sz);
-    // uint8_t* prev_vals_ar   = (uint8_t*)calloc(4 * nvectors * elem_sz, vector_sz);
-    int_t*  prev_deltas_ar = (int_t* )prev_vals_ar + vector_sz * 1 * nvectors;
-    // int8_t*  prev_deltas_ar = (int8_t* )prev_vals_ar + vector_sz * 1 * nvectors;
-    uint8_t* coeffs_ar_even = (uint8_t*)prev_vals_ar + vector_sz * 2 * nvectors;
-    uint8_t* coeffs_ar_odd  = (uint8_t*)prev_vals_ar + vector_sz * 3 * nvectors;
+    // uint_t* prev_vals_ar   = (uint_t*)calloc(4 * nvectors * elem_sz, vector_sz);
+    // // uint8_t* prev_vals_ar   = (uint8_t*)calloc(4 * nvectors * elem_sz, vector_sz);
+    // int_t*  prev_deltas_ar = (int_t* )prev_vals_ar + vector_sz * 1 * nvectors;
+    // // int8_t*  prev_deltas_ar = (int8_t* )prev_vals_ar + vector_sz * 1 * nvectors;
+    // uint8_t* coeffs_ar_even = (uint8_t*)prev_vals_ar + vector_sz * 2 * nvectors;
+    // uint8_t* coeffs_ar_odd  = (uint8_t*)prev_vals_ar + vector_sz * 3 * nvectors;
 
+    uint32_t row_sz = nvectors * vector_sz;
+    uint_t* prev_vals_ar   = (uint_t*)calloc(2 * row_sz * elem_sz, 1);
+    int_t*  prev_deltas_ar = (int_t* )prev_vals_ar + row_sz;
+    uint_t* coeffs_ar_even = (uint_t*)calloc(2 * row_sz * elem_sz, 1);
+    uint_t* coeffs_ar_odd = coeffs_ar_even + row_sz;
 
     // printf("-------- decompression (len = %lld, ndims = %d)\n", (int64_t)len, ndims);
     // printf("saw compressed data:\n");
@@ -475,6 +476,10 @@ uint32_t decode_xff_rowmajor(const int_t* src, uint32_t len, uint_t* dest,
     decode_delta_serial(src, dest, orig_dest + len, ndims, nblocks == 0);
 
     // printf("decoded data:\n"); dump_bytes(orig_dest, len, ndims);
+
+    if (debug > 2) {
+        printf("decompressed data:\n"); dump_bytes(orig_dest, len, ndims * 4);
+    }
 
     free(prev_vals_ar);
     return len;
