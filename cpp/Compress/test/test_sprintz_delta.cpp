@@ -7,68 +7,67 @@
 //
 
 #include <stdio.h>
+#include <vector>
 
 #include "catch.hpp"
 #include "eigen/Eigen"
 
-#include "compress_testing.hpp"
-
-// #include "array_utils.hpp"
 #include "sprintz_delta.h"
-// #include "bitpack.h"
+#include "util.h" // TODO new test file for these
+
+#include "array_utils.hpp"
+#include "compress_testing.hpp"
+#include "debug_utils.hpp"
 #include "test_utils.hpp"
 
-#include "debug_utils.hpp" // TODO rm
 
-//TEST_CASE("how_many_times_are_these_run?", "[rowmajor][dbg]") {
-//    printf("running nop test\n");
-//    auto ndims_list = ar::range(1, 33 + 1);
-//    for (auto ndims : ndims_list) {
-//        printf("------ ndims = %d\n", ndims);
-//    }
-//
-//    REQUIRE(true);
-//}
+TEST_CASE("mm256_shuffle_epi8_to_epi16", "[util]") {
+    using dtype = uint8_t;
 
-// template<typename SizeT, typename CompT, typename DecompT>
-// void _test_simple_inputs(SizeT SZ, CompT f_comp, DecompT f_decomp) {
-//     {
-//         Vec_u8 raw(SZ);
-//         for (int i = 0; i < SZ; i++) { raw(i) = i % 64; }
-//         TEST_COMPRESSOR(SZ, f_comp, f_decomp);
-//     }
-//     {
-//         Vec_u8 raw(SZ);
-//         for (int i = 0; i < SZ; i++) { raw(i) = ((i + 64) / 1) % 128; }
-//         TEST_COMPRESSOR(SZ, f_comp, f_decomp);
-//     }
-// }
+    static const __m256i nbits_to_mask_16b_low = _mm256_setr_epi8(
+        0x00, 0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f, 0xff,   // 0-8
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,               // 9-15
+        0x00, 0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f, 0xff,   // 0-8
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff);              // 9-15
+    static const __m256i nbits_to_mask_16b_high = _mm256_setr_epi8(
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,         // 0-7
+        0x00, 0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0xff,         // 8-15
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,         // 0-7
+        0x00, 0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0xff);        // 8-15
 
-/*
- #undef TEST_KNOWN_INPUT
- #define TEST_KNOWN_INPUT(SZ, COMP_FUNC, DECOMP_FUNC)                 \
-    {                                                                   \
-        Vec_u8 raw(SZ);                                                 \
-        for (int i = 0; i < SZ; i++) {                                  \
-            raw(i) = (i % 2) ? (i + 64) % 128 : 0;                \
-        }                                                               \
-        TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);                    \
-    }                                                                   \
-//*/
-/*
-     {                                                   \
-         Vec_u8 raw(SZ);                                                 \
-         for (int i = 0; i < SZ; i++) { raw(i) = (i + 64) % 128; } \
-         TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);                    \
-     }                                                                  \
-{                                                    \
-    Vec_u8 raw(SZ);                                                 \
-    for (int i = 0; i < SZ; i++) { raw(i) = i % 64; }               \
-    TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);                    \
-}                                                                   \
-//*/
+    static const __m256i idxs = _mm256_setr_epi8(
+        15, 14, 13, 12, 11, 10, 9,  8,
+        7,  6,  5,  4,  3,  2,  1,  0,
+        0,  1,  2,  3,  4,  5,  6,  7,
+        8,  9, 10, 11, 12, 13, 14, 15);
 
-TEST_CASE("compress8b_rowmajor", "[rowmajor][nodelta]") {
+    std::vector<uint16_t> ans = {
+        0xffff, 0x3fff, 0x1fff, 0x0fff, 0x07ff, 0x03ff, 0x01ff, 0x00ff,
+        0x7f,   0x3f,   0x1f,   0xf,    0x7,    0x3,    0x1,    0x0,
+        0x0,    0x1,    0x3,    0x7,    0xf,    0x1f,   0x3f,   0x7f,
+        0xff,   0x1ff,  0x3ff,  0x7ff,  0xfff,  0x1fff, 0x3fff, 0xffff
+    };
+    std::vector<uint16_t> ret(ans.size());
+
+    __m256i masks0 = _mm256_undefined_si256();
+    __m256i masks1 = _mm256_undefined_si256();
+    mm256_shuffle_epi8_to_epi16(nbits_to_mask_16b_low, nbits_to_mask_16b_high,
+                                idxs, masks0, masks1);
+
+    _mm256_storeu_si256((__m256i*)ret.data(), masks0);
+    _mm256_storeu_si256((__m256i*)(ret.data() + 16), masks1);
+
+    bool eq = ar::all_eq(ans, ret);
+    if (!eq) {
+        printf("answer:\n");
+        dump_elements(ans.data(), 32);
+        printf("returned data:\n");
+        dump_elements(ret.data(), 32);
+    }
+    REQUIRE(eq);
+}
+
+TEST_CASE("compress8b_rowmajor", "[rowmajor][bitpack][8b]") {
     printf("executing rowmajor test\n");
 
    // uint16_t ndims = 8;
@@ -85,12 +84,14 @@ TEST_CASE("compress8b_rowmajor", "[rowmajor][nodelta]") {
         auto ndims = (uint16_t)_ndims;
         printf("---- ndims = %d\n", ndims);
         CAPTURE(ndims);
-        auto comp = [ndims](uint8_t* src, size_t len, int8_t* dest) {
-            return compress8b_rowmajor(src, len, dest, ndims);
+        auto comp = [ndims](const uint8_t* src, size_t len, int8_t* dest) {
+            return compress_rowmajor_8b(src, (uint32_t)len, dest, ndims);
         };
         auto decomp = [](int8_t* src, uint8_t* dest) {
-            return decompress8b_rowmajor(src, dest);
+            return decompress_rowmajor_8b(src, dest);
         };
+
+        test_codec<1>(comp, decomp);
 
         // size_t SZ = ndims * 16;
         // Vec_u8 raw(SZ);
@@ -127,7 +128,7 @@ TEST_CASE("compress8b_rowmajor", "[rowmajor][nodelta]") {
        // TEST_KNOWN_INPUT(129, comp, decomp);
        // TEST_KNOWN_INPUT(4096 + 17, comp, decomp);
 
-       TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
+//       TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
     }
 //    REQUIRE(true);
 }
@@ -136,14 +137,14 @@ TEST_CASE("compress8b_rowmajor", "[rowmajor][nodelta]") {
 void test_dset(DatasetName name, uint16_t ndims, int64_t limit_bytes=-1) {
     Dataset raw = read_dataset(name, limit_bytes);
     // ar::print(data.get(), 100, "msrc");
-    auto comp = [ndims](uint8_t* src, size_t len, int8_t* dest) {
-        return compress8b_rowmajor(src, len, dest, ndims);
+    auto comp = [ndims](uint8_t* src, uint32_t len, int8_t* dest) {
+        return compress_rowmajor_8b(src, len, dest, ndims);
     };
     auto decomp = [](int8_t* src, uint8_t* dest) {
-        return decompress8b_rowmajor(src, dest);
+        return decompress_rowmajor_8b(src, dest);
     };
     printf("compressing %lld bytes of %d-dimensional data\n", raw.size(), ndims);
-    TEST_COMPRESSOR(raw.size(), comp, decomp);
+    TEST_COMPRESSOR((uint32_t)raw.size(), comp, decomp);
 }
 
 TEST_CASE("real datasets", "[rowmajor][dsets]") {

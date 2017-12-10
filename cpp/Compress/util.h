@@ -22,8 +22,11 @@
     #define CONSTEXPR
 #endif
 
+#include <string.h>
+
 #include "immintrin.h"  // TODO memrep impl without avx2
 
+#define DIV_ROUND_UP(X, Y) ( ((X) / (Y)) + (((X) % (Y)) > 0) )
 
 template<typename T, typename T2>
 static CONSTEXPR inline T round_up_to_multiple(T x, T2 multipleof) {
@@ -43,6 +46,46 @@ static inline int8_t copysign_i8(int8_t sign_of, int8_t val) {
     int8_t mask = sign_of >> 7; // technically UB, but sane compilers do this
     int8_t maybe_negated = (val ^ mask) - mask;
     return sign_of != 0 ? maybe_negated : 0; // let compiler optimize this
+}
+
+/**
+ * Extends _mm256_shuffle_epi to map 4bit indices to 2B values
+ *
+ * To do this, the low bytes and high bytes of the values
+ * must be passed in as separate tables. Returns the values associated
+ * with the low 128b lane as out0, and with the high 128b lane as out1
+ *
+ * Conceptually, this emulates returning one 512-element vector of epi16s
+ * where:
+ *      `out[i] = table[idxs[i]]`
+ * with `out` the full output vector and `table` a 16 entry table of 16b values.
+ *
+ * Example (with 4B vectors, 2B lanes):
+ *
+ * tbl_low  = [0, 1, 2, 3 | 0, 1, 2, 3]
+ * tbl_high = [0, 0, 4, 4 | 0, 0, 4, 4]
+ * idxs     = [1, 0, 2, 3 | 0, 2, 2, 1]
+ *
+ * out0 = [(1 + 0 << 8), (0 + 0 << 8), (2 + 4 << 8), (3 + 4 << 8)]
+ * out1 = [(0 + 0 << 8), (2 + 4 << 8), (2 + 4 << 8), (1 + 0 << 8)]
+ *
+ * @param tbl_low Low bytes of the entries in the notional 16b table
+ * @param tbl_high High bytes of the entries in the notional 16b table
+ * @param idxs The indices to look up in the table (like normal shuffle)
+ * @param out0 Epi16 array of values associated with the low 128b of `idxs`
+ * @param out1 Epi16 array of values associated with the high 128b of `idxs`
+ */
+static inline void mm256_shuffle_epi8_to_epi16(const __m256i& tbl_low,
+    const __m256i& tbl_high, const __m256i& idxs, __m256i& out0, __m256i& out1)
+{
+    __m256i vals_low = _mm256_shuffle_epi8(tbl_low, idxs);
+    __m256i vals_high = _mm256_shuffle_epi8(tbl_high, idxs);
+    __m256i first_third_u64s = _mm256_unpacklo_epi8(vals_low, vals_high);
+    __m256i second_fourth_u64s = _mm256_unpackhi_epi8(vals_low, vals_high);
+    out0 = _mm256_permute2x128_si256(
+        first_third_u64s, second_fourth_u64s, 0 + (2 << 4));
+    out1 = _mm256_permute2x128_si256(
+        first_third_u64s, second_fourth_u64s, 1 + (3 << 4));
 }
 
 inline void memrep(uint8_t* dest, const uint8_t* src, int32_t in_nbytes,
