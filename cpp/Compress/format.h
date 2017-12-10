@@ -11,6 +11,8 @@
 
 #include <stdint.h>
 
+#include "util.h"  // just for DIV_ROUND_UP
+
 // template<typename int_t>
 // uint16_t write_metadata_rle(int_t* dest, uint16_t ndims, uint32_t ngroups,
 //     uint16_t remaining_len);
@@ -28,8 +30,6 @@
 
 #define kMetaDataLenBytesRle 8
 #define kMetaDataLenBytesSimple 6
-
-#define DIV_ROUND_UP(X, Y) ((X) / (Y)) + (((X) % (Y)) > 0)
 
 template<typename int_t>
 static inline uint16_t write_metadata_rle(int_t* orig_dest, uint16_t ndims,
@@ -106,7 +106,5 @@ uint16_t write_metadata_simple_16b(int16_t* dest, uint16_t ndims, uint32_t len);
 
 uint16_t read_metadata_simple_16b(const int16_t* src, uint16_t* p_ndims,
     uint32_t* p_len);
-
-#undef DIV_ROUND_UP
 
 #endif /* format_hpp */

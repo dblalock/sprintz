@@ -67,8 +67,8 @@ TEST_CASE("mm256_shuffle_epi8_to_epi16", "[util]") {
     REQUIRE(eq);
 }
 
-TEST_CASE("compress8b_rowmajor", "[rowmajor][bitpack][8b]") {
-    printf("executing rowmajor test\n");
+TEST_CASE("compress rowmajor bitpack 8b", "[rowmajor][bitpack][8b]") {
+    printf("executing rowmajor bitpack-only test\n");
 
    // uint16_t ndims = 8;
     // auto ndims_list = ar::range(1, 33 + 1);
@@ -133,6 +133,11 @@ TEST_CASE("compress8b_rowmajor", "[rowmajor][bitpack][8b]") {
 //    REQUIRE(true);
 }
 
+// TODO run this test
+// TEST_CASE("compress rowmajor bitpack 16b", "[rowmajor][bitpack][16b]") {
+//     printf("executing rowmajor bitpack-only 16b test\n");
+//     TEST_CODEC_MANY_NDIMS_16b(compress_rowmajor_16b, decompress_rowmajor_16b);
+// }
 
 void test_dset(DatasetName name, uint16_t ndims, int64_t limit_bytes=-1) {
     Dataset raw = read_dataset(name, limit_bytes);

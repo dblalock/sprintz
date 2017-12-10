@@ -23,9 +23,14 @@
 
 // ------------------------ no preprocessing (just bitpacking)
 
-int64_t compress8b_rowmajor(const uint8_t* src, uint64_t len, int8_t* dest,
+int64_t compress_rowmajor_8b(const uint8_t* src, uint32_t len, int8_t* dest,
                             uint16_t ndims, bool write_size=true);
-int64_t decompress8b_rowmajor(const int8_t* src, uint8_t* dest);
+int64_t decompress_rowmajor_8b(const int8_t* src, uint8_t* dest);
+
+int64_t compress_rowmajor_16b(const uint16_t* src, uint32_t len, int16_t* dest,
+                            uint16_t ndims, bool write_size=true);
+int64_t decompress_rowmajor_16b(const int16_t* src, uint16_t* dest);
+
 
 // ------------------------ delta coding only
 
