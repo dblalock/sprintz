@@ -156,7 +156,7 @@ TEST_CASE("real datasets", "[rowmajor][dsets]") {
 TEST_CASE("compress_rowmajor_delta 8b", "[rowmajor][delta][8b][dbg]") {
     printf("executing rowmajor delta 8b test\n");
     TEST_CODEC_MANY_NDIMS_8b(compress_rowmajor_delta_8b, decompress_rowmajor_delta_8b);
-    // TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_delta_8b, decompress_rowmajor_delta_8b, 1, 5);
+    // TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_delta_8b, decompress_rowmajor_delta_8b, 1, 41);
     // TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_delta_8b, decompress_rowmajor_delta_8b, 1, 3);
 }
 
@@ -180,7 +180,7 @@ TEST_CASE("compress rowmajor delta 16b", "[rowmajor][delta][16b][dbg]") {
 
         test_codec<2>(comp, decomp);
         // auto SZ = ndims * 16;
-        // auto SZ = 400;
+        // // auto SZ = 400;
         // srand(123);
         // Vec_u16 raw(SZ);
         // {

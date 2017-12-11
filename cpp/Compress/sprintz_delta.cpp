@@ -879,14 +879,8 @@ int64_t compress_rowmajor_delta(const uint_t* src, uint32_t len, int_t* dest,
                     uint32_t offset = (i * ndims) + dim;
                     uint_t val = src[offset];
                     int_t delta = (int_t)(val - prev_val);
-                    // uint_t bits = zigzag_encode_i8(delta);
-                    // uint_t bits = ZIGZAG_ENCODE_SCALAR(delta);
-
-
-                    // uint_t bits = ZIGZAG_ENCODE_SCALAR(val); // TODO rm
-                    uint_t bits = val; // TODO rm
-
-
+                    uint_t bits = ZIGZAG_ENCODE_SCALAR(delta);
+                    // uint_t bits = val; // TODO rm
                     mask |= bits;
                     deltas[offset] = bits;
                     prev_val = val;
@@ -1156,6 +1150,11 @@ int64_t decompress_rowmajor_delta(const int_t* src, uint_t* dest) {
     uint16_t nvectors = DIV_ROUND_UP(padded_ndims, vector_sz);
     // uint16_t nvectors = padded_ndims / vector_sz + ((padded_ndims % vector_sz) > 0);
 
+    if (debug) {
+        printf("group sz, nstripes, padded_ndims, nvectors = %d, %d, %d, %d\n",
+            group_sz, nstripes, padded_ndims, nvectors);
+    }
+
     // stats for sizing temp storage
     uint32_t nstripes_in_group = nstripes * group_sz_blocks;
     uint32_t group_header_sz = round_up_to_multiple(
@@ -1170,7 +1169,7 @@ int64_t decompress_rowmajor_delta(const int_t* src, uint_t* dest) {
     uint64_t* headers_tmp       = (uint64_t*)calloc(nheader_stripes, 8);
     uint8_t*  headers           = (uint8_t*) calloc(1, group_header_sz);
     uint64_t* data_masks        = (uint64_t*)calloc(nstripes_in_vectors * elem_sz, 8);
-    bitwidth_t* stripe_bitwidths  = (bitwidth_t*)calloc(nstripes_in_vectors, 8);
+    bitwidth_t* stripe_bitwidths= (bitwidth_t*)calloc(nstripes_in_vectors, 8);
     uint32_t* stripe_bitoffsets = (uint32_t*)calloc(nstripes, 4);
 
     // extra row in deltas is to store last decoded values
@@ -1373,48 +1372,53 @@ int64_t decompress_rowmajor_delta(const int_t* src, uint_t* dest) {
                 }
             } // for each stripe
 
-            for (uint8_t i = 0; i < block_sz; i++) {
-                uint32_t in_offset = i * padded_ndims;
-                uint32_t out_offset = i * ndims;
-                memcpy(dest + out_offset, deltas + in_offset, out_row_nbytes);
+            // this works when we don't delta code in the compressor
+            // for (uint8_t i = 0; i < block_sz; i++) {
+            //     uint32_t in_offset = i * padded_ndims;
+            //     uint32_t out_offset = i * ndims;
+            //     memcpy(dest + out_offset, deltas + in_offset, out_row_nbytes);
+            // }
+            if (debug) {
+                printf("deltas array:\n"); dump_elements(deltas, padded_ndims * block_sz, padded_ndims);
+                printf("prev vals:\n"); dump_elements(prev_vals_ar, padded_ndims);
             }
 
             // TODO uncomment after debug
-            // for (int32_t v = nvectors - 1; v >= 0; v--) {
-            //     uint32_t vstripe_start = v * vector_sz;
-            //     uint32_t prev_vals_offset = v * vector_sz_nbytes;
-            //     __m256i prev_vals = _mm256_loadu_si256((const __m256i*)
-            //         (prev_vals_ar + prev_vals_offset));
-            //     // printf("========\ninitial prev vals: "); dump_m256i(prev_vals);
-            //     __m256i vals = _mm256_undefined_si256();
-            //     for (uint8_t i = 0; i < block_sz; i++) {
-            //         uint32_t in_offset = i * padded_ndims + vstripe_start;
-            //         uint32_t out_offset = i * ndims + vstripe_start;
+            for (int32_t v = nvectors - 1; v >= 0; v--) {
+                uint32_t vstripe_start = v * vector_sz;
+                // uint32_t prev_vals_offset = v * vector_sz_nbytes;
+                __m256i prev_vals = _mm256_loadu_si256((const __m256i*)
+                    (prev_vals_ar + vstripe_start));
+                if (debug) { printf("========\ninitial prev vals: "); dump_m256i(prev_vals); }
+                __m256i vals = _mm256_undefined_si256();
+                for (uint8_t i = 0; i < block_sz; i++) {
+                    uint32_t in_offset = i * padded_ndims + vstripe_start;
+                    uint32_t out_offset = i * ndims + vstripe_start;
 
-            //         __m256i raw_vdeltas = _mm256_loadu_si256(
-            //             (const __m256i*)(deltas + in_offset));
+                    __m256i raw_vdeltas = _mm256_loadu_si256(
+                        (const __m256i*)(deltas + in_offset));
 
-            //         // zigzag + delta decode
-            //         __m256i vdeltas = _mm256_undefined_si256();
-            //         if (elem_sz == 1) {
-            //             vdeltas = mm256_zigzag_decode_epi8(raw_vdeltas);
-            //             vals = _mm256_add_epi8(prev_vals, vdeltas);
-            //         } else if (elem_sz == 2) {
-            //             vdeltas = mm256_zigzag_decode_epi16(raw_vdeltas);
-            //             vals = _mm256_add_epi16(prev_vals, vdeltas);
-            //         }
+                    // zigzag + delta decode
+                    __m256i vdeltas = _mm256_undefined_si256();
+                    if (elem_sz == 1) {
+                        vdeltas = mm256_zigzag_decode_epi8(raw_vdeltas);
+                        vals = _mm256_add_epi8(prev_vals, vdeltas);
+                    } else if (elem_sz == 2) {
+                        vdeltas = mm256_zigzag_decode_epi16(raw_vdeltas);
+                        vals = _mm256_add_epi16(prev_vals, vdeltas);
+                    }
 
-            //         _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
-            //         // if (debug) {
-            //         //     printf("---- row %d\n", i);
-            //         //     printf("deltas: "); dump_m256i<int16_t>(vdeltas);
-            //         //     // printf("prev vals:   "); dump_m256i<uint16_t>(prev_vals);
-            //         //     // printf("vals:   "); dump_m256i<uint16_t>(vals);
-            //         // }
-            //         prev_vals = vals;
-            //     }
-            //     _mm256_storeu_si256((__m256i*)(prev_vals_ar+prev_vals_offset), vals);
-            // }
+                    _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
+                    // if (debug) {
+                    //     printf("---- row %d\n", i);
+                    //     printf("deltas: "); dump_m256i<int16_t>(vdeltas);
+                    //     // printf("prev vals:   "); dump_m256i<uint16_t>(prev_vals);
+                    //     // printf("vals:   "); dump_m256i<uint16_t>(vals);
+                    // }
+                    prev_vals = vals;
+                }
+                _mm256_storeu_si256((__m256i*)(prev_vals_ar+vstripe_start), vals);
+            }
 
             src += block_sz * in_row_nbytes / elem_sz;
             dest += block_sz * out_row_nbytes / elem_sz;
