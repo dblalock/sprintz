@@ -254,6 +254,17 @@ static inline uint8_t needed_nbits_i16x8_simple(int16_t* x) {
 
 // ------------------------------------------------ zigzag
 
+// static inline uint8_t zigzag_encode_i16(int8_t x) {
+//     return (x << 1) ^ (x >> 7);
+// }
+
+// static inline int8_t zigzag_decode_i16(uint8_t x) {
+//     return (x >> 1) ^ -(x & 0x01);
+// }
+
+#define ZIGZAG_ENCODE_SCALAR(x) ( ((x) << 1) ^ ((x) >> (8 * sizeof(x) - 1)) )
+#define ZIGZAG_DECODE_SCALAR(x) ( ((x) >> 1) ^ -((x) & 0x01) )
+
 static inline uint8_t zigzag_encode_i8(int8_t x) {
     return (x << 1) ^ (x >> 7);
 }
@@ -278,6 +289,15 @@ static inline __m256i mm256_zigzag_decode_epi8(const __m256i& x) {
     __m256i invert_mask = _mm256_cmpgt_epi8(zeros, _mm256_slli_epi64(x, 7));
     return _mm256_xor_si256(invert_mask, shifted);
 }
+
+// TODO uncomment and impl these functions
+// static inline __m256i mm256_zigzag_encode_epi16(const __m256i& x) {
+    // TODO
+// }
+
+// static inline __m256i mm256_zigzag_decode_epi16(const __m256i& x) {
+    // TODO
+// }
 
 // ------------------------------------------------ horz bit packing
 // (These functions are basically for debugging / validating bitpacking consts)

@@ -34,9 +34,9 @@ int64_t decompress_rowmajor_16b(const int16_t* src, uint16_t* dest);
 
 // ------------------------ delta coding only
 
-int64_t compress8b_rowmajor_delta(const uint8_t* src, uint64_t len, int8_t* dest,
+int64_t compress_rowmajor_delta_8b(const uint8_t* src, uint32_t len, int8_t* dest,
                                   uint16_t ndims, bool write_size=true);
-int64_t decompress8b_rowmajor_delta(const int8_t* src, uint8_t* dest);
+int64_t decompress_rowmajor_delta_8b(const int8_t* src, uint8_t* dest);
 
 // ------------------------ delta + run length encoding
 
