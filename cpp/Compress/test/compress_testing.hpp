@@ -81,8 +81,10 @@ static inline void test_compressor(const RawT& raw, CompF&& f_comp,
     }
     IVec compressed(sz * 3/2 + 64);
     UVec decompressed(sz + 64);
-    compressed += 0x55; /* poison memory */
+    // poison memory
+    compressed += ElemSz == 1 ? 0x55 : 0x55 + 1024 + 2048;
     decompressed += 0xaa;
+
     auto compressed_len = f_comp(raw.data(), sz, compressed.data());
     CAPTURE(compressed_len);
     auto decompressed_len = f_decomp(compressed.data(), decompressed.data());

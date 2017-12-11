@@ -187,7 +187,7 @@ inline void dump_bytes(const T* x, size_t len=1, size_t newline_every=1,
 
 template<class T, class _=typename std::enable_if< !std::is_pointer<T>::value >::type >
 inline void dump_bytes(T x, size_t newline_every=1) {
-	dump_bytes(&x, sizeof(T), newline_every, -1);
+	dump_bytes((uint8_t*)&x, sizeof(T), newline_every, -1);
 }
 
 #ifdef __AVX__
