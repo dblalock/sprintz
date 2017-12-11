@@ -71,19 +71,26 @@ template<> struct elemsize_traits<2> {
 
 template<int ElemSz, class RawT, class CompF, class DecompF>
 static inline void test_compressor(const RawT& raw, CompF&& f_comp,
-    DecompF&& f_decomp, const char* name="", size_t sz=0)
+    DecompF&& f_decomp, const char* name="", bool check_overrun=false,
+    size_t sz=0)
 {
     using traits = elemsize_traits<ElemSz>;
+    using uint_t = typename traits::uint_t;
     using UVec = typename traits::uvec_t;
     using IVec = typename traits::ivec_t;
     if (sz == 0) {
         sz = raw.size();
     }
     IVec compressed(sz * 3/2 + 64);
-    UVec decompressed(sz + 64);
+    uint16_t decomp_padding = 64;
+    UVec decompressed(sz + decomp_padding);
+    compressed.setZero();
+    decompressed.setZero();
     // poison memory
-    compressed += ElemSz == 1 ? 0x55 : 0x55 + 1024 + 2048;
-    decompressed += 0xaa;
+    uint_t comp_poison = ElemSz == 1 ? 0x55 : 0x55 + 1024 + 2048;
+    uint_t decomp_poison = ElemSz == 1 ? 0xaa : 0xaa + 512 + 4096;
+    compressed += comp_poison;
+    decompressed += decomp_poison;
 
     auto compressed_len = f_comp(raw.data(), sz, compressed.data());
     CAPTURE(compressed_len);
@@ -107,6 +114,21 @@ static inline void test_compressor(const RawT& raw, CompF&& f_comp,
             auto output_as_str = ar::to_string(decompressed.data(), sz);
             printf("input:\t%s\n", input_as_str.c_str());
             printf("output:\t%s\n", output_as_str.c_str());
+        }
+    }
+    if (check_overrun) {
+        bool fail = false;
+        for (uint64_t i = 0; i < decomp_padding * ElemSz; i++) {
+            if (decompressed(sz + i) != decomp_poison) {
+                fail = true;
+                printf("\n**** Test Failed: '%s' ****\n", name);
+                printf("First wrote past end of decompress buffer " \
+                    "at element %lld", i - sz);
+            }
+        }
+        if (fail) {
+            ar::print(decompressed.data() + sz, decomp_padding,
+                "Data past end of buffer");
         }
     }
     REQUIRE(arrays_eq);

@@ -156,31 +156,15 @@ TEST_CASE("real datasets", "[rowmajor][dsets]") {
 TEST_CASE("compress_rowmajor_delta 8b", "[rowmajor][delta][8b][dbg]") {
     printf("executing rowmajor delta 8b test\n");
     TEST_CODEC_MANY_NDIMS_8b(compress_rowmajor_delta_8b, decompress_rowmajor_delta_8b);
-    // TEST_CODEC_NDIMS_RANGE(1, compress8b_rowmajor_delta, decompress_rowmajor_delta_8b, 1, 5);
-
-    // // int ndims = 1;
-    // // auto ndims_list = ar::range(ndims, ndims + 1);
-    // auto ndims_list = ar::range(1, 129 + 1);
-    // for (auto _ndims : ndims_list) {
-    //     auto ndims = (uint16_t)_ndims;
-    //     printf("---- ndims = %d\n", ndims);
-    //     CAPTURE(ndims);
-    //     auto comp = [ndims](const uint8_t* src, size_t len, int8_t* dest) {
-    //         return compress8b_rowmajor_delta(src, len, dest, ndims);
-    //     };
-    //     auto decomp = [](int8_t* src, uint8_t* dest) {
-    //         return decompress8b_rowmajor_delta(src, dest);
-    //     };
-    //     // test_codec<1>(comp, decomp);
-    //     TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
-    // }
+    // TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_delta_8b, decompress_rowmajor_delta_8b, 1, 5);
+    // TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_delta_8b, decompress_rowmajor_delta_8b, 1, 3);
 }
 
-TEST_CASE("compress rowmajor delta 16b", "[rowmajor][bitpack][16b][dbg]") {
+TEST_CASE("compress rowmajor delta 16b", "[rowmajor][delta][16b][dbg]") {
     printf("executing rowmajor delta 16b test\n");
     // TEST_CODEC_MANY_NDIMS_16b(compress_rowmajor_16b, decompress_rowmajor_16b);
 
-    // uint16_t ndims = 4;
+    // uint16_t ndims = 17;
     // auto ndims_list = ar::range(ndims, ndims + 1);
     auto ndims_list = ar::range(1, 129 + 1);
     for (auto _ndims : ndims_list) {
@@ -188,13 +172,34 @@ TEST_CASE("compress rowmajor delta 16b", "[rowmajor][bitpack][16b][dbg]") {
         printf("---- ndims = %d\n", ndims);
         CAPTURE(ndims);
         auto comp = [ndims](const uint16_t* src, size_t len, int16_t* dest) {
-            return compress_rowmajor_16b(src, (uint32_t)len, dest, ndims);
+            return compress_rowmajor_delta_16b(src, (uint32_t)len, dest, ndims);
         };
         auto decomp = [](int16_t* src, uint16_t* dest) {
-            return decompress_rowmajor_16b(src, dest);
+            return decompress_rowmajor_delta_16b(src, dest);
         };
 
         test_codec<2>(comp, decomp);
+        // auto SZ = ndims * 16;
+        // auto SZ = 400;
+        // srand(123);
+        // Vec_u16 raw(SZ);
+        // {
+        //     for (int i = 0; i < SZ; i++) {
+        //         // raw(i) = i % 64;
+        //         // raw(i) = (i % 2) ? (i + 64) % 128 : 0;
+        //         raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
+        //     //     raw(i) = (i % 64);
+        //     //     // raw(i) = 128;
+        //         // raw(i) = (i % 2) ? (i + 64) % 128 : 72;
+        //         // raw(i) = (i % 2) ? (i * 1024) % 65536 : 64;
+        //         // raw(i) = (i % 2) ? 32768 : 64;
+        //     }
+        //     // raw.setRandom();
+
+        //     // TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);
+        //     // test_compressor<2>(raw, comp, decomp, "debug test", true);
+        //     test_compressor<2>(raw, comp, decomp, "debug test");
+        // }
     }
 }
 
