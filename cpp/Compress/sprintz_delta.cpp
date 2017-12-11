@@ -23,6 +23,7 @@
 
 static const int debug = 0;
 // static const int debug = 3;
+// static const int debug = 4;
 
 // byte shuffle values to construct data masks; note that nbits == 7 yields
 // a byte of all ones (0xff); also note that rows 1 and 3 below are unused
@@ -111,7 +112,7 @@ int64_t compress_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
 
     if (debug > 0) {
         printf("-------- compression (len = %lld)\n", (int64_t)len);
-        if (debug > 3) {
+        if (debug > 2) {
             printf("saw original data:\n"); dump_elements(src, len, ndims);
         }
     }
@@ -171,7 +172,13 @@ int64_t compress_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
                 if (elem_sz == 1) {
                     mask = NBITS_MASKS_U8[mask];
                 } else if (elem_sz == 2) {
-                    mask = 0xffff; // TODO rm
+                    // mask |= mask >> 1;
+                    // mask |= mask >> 2;
+                    // mask |= mask >> 4;
+                    // mask |= mask >> 8;
+                    uint8_t upper_mask = NBITS_MASKS_U8[mask >> 8];
+                    mask = upper_mask > 0 ? (upper_mask << 8) + 255 : NBITS_MASKS_U8[mask];
+                    // mask = 0xffff; // TODO rm
                     // mask = NBITS_MASKS_U8[mask] | (NBITS_MASKS_U8[mask >> 8] << 8);
                 }
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
@@ -216,11 +223,11 @@ int64_t compress_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
                     // }
                     *(uint64_t*)(header_dest + byte_offset) |= \
                         ((uint64_t)(stripe_headers[stripe])) << bit_offset;
-                    if (debug > 0) {
-                        printf("new contents of header dest: ");
-                        dump_bytes(header_dest, 8, false);
-                        printf(" \t(bit, byte offsets = %d, %d)\n", bit_offset, byte_offset);
-                    }
+                    // if (debug > 0) {
+                    //     printf("new contents of header dest: ");
+                    //     dump_bytes(header_dest, 8, false);
+                    //     printf(" \t(bit, byte offsets = %d, %d)\n", bit_offset, byte_offset);
+                    // }
                 }
 
                 uint8_t is_final_stripe = stripe == (nstripes - 1);
@@ -244,6 +251,9 @@ int64_t compress_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
             memset(dest, 0, out_row_nbytes * block_sz); // above line can overrun dest buff
 
             // if (debug) { printf("header before block data write: "); dump_bytes(header_dest, 8); }
+            if (debug) {
+                printf("stripe masks: "); dump_bytes((uint8_t*)stripe_masks, 32);
+            }
 
             // write out packed data; we iterate thru stripes in reverse order
             // since (nbits % stripe_sz) != 0 will make the last stripe in each
@@ -265,6 +275,7 @@ int64_t compress_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
                     // printf("offset bytes, offset bits, nbits, total_bits = %u, %u, %u, %d\n",
                     //     offset_bytes, offset_bits, nbits, total_bits);
                     printf("src, dest offsets = %d -> %d\n", (int)(src - orig_src), (int)(dest - orig_dest));
+                    printf("mask: "); dump_bits(mask);
                 }
                 // printf("using mask: "); dump_bytes(mask);
 
@@ -355,8 +366,11 @@ int64_t compress_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
     // printf("mystery header bytes: "); dump_bytes(orig_dest + 753737, 1);
     // printf("mystery header bits:  "); dump_bits(orig_dest + 753737, 1);
 
-    // uint32_t dest_sz = dest + remaining_len - orig_dest;
-    // printf("wrote compressed data:\n"); dump_bytes(orig_dest, dest_sz);
+    if (debug > 3) {
+        uint32_t dest_sz = (uint32_t)   (dest + remaining_len - orig_dest) * elem_sz;
+        printf("wrote compressed data:\n"); dump_bytes(orig_dest + 5, dest_sz, ndims * elem_sz);
+        // printf("wrote compressed data:\n"); dump_bytes(orig_dest + 3, dest_sz, ndims * elem_sz);
+    }
 
     // uint32_t dest_sz = dest + remaining_len - orig_dest;
     // if (dest_sz >= len) { // if made things larger, just mempcpy
@@ -413,7 +427,8 @@ int64_t decompress_rowmajor(const int_t* src, uint_t* dest) {
     const int_t* orig_src = src;
 
     int gDebug = debug;
-    int debug = (elem_sz == 2) ? gDebug : 0;
+    // int debug = (elem_sz == 2) ? gDebug : 0;
+    int debug = false;
 
     // ================================ one-time initialization
 
@@ -713,7 +728,7 @@ int64_t decompress_rowmajor(const int_t* src, uint_t* dest) {
                         outptr += out_row_nbytes;
                     }
                 }
-                if (debug) { printf("data we wrote:\n"); dump_bytes((uint8_t*)dest, block_sz*ndims*elem_sz, ndims * elem_sz); }
+                // if (debug) { printf("data we wrote:\n"); dump_bytes((uint8_t*)dest, block_sz*ndims*elem_sz, ndims * elem_sz); }
             } // for each stripe
 
             src += block_sz * in_row_nbytes / elem_sz;

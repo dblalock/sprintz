@@ -79,7 +79,7 @@ TEST_CASE("compress rowmajor bitpack 16b", "[rowmajor][bitpack][16b]") {
     printf("executing rowmajor bitpack-only 16b test\n");
     // TEST_CODEC_MANY_NDIMS_16b(compress_rowmajor_16b, decompress_rowmajor_16b);
 
-    // uint16_t ndims = 5;
+    // uint16_t ndims = 4;
     // auto ndims_list = ar::range(ndims, ndims + 1);
     auto ndims_list = ar::range(1, 129 + 1);
     for (auto _ndims : ndims_list) {
@@ -95,13 +95,19 @@ TEST_CASE("compress rowmajor bitpack 16b", "[rowmajor][bitpack][16b]") {
 
         test_codec<2>(comp, decomp);
         // auto SZ = 128;
+        // srand(123);
         // Vec_u16 raw(SZ);
         // {
         //     for (int i = 0; i < SZ; i++) {
         //         // raw(i) = (i % 2) ? (i + 64) % 128 : 0;
-        //         raw(i) = (i % 64);
-        //         // raw(i) = 128;
+        //     //     raw(i) = (i % 64);
+        //     //     // raw(i) = 128;
+        //         // raw(i) = (i % 2) ? (i + 64) % 128 : 72;
+        //         // raw(i) = (i % 2) ? (i * 1024) % 65536 : 64;
+        //         raw(i) = (i % 2) ? 32768 : 64;
         //     }
+        //     // raw.setRandom();
+
         //     // TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);
         //     test_compressor<2>(raw, comp, decomp, "debug test");
         // }
