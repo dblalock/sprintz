@@ -138,6 +138,11 @@ TEST_CASE("zigzag_8b", "[bitpack][zigzag]") {
             REQUIRE(val == zigzag_decode_i8(zigzag_encode_i8((int8_t)val)));
         }
     }
+    SECTION("scalar macro") {
+        for (int val = -128; val <= 127; val++) {
+            REQUIRE(val == ZIGZAG_DECODE_SCALAR(ZIGZAG_ENCODE_SCALAR((int8_t)val)));
+        }
+    }
     SECTION("mm256_epi8 constant vectors") {
         static const int n = 32; // number of elements in a SIMD vector
         uint8_t buff[n];
@@ -179,6 +184,58 @@ TEST_CASE("zigzag_8b", "[bitpack][zigzag]") {
         }
 
         REQUIRE(X_out.minCoeff() == 255); // all comparisons true (ones byte)
+    }
+}
+
+TEST_CASE("zigzag_16b", "[bitpack][zigzag]") {
+    const int16_t minval =  -128 * 256;
+    const int16_t maxval =  127 * 256;
+    SECTION("scalar macro") {
+        for (int val = -minval; val <= maxval; val++) {
+            REQUIRE(val == ZIGZAG_DECODE_SCALAR(ZIGZAG_ENCODE_SCALAR((int16_t)val)));
+        }
+    }
+    SECTION("mm256_epi16 constant vectors") {
+        static const int n = 16; // number of elements in a SIMD vector
+        uint16_t buff[n];
+        __m256i* store_ptr = (__m256i*)buff;
+         for (int val = -128; val <= 127; val++) {
+            __m256i v = _mm256_set1_epi16((int8_t)val);
+            auto encoded = mm256_zigzag_encode_epi16(v);
+//            printf("encoded: "); dump_m256i(encoded);
+            auto decoded = mm256_zigzag_decode_epi16(encoded);
+//            printf("decoded: "); dump_m256i(decoded);
+            auto same = _mm256_cmpeq_epi16(v, decoded);
+            _mm256_storeu_si256(store_ptr, same);
+            CAPTURE(val);
+            for (int i = 0; i < n; i++) {
+                REQUIRE(buff[i] == 0xffff);
+            }
+        }
+    }
+    SECTION("mm256_epi16 random vectors") {
+        static const int n = 16; // number of elements in a SIMD vector
+        static const size_t sz = 256 * 1024;
+
+        using DataMat = Eigen::Matrix<uint16_t, Eigen::Dynamic,
+            Eigen::Dynamic, Eigen::RowMajor>;
+        DataMat X(sz, n);
+        DataMat X_out(sz, n);
+        X.setRandom(); // random vals in [0, 255]
+
+        // NOTE: 8x faster to use pointers directly than to use X.row(i).data()
+        for (size_t i = 0; i < sz; i++) {
+            auto inptr = X.data() + n * i;
+            auto v = _mm256_loadu_si256((const __m256i*)inptr);
+            auto encoded = mm256_zigzag_encode_epi16(v);
+            auto decoded = mm256_zigzag_decode_epi16(encoded);
+
+            auto same = _mm256_cmpeq_epi16(v, decoded);
+            __m256i* store_ptr = (__m256i*)(X_out.data() + n * i);
+            _mm256_storeu_si256(store_ptr, same);
+        }
+
+        REQUIRE(X_out.minCoeff() == 0xffff); // all comparisons true (ones byte)
     }
 }
 
