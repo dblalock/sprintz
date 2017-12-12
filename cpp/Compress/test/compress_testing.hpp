@@ -388,6 +388,7 @@ static inline void test_codec(CompF&& f_comp, DecompF&& f_decomp) {
     for (auto sz : sizes) { test_known_input<ElemSz>(sz, f_comp, f_decomp); }
     for (auto sz : sizes) { test_zeros<ElemSz>(sz, f_comp, f_decomp); }
     for (auto sz : sizes) { test_fuzz<ElemSz>(sz, f_comp, f_decomp); }
+    for (auto sz : sizes) { test_sparse<ElemSz>(sz, f_comp, f_decomp); }
     test_fuzz<ElemSz>(1024 * 1024 + 7, f_comp, f_decomp);
     test_sparse<ElemSz>(1024 * 1024 + 7, f_comp, f_decomp);
 }
