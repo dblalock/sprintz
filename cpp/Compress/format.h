@@ -35,9 +35,10 @@ template<typename int_t>
 static inline uint16_t write_metadata_rle(int_t* orig_dest, uint16_t ndims,
     uint32_t ngroups, uint16_t remaining_len)
 {
-    *(uint32_t*)orig_dest = ngroups;
-    *(uint16_t*)(orig_dest + 4) = (uint16_t)remaining_len;
-    *(uint16_t*)(orig_dest + 6) = ndims;
+    int8_t* dest8 = (int8_t*)orig_dest;
+    *(uint32_t*)dest8 = ngroups;
+    *(uint16_t*)(dest8 + 4) = (uint16_t)remaining_len;
+    *(uint16_t*)(dest8 + 6) = ndims;
 
     return DIV_ROUND_UP(kMetaDataLenBytesRle, sizeof(int_t));
 }
@@ -62,9 +63,9 @@ static inline uint16_t read_metadata_rle(const int_t* src, uint16_t* p_ndims,
 template<typename int_t>
 static inline uint16_t write_metadata_simple(int_t* dest, uint16_t ndims, uint32_t len) {
     static const uint8_t elem_sz = sizeof(int_t);
-    uint8_t* _dest = (uint8_t*)dest;
-    *(uint32_t*)_dest = len;
-    *(uint16_t*)(_dest + 4) = ndims;
+    uint8_t* dest8 = (uint8_t*)dest;
+    *(uint32_t*)dest8 = len;
+    *(uint16_t*)(dest8 + 4) = ndims;
 
     return DIV_ROUND_UP(kMetaDataLenBytesSimple, sizeof(int_t));
 }

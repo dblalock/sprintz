@@ -95,8 +95,6 @@ static inline void test_compressor(const RawT& raw, CompF&& f_comp,
     auto compressed_len = f_comp(raw.data(), sz, compressed.data());
     CAPTURE(compressed_len);
     auto decompressed_len = f_decomp(compressed.data(), decompressed.data());
-    CAPTURE(sz);
-    REQUIRE(decompressed_len == sz);
     auto arrays_eq = ar::all_eq(raw.data(), decompressed.data(), sz);
     if (!arrays_eq) {
         printf("\n**** Test Failed: '%s' ****\n", name);
@@ -131,6 +129,8 @@ static inline void test_compressor(const RawT& raw, CompF&& f_comp,
                 "Data past end of buffer");
         }
     }
+    CAPTURE(sz);
+    REQUIRE(decompressed_len == sz);
     REQUIRE(arrays_eq);
 }
 

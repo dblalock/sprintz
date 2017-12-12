@@ -87,11 +87,9 @@ int64_t compress_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
     // ================================ one-time initialization
 
     // ------------------------ stats derived from ndims
-    // uint16_t nstripes = ndims / stripe_sz + ((ndims % stripe_sz) > 0);
     uint16_t nstripes = DIV_ROUND_UP(ndims, stripe_sz);
     uint32_t group_sz = ndims * block_sz * group_sz_blocks;
     uint32_t total_header_bits = ndims * nbits_sz_bits * group_sz_blocks;
-    // uint32_t total_header_bytes = (total_header_bits / 8) + ((total_header_bits % 8) > 0);
     uint32_t total_header_bytes = DIV_ROUND_UP(total_header_bits, 8);
 
     // ------------------------ store data size and number of dimensions
@@ -122,7 +120,6 @@ int64_t compress_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
     }
 
     if (debug > 1) { printf("total header bits, bytes: %d, %d\n", total_header_bits, total_header_bytes); }
-
 
     // ------------------------ temp storage
     uint8_t*  stripe_bitwidths  = (uint8_t*) malloc(nstripes*sizeof(uint8_t));

@@ -99,21 +99,6 @@ int64_t compress_rowmajor_delta_rle(const uint_t* src, uint64_t len,
 
     // ------------------------ store data size and number of dimensions
 
-    // handle low dims and low length; we'd read way past the end of the
-    // input in this case
-    if (len < min_data_size) {
-        assert(min_data_size < ((uint64_t)1) << 16);
-        // printf("data less than min data size: %lu\n", min_data_size);
-        if (write_size) {
-            dest += write_metadata_rle(dest, ndims, 0, (uint16_t)len);
-        }
-        memcpy(dest, src, len);
-        return (dest - orig_dest) + len;
-    }
-    if (write_size) {
-        dest += length_header_nbytes;
-    }
-
     if (debug > 0) {
         printf("-------- compression (len = %lld)\n", (int64_t)len);
         if (debug > 2) {
@@ -121,6 +106,22 @@ int64_t compress_rowmajor_delta_rle(const uint_t* src, uint64_t len,
         }
     }
     if (debug > 1) { printf("total header bits, bytes: %d, %d\n", total_header_bits, total_header_bytes); }
+
+
+    // handle low dims and low length; we'd read way past the end of the
+    // input in this case
+    if (len < min_data_size) {
+        assert(min_data_size < ((uint32_t)1) << 16);
+        if (debug) { printf("data less than min data size: %u\n", min_data_size); }
+        if (write_size) {
+            dest += write_metadata_rle(dest, ndims, 0, (uint16_t)len);
+        }
+        memcpy(dest, src, len * elem_sz);
+        return (dest - orig_dest) + len;
+    }
+    if (write_size) {
+        dest += length_header_nbytes / elem_sz;  // XXX needs to div evenly
+    }
 
     // ------------------------ temp storage
     uint8_t*  stripe_bitwidths  = (uint8_t*) malloc(nstripes*sizeof(uint8_t));
@@ -177,7 +178,7 @@ int64_t compress_rowmajor_delta_rle(const uint_t* src, uint64_t len,
                 for (uint8_t i = 0; i < block_sz; i++) {
                     uint32_t offset = (i * ndims) + dim;
                     uint_t val = src[offset];
-                    int_t delta = (int8_t)(val - prev_val);
+                    int_t delta = (int_t)(val - prev_val);
                     uint_t bits = ZIGZAG_ENCODE_SCALAR(delta);
                     mask |= bits;
                     deltas[offset] = bits;
@@ -190,7 +191,7 @@ int64_t compress_rowmajor_delta_rle(const uint_t* src, uint64_t len,
                 } else if (elem_sz == 2) {
                     uint8_t upper_mask = NBITS_MASKS_U8[mask >> 8];
                     mask = upper_mask > 0 ? (upper_mask << 8) + 255 : NBITS_MASKS_U8[mask];
-                    // mask = 0xffff; // TODO rm
+                    mask = 0xffff; // TODO rm
                 }
                 prev_vals_ar[dim] = prev_val;
 
@@ -468,6 +469,17 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle(const int_t* src,
     int debug = (elem_sz == 2) ? gDebug : 0;
     // int debug = false;
 
+    if (debug > 0) {
+        int64_t min_orig_len = ngroups * group_sz_blocks * block_sz * ndims;
+        printf("--------- decomp: saw original ngroups, ndims, min_len = %u, %d, %lld\n", ngroups, ndims, min_orig_len);
+        if (debug > 3) {
+            printf("saw compressed data (with possible extra at end):\n");
+            // dump_bytes(src, orig_len + 8, ndims * elem_sz);
+            // dump_bytes(((uint8_t*)src) + ndims, min_orig_len, ndims * elem_sz);
+            dump_elements(src, min_orig_len + 4, ndims);
+        }
+    }
+
     // ------------------------ handle edge cases
 
     // bool just_cpy = orig_len < min_data_size;
@@ -475,7 +487,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle(const int_t* src,
     // just_cpy = just_cpy || orig_len & (((uint64_t)1) << 47);
     if (just_cpy) { // if data was too small or failed to compress
         // printf("decomp: data less than min data size: %lu\n", min_data_size);
-        memcpy(dest, src, (uint32_t)remaining_len);
+        memcpy(dest, src, remaining_len * elem_sz);
         return remaining_len;
     }
     if (ndims == 0) {
@@ -492,17 +504,6 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle(const int_t* src,
     // printf("-------- decompression (orig_len = %lld)\n", (int64_t)orig_len);
     // printf("saw compressed data (with possible extra at end):\n");
     // dump_bytes(src, orig_len + 24);
-
-    if (debug > 0) {
-        int64_t min_orig_len = ngroups * group_sz_blocks * block_sz * ndims;
-        printf("--------- decomp: saw original ngroups, ndims, min_len = %u, %d, %lld\n", ngroups, ndims, min_orig_len);
-        if (debug > 3) {
-            printf("saw compressed data (with possible extra at end):\n");
-            // dump_bytes(src, orig_len + 8, ndims * elem_sz);
-            dump_bytes(((uint8_t*)src) + ndims, min_orig_len, ndims * elem_sz);
-            // dump_elements(src, orig_len + 4, ndims);
-        }
-    }
 
     // ------------------------ stats derived from ndims
     // header stats
@@ -730,7 +731,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle(const int_t* src,
                 uint32_t vstripe_start = v * vector_sz;
                 __m256i prev_vals = _mm256_loadu_si256((const __m256i*)
                     (prev_vals_ar + vstripe_start));
-                if (debug) { printf("========\ninitial prev vals: "); dump_m256i(prev_vals); }
+                // if (debug) { printf("========\ninitial prev vals: "); dump_m256i(prev_vals); }
                 __m256i vals = _mm256_undefined_si256();
                 for (uint8_t i = 0; i < block_sz; i++) {
                     uint32_t in_offset = i * padded_ndims + vstripe_start;
