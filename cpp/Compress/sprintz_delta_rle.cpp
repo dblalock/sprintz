@@ -105,7 +105,7 @@ int64_t compress_rowmajor_delta_rle(const uint_t* src, uint64_t len,
         assert(min_data_size < ((uint64_t)1) << 16);
         // printf("data less than min data size: %lu\n", min_data_size);
         if (write_size) {
-            dest += write_metadata_rle_8b(dest, ndims, 0, (uint16_t)len);
+            dest += write_metadata_rle(dest, ndims, 0, (uint16_t)len);
         }
         memcpy(dest, src, len);
         return (dest - orig_dest) + len;
@@ -142,7 +142,7 @@ int64_t compress_rowmajor_delta_rle(const uint_t* src, uint64_t len,
 
     uint16_t run_length_nblocks = 0;
 
-    const uint8_t* last_full_group_start = src_end - group_sz;
+    const uint_t* last_full_group_start = src_end - group_sz;
     uint32_t ngroups = 0;
     // printf("group_sz elements: %d\n", group_sz);
     // printf("src end offset, last_full_group_start offset = %d, %d\n", (int)(src_end - src), (int)(last_full_group_start - src));
@@ -307,7 +307,7 @@ do_rle:
                     ngroups++;  // invariant: groups we start are always finished
                     header_bit_offset = 0;
                     b = 0;
-                    header_dest = dest;
+                    header_dest = (int8_t*)dest;
                     dest += total_header_bytes;
                     memset(header_bytes, 0, total_header_bytes_padded);
                     memset(header_dest, 0, total_header_bytes);
@@ -410,7 +410,7 @@ main_loop_end:
 
     uint32_t remaining_len = (uint32_t)(src_end - src);
     if (write_size) {
-        write_metadata_rle_8b(orig_dest, ndims, ngroups, remaining_len);
+        write_metadata_rle(orig_dest, ndims, ngroups, remaining_len);
         // *(uint32_t*)orig_dest = ngroups;
         // *(uint16_t*)(orig_dest + 4) = (uint16_t)remaining_len;
         // *(uint16_t*)(orig_dest + 6) = ndims;
@@ -425,13 +425,12 @@ int64_t compress_rowmajor_delta_rle_8b(const uint8_t* src, uint32_t len,
 {
     return compress_rowmajor_delta_rle(src, len, dest, ndims, write_size);
 }
-// int64_t compress_rowmajor_delta_rle_16b(const uint16_t* src, uint64_t len,
-//     int16_t* dest, uint16_t ndims, bool write_size)
-// {
-//     return compress_rowmajor_delta_rle(src, len, dest, ndims, write_size);
-// }
+int64_t compress_rowmajor_delta_rle_16b(const uint16_t* src, uint32_t len,
+    int16_t* dest, uint16_t ndims, bool write_size)
+{
+    return compress_rowmajor_delta_rle(src, len, dest, ndims, write_size);
+}
 
-// int64_t decompress8b_rowmajor_delta_rle(const int8_t* src, uint8_t* dest) {
 template<typename int_t, typename uint_t>
 SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle(const int_t* src,
     uint_t* dest, uint16_t ndims, uint32_t ngroups, uint16_t remaining_len)
@@ -544,20 +543,12 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle(const int_t* src,
 
     // extra row in deltas is to store last decoded values
     // TODO just special case very first row
-    // uint8_t* deltas = (uint8_t*)calloc((block_sz + 1) * padded_ndims, 1);
     int_t* deltas = (int_t*)calloc(block_sz * padded_ndims, elem_sz);
     uint_t* prev_vals_ar = (uint_t*)calloc(padded_ndims, elem_sz);
 
-    // TODO uncomment once we swap out the delta impl
-    // int_t* deltas = (int_t*)calloc(block_sz * padded_ndims, elem_sz);
-    // uint_t* prev_vals_ar = (uint_t*)calloc(padded_ndims, elem_sz);
-
     // ================================ main loop
 
-    // uint64_t ngroups = orig_len / group_sz; // if we get an fp error, it's this
     for (uint64_t g = 0; g < ngroups; g++) {
-        // const uint8_t* header_src = (uint8_t*)src;
-        // src += total_header_bytes;
         const uint8_t* header_src = (const uint8_t*)src;
         src = (int_t*)(((int8_t*)src) + total_header_bytes);
 
@@ -671,7 +662,6 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle(const int_t* src,
             uint32_t in_row_nbytes = DIV_ROUND_UP(in_row_nbits, 8);
             uint32_t out_row_nbytes = padded_ndims * elem_sz;
 
-            // if (in_row_nbits > 99999) { // TODO rm
             if (in_row_nbits == 0) {
                 int8_t* src8 = (int8_t*)src;
                 int8_t low_byte = *src8;
@@ -681,7 +671,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle(const int_t* src,
 
                 // write out the run
                 if (g > 0 || b > 0) { // if not at very beginning of data
-                    const uint8_t* inptr = dest - ndims;
+                    const uint_t* inptr = dest - ndims;
                     uint32_t ncopies = length * block_sz;
                     memrep(dest, inptr, ndims * elem_sz, ncopies);
                     dest += ndims * ncopies;
@@ -770,17 +760,12 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle(const int_t* src,
                 _mm256_storeu_si256((__m256i*)(prev_vals_ar+vstripe_start), vals);
             }
 
-            // src += block_sz * in_row_nbytes;
-            // dest += block_sz * ndims;
-            // masks += nstripes;
-            // bitwidths += nstripes;
             src += block_sz * in_row_nbytes / elem_sz;
             dest += block_sz * ndims;
             masks += nstripes;
             bitwidths += nstripes;
 
         } // for each block
-        // printf("will now write to dest at offset %lld\n", (uint64_t)(dest - orig_dest));
     } // for each group
 
     free(headers_tmp);
@@ -788,6 +773,8 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle(const int_t* src,
     free(data_masks);
     free(stripe_bitwidths);
     free(stripe_bitoffsets);
+    free(deltas);
+    free(prev_vals_ar);
 
     // printf("bytes read: %lld\n", (uint64_t)(src - orig_src));
 
@@ -799,14 +786,13 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle(const int_t* src,
     // printf("remaining len: %d\n", (int)remaining_len);
     // printf("read bytes: %lu\n", remaining_len);
     // printf("remaining data: "); ar::print(src, remaining_len);
-    memcpy(dest, src, remaining_len);
+    if (debug) { printf("remaining len: %d\n", remaining_len); }
+    memcpy(dest, src, remaining_len * elem_sz);
 
-    // uint32_t dest_sz = dest + remaining_len - orig_dest;
-    // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, ndims);
-    // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, ndims * 2, 4);
-    // ar::print(orig_dest, dest_sz, "decompressed data");
-
-    // printf("reached end of decomp\n");
+    if (debug > 2) {
+        // printf("decompressed data:\n"); dump_bytes(orig_dest, orig_len * elem_sz, ndims * 4);
+        printf("decompressed data:\n"); dump_elements(orig_dest, (int)(dest - orig_dest), ndims);
+    }
     return dest + remaining_len - orig_dest;
 }
 
@@ -815,17 +801,25 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_8b(const int8_t* src,
 {
     return decompress_rowmajor_delta_rle(src, dest, ndims, ngroups, remaining_len);
 }
-// SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_16b(const int16_t* src,
-//     uint16_t* dest, uint16_t ndims, uint32_t ngroups, uint16_t remaining_len)
-// {
-//     return decompress_rowmajor_delta_rle(src, dest, ndims, ngroups, remaining_len);
-// }
+SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_16b(const int16_t* src,
+    uint16_t* dest, uint16_t ndims, uint32_t ngroups, uint16_t remaining_len)
+{
+    return decompress_rowmajor_delta_rle(src, dest, ndims, ngroups, remaining_len);
+}
 
 int64_t decompress_rowmajor_delta_rle_8b(const int8_t* src, uint8_t* dest) {
     uint16_t ndims;
     uint32_t ngroups;
     uint16_t remaining_len;
-    src += read_metadata_rle_8b(src, &ndims, &ngroups, &remaining_len);
+    src += read_metadata_rle(src, &ndims, &ngroups, &remaining_len);
     return decompress_rowmajor_delta_rle_8b(
+        src, dest, ndims, ngroups, remaining_len);
+}
+int64_t decompress_rowmajor_delta_rle_16b(const int16_t* src, uint16_t* dest) {
+    uint16_t ndims;
+    uint32_t ngroups;
+    uint16_t remaining_len;
+    src += read_metadata_rle(src, &ndims, &ngroups, &remaining_len);
+    return decompress_rowmajor_delta_rle_16b(
         src, dest, ndims, ngroups, remaining_len);
 }

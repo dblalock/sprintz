@@ -1369,6 +1369,7 @@ int64_t decompress_rowmajor_delta(const int_t* src, uint_t* dest) {
     free(data_masks);
     free(stripe_bitwidths);
     free(stripe_bitoffsets);
+    free(deltas);
     free(prev_vals_ar);
 
     // copy over trailing data
