@@ -16,6 +16,7 @@
 		723DEB4C1FDA025600EE6510 /* test_univariate_8b.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 723DEB421FDA025500EE6510 /* test_univariate_8b.cpp */; };
 		723DEB4D1FDA025600EE6510 /* test_sprintz_xff.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 723DEB431FDA025500EE6510 /* test_sprintz_xff.cpp */; };
 		723DEB4E1FDA025600EE6510 /* test_bitpack.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 723DEB451FDA025600EE6510 /* test_bitpack.cpp */; };
+		7250422E1FDF4DED00865503 /* sprintz_delta_rle.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7250422D1FDF4DED00865503 /* sprintz_delta_rle.cpp */; };
 		725E207D1FAAADD2007B2797 /* delta.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 725E207B1FAAADD2007B2797 /* delta.cpp */; };
 		727B03311FCC9265004F07D4 /* sprintz_xff.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 727B032F1FCC9265004F07D4 /* sprintz_xff.cpp */; };
 		72C2D0AB1FD6013100D6740B /* sprintz_xff_lowdim.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C2D0AA1FD6013000D6740B /* sprintz_xff_lowdim.cpp */; };
@@ -381,6 +382,7 @@
 		723DEB441FDA025500EE6510 /* array_utils.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = array_utils.hpp; path = test/array_utils.hpp; sourceTree = "<group>"; };
 		723DEB451FDA025600EE6510 /* test_bitpack.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = test_bitpack.cpp; path = test/test_bitpack.cpp; sourceTree = "<group>"; };
 		723DEB461FDA025600EE6510 /* catch.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; name = catch.hpp; path = test/catch.hpp; sourceTree = "<group>"; };
+		7250422D1FDF4DED00865503 /* sprintz_delta_rle.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz_delta_rle.cpp; sourceTree = "<group>"; };
 		725E207B1FAAADD2007B2797 /* delta.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = delta.cpp; sourceTree = "<group>"; };
 		725E20801FAAC0E8007B2797 /* delta.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = delta.h; sourceTree = "<group>"; };
 		726D10581F6DCDD200080495 /* bitpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bitpack.h; sourceTree = "<group>"; };
@@ -1097,6 +1099,7 @@
 				723DE9D01FDA025300EE6510 /* macros.hpp */,
 				723DEB451FDA025600EE6510 /* test_bitpack.cpp */,
 				723DEB411FDA025500EE6510 /* test_delta.cpp */,
+				7250422D1FDF4DED00865503 /* sprintz_delta_rle.cpp */,
 				723DEB3A1FDA025300EE6510 /* test_predict.cpp */,
 				723DEB3C1FDA025400EE6510 /* test_sprintz_8b.cpp */,
 				723DEB3E1FDA025400EE6510 /* test_sprintz_delta.cpp */,
@@ -1170,6 +1173,7 @@
 				723DEB4D1FDA025600EE6510 /* test_sprintz_xff.cpp in Sources */,
 				723DEB491FDA025600EE6510 /* test_transpose.cpp in Sources */,
 				72C2D0B01FD6456200D6740B /* univariate_8b.cpp in Sources */,
+				7250422E1FDF4DED00865503 /* sprintz_delta_rle.cpp in Sources */,
 				723DEB471FDA025600EE6510 /* test_predict.cpp in Sources */,
 				72C2D0BB1FD7279C00D6740B /* format.cpp in Sources */,
 				727B03311FCC9265004F07D4 /* sprintz_xff.cpp in Sources */,

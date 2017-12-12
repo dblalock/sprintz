@@ -153,14 +153,14 @@ TEST_CASE("real datasets", "[rowmajor][dsets]") {
 
 // ============================================================ rowmajor delta
 
-TEST_CASE("compress_rowmajor_delta 8b", "[rowmajor][delta][8b][dbg]") {
+TEST_CASE("compress_rowmajor_delta 8b", "[rowmajor][delta][8b]") {
     printf("executing rowmajor delta 8b test\n");
     TEST_CODEC_MANY_NDIMS_8b(compress_rowmajor_delta_8b, decompress_rowmajor_delta_8b);
     // TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_delta_8b, decompress_rowmajor_delta_8b, 1, 41);
     // TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_delta_8b, decompress_rowmajor_delta_8b, 1, 3);
 }
 
-TEST_CASE("compress rowmajor delta 16b", "[rowmajor][delta][16b][dbg]") {
+TEST_CASE("compress rowmajor delta 16b", "[rowmajor][delta][16b]") {
     printf("executing rowmajor delta 16b test\n");
     // TEST_CODEC_MANY_NDIMS_16b(compress_rowmajor_16b, decompress_rowmajor_16b);
 
@@ -205,8 +205,11 @@ TEST_CASE("compress rowmajor delta 16b", "[rowmajor][delta][16b][dbg]") {
 
 // ============================================================ rowmajor delta rle
 
-TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][rle]") {
-    printf("executing rowmajor delta rle test\n");
+TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][rle][dbg]") {
+    printf("executing rowmajor delta rle 8b test\n");
+    // TEST_CODEC_MANY_NDIMS_8b(compress_rowmajor_delta_rle_8b, decompress_rowmajor_delta_8b);
+    // TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_delta_8b, decompress_rowmajor_delta_8b, 1, 41);
+    // TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_delta_8b, decompress_rowmajor_delta_8b, 1, 3);
 
     // int ndims = 64;
     // int ndims = 17;
@@ -218,7 +221,7 @@ TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][rle]") {
         printf("---- ndims = %d\n", ndims);
         CAPTURE(ndims);
         auto comp = [ndims](const uint8_t* src, size_t len, int8_t* dest) {
-            return compress8b_rowmajor_delta_rle(src, len, dest, ndims);
+            return compress_rowmajor_delta_rle_8b(src, len, dest, ndims);
         };
         auto decomp = [](int8_t* src, uint8_t* dest) {
             return decompress8b_rowmajor_delta_rle(src, dest);
@@ -228,7 +231,7 @@ TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][rle]") {
     }
 }
 
-TEST_CASE("compress8b_rowmajor_delta_rle_lowdims", "[rowmajor][delta][rle]") {
+TEST_CASE("compress8b_rowmajor_delta_rle_lowdim", "[rowmajor][delta][rle]") {
     printf("executing rowmajor delta rle lowdim test\n");
 
     // int ndims = 1;

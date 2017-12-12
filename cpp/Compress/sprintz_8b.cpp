@@ -52,10 +52,10 @@ int64_t sprintz_compress_delta_8b(const uint8_t* src, uint32_t len, int8_t* dest
             src, len, dest, NDIMS, write_size);
 
     #define CASE(NDIMS)                                             \
-        case NDIMS: return compress8b_rowmajor_delta_rle(           \
+        case NDIMS: return compress_rowmajor_delta_rle_8b(           \
             src, len, dest, NDIMS, write_size);
 
-    SWITCH_ON_NDIMS(ndims, compress8b_rowmajor_delta_rle(
+    SWITCH_ON_NDIMS(ndims, compress_rowmajor_delta_rle_8b(
         src, len, dest, ndims, write_size));
 
     #undef LOW_DIMS_CASE

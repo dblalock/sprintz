@@ -44,7 +44,7 @@ int64_t decompress_rowmajor_delta_16b(const int16_t* src, uint16_t* dest);
 
 // ------------------------ delta + run length encoding
 
-int64_t compress8b_rowmajor_delta_rle(const uint8_t* src, uint64_t len,
+int64_t compress_rowmajor_delta_rle_8b(const uint8_t* src, uint64_t len,
     int8_t* dest, uint16_t ndims, bool write_size=true);
 
 SPRINTZ_FORCE_INLINE int64_t decompress8b_rowmajor_delta_rle(
