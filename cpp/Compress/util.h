@@ -88,10 +88,14 @@ static inline void mm256_shuffle_epi8_to_epi16(const __m256i& tbl_low,
         first_third_u64s, second_fourth_u64s, 1 + (3 << 4));
 }
 
-inline void memrep(uint8_t* dest, const uint8_t* src, int32_t in_nbytes,
+inline void memrep(void* dest_, const void* src_, int32_t in_nbytes,
                     int32_t ncopies)
+// inline void memrep(uint8_t* dest, const uint8_t* src, int32_t in_nbytes,
+//                     int32_t ncopies)
 {
     if (in_nbytes < 1 || ncopies < 1) { return; }
+    uint8_t* dest = (uint8_t*)dest_;
+    const uint8_t* src = (const uint8_t*)src_;
 
     static const int vector_sz = 32;
 

@@ -19,7 +19,7 @@ uint16_t write_metadata_rle_8b(int8_t* orig_dest, uint16_t ndims,
     return write_metadata_rle(orig_dest, ndims, ngroups, remaining_len);
 }
 uint16_t read_metadata_rle_8b(const int8_t* src, uint16_t* p_ndims,
-    uint64_t* p_ngroups, uint16_t* p_remaining_len)
+    uint32_t* p_ngroups, uint16_t* p_remaining_len)
 {
     return read_metadata_rle(src, p_ndims, p_ngroups, p_remaining_len);
 }
@@ -43,7 +43,7 @@ uint16_t write_metadata_rle_16b(int16_t* orig_dest, uint16_t ndims,
     return write_metadata_rle(orig_dest, ndims, ngroups, remaining_len);
 }
 uint16_t read_metadata_rle_16b(const int16_t* src, uint16_t* p_ndims,
-    uint64_t* p_ngroups, uint16_t* p_remaining_len)
+    uint32_t* p_ngroups, uint16_t* p_remaining_len)
 {
     return read_metadata_rle(src, p_ndims, p_ngroups, p_remaining_len);
 }

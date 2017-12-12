@@ -63,7 +63,7 @@ int64_t sprintz_compress_delta_8b(const uint8_t* src, uint32_t len, int8_t* dest
 }
 int64_t sprintz_decompress_delta_8b(const int8_t* src, uint8_t* dest) {
     uint16_t ndims;
-    uint64_t ngroups;
+    uint32_t ngroups;
     uint16_t remaining_len;
     src += read_metadata_rle_8b(src, &ndims, &ngroups, &remaining_len);
 
@@ -72,10 +72,10 @@ int64_t sprintz_decompress_delta_8b(const int8_t* src, uint8_t* dest) {
             src, dest, NDIMS, ngroups, remaining_len);
 
     #define CASE(NDIMS)                                                 \
-        case NDIMS: return decompress8b_rowmajor_delta_rle(             \
+        case NDIMS: return decompress_rowmajor_delta_rle_8b(             \
             src, dest, NDIMS, ngroups, remaining_len);
 
-    SWITCH_ON_NDIMS(ndims, decompress8b_rowmajor_delta_rle(
+    SWITCH_ON_NDIMS(ndims, decompress_rowmajor_delta_rle_8b(
         src, dest, ndims, ngroups, remaining_len));
 
     #undef LOW_DIMS_CASE
@@ -101,7 +101,7 @@ int64_t sprintz_compress_xff_8b(const uint8_t* src, uint32_t len, int8_t* dest,
 }
 int64_t sprintz_decompress_xff_8b(const int8_t* src, uint8_t* dest) {
     uint16_t ndims;
-    uint64_t ngroups;
+    uint32_t ngroups;
     uint16_t remaining_len;
     src += read_metadata_rle_8b(src, &ndims, &ngroups, &remaining_len);
 

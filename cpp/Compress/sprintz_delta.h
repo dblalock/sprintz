@@ -44,14 +44,14 @@ int64_t decompress_rowmajor_delta_16b(const int16_t* src, uint16_t* dest);
 
 // ------------------------ delta + run length encoding
 
-int64_t compress_rowmajor_delta_rle_8b(const uint8_t* src, uint64_t len,
+int64_t compress_rowmajor_delta_rle_8b(const uint8_t* src, uint32_t len,
     int8_t* dest, uint16_t ndims, bool write_size=true);
 
-SPRINTZ_FORCE_INLINE int64_t decompress8b_rowmajor_delta_rle(
-    const int8_t* src, uint8_t* dest, uint16_t ndims, uint64_t ngroups,
+SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_8b(
+    const int8_t* src, uint8_t* dest, uint16_t ndims, uint32_t ngroups,
     uint16_t remaining_len);
 
-int64_t decompress8b_rowmajor_delta_rle(const int8_t* src, uint8_t* dest);
+int64_t decompress_rowmajor_delta_rle_8b(const int8_t* src, uint8_t* dest);
 
 // ------------------------ delta + rle low dimensional
 
@@ -64,6 +64,13 @@ SPRINTZ_FORCE_INLINE int64_t decompress8b_rowmajor_delta_rle_lowdim(
 
 int64_t decompress8b_rowmajor_delta_rle_lowdim(
     const int8_t* src, uint8_t* dest);
+
+// ------------------------ misc
+
+// TODO this isn't a great place for this since not part of the API
+template<int elem_sz> struct ElemSzTraits {};
+template<> struct ElemSzTraits<1> { typedef uint64_t bitwidth_t; };
+template<> struct ElemSzTraits<2> { typedef uint32_t bitwidth_t; };
 
 
 #endif

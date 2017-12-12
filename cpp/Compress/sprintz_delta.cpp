@@ -394,10 +394,6 @@ int64_t compress_rowmajor_16b(const uint16_t* src, uint32_t len, int16_t* dest,
     return compress_rowmajor(src, len, dest, ndims, write_size);
 }
 
-template<int elem_sz> struct ElemSzTraits {};
-template<> struct ElemSzTraits<1> { typedef uint64_t bitwidth_t; };
-template<> struct ElemSzTraits<2> { typedef uint32_t bitwidth_t; };
-
 template<typename int_t, typename uint_t>
 int64_t decompress_rowmajor(const int_t* src, uint_t* dest) {
 
@@ -927,18 +923,8 @@ int64_t compress_rowmajor_delta(const uint_t* src, uint32_t len, int_t* dest,
                     *(uint32_t*)(header_dest + byte_offset) |= \
                         stripe_headers[stripe] << bit_offset;
                 } else {
-                    // if (debug > 0) {
-                    //     printf("prev contents of header dest: ");
-                    //     dump_bytes(header_dest, 8, true);
-                    //     printf("ORing in header value: %d\n", (int)(stripe_headers[stripe] << bit_offset));
-                    // }
                     *(uint64_t*)(header_dest + byte_offset) |= \
                         ((uint64_t)(stripe_headers[stripe])) << bit_offset;
-                    // if (debug > 0) {
-                    //     printf("new contents of header dest: ");
-                    //     dump_bytes(header_dest, 8, false);
-                    //     printf(" \t(bit, byte offsets = %d, %d)\n", bit_offset, byte_offset);
-                    // }
                 }
 
                 uint8_t is_final_stripe = stripe == (nstripes - 1);
@@ -966,11 +952,6 @@ int64_t compress_rowmajor_delta(const uint_t* src, uint32_t len, int_t* dest,
                 uint64_t mask = stripe_masks[stripe];
                 uint16_t nbits = stripe_bitwidths[stripe];
                 uint16_t total_bits = nbits + offset_bits;
-
-                // int8_t* outptr = dest + offset_bytes;
-                // // const uint8_t* inptr = src + (stripe * stripe_sz);
-                // const uint8_t* inptr = (const uint8_t*)(deltas +
-                //     (stripe * stripe_sz));
 
                 int8_t* outptr = ((int8_t*)dest) + offset_bytes;
                 const uint8_t* inptr = ((const uint8_t*)deltas) + (stripe * stripe_sz_nbytes);
@@ -1042,28 +1023,6 @@ int64_t compress_rowmajor_delta_16b(const uint16_t* src, uint32_t len,
 // int64_t decompress_rowmajor_delta(const int8_t* src, uint8_t* dest) {
 template<typename int_t, typename uint_t>
 int64_t decompress_rowmajor_delta(const int_t* src, uint_t* dest) {
-    // CHECK_INT_UINT_TYPES_VALID(int_t, uint_t);
-    // static const uint8_t elem_sz = sizeof(uint_t);
-    // typedef typename ElemSzTraits<elem_sz>::bitwidth_t bitwidth_t;
-    // static const uint8_t elem_sz_nbits = 8 * elem_sz;
-    // static const uint8_t nbits_sz_bits = elem_sz == 1 ? 3 : 4; // XXX {8,16}b
-    // // constants that could, in principle, be changed (but not in this impl)
-    // static const uint8_t block_sz = 8;
-    // static const uint8_t vector_sz = 32;
-    // // static const uint8_t stripe_sz = 8;
-    // // static const uint8_t nbits_sz_bits = 3;
-    // // constants that could actually be changed in this impl
-    // static const uint8_t group_sz_blocks = kDefaultGroupSzBlocks;
-    // // derived constants
-    // static const int group_sz_per_dim = block_sz * group_sz_blocks;
-    // static const uint8_t stripe_sz = 8 / elem_sz;
-    // static const uint8_t stripe_header_sz = nbits_sz_bits * stripe_sz / 8;
-    // static const uint8_t nbits_sz_mask = (1 << nbits_sz_bits) - 1;
-    // static const uint64_t kHeaderUnpackMask = TILE_BYTE(nbits_sz_mask);
-    // assert(stripe_sz % 8 == 0);
-    // assert(vector_sz % stripe_sz == 0);
-    // assert(vector_sz >= stripe_sz);
-
     CHECK_INT_UINT_TYPES_VALID(int_t, uint_t);
     static const uint8_t elem_sz = sizeof(uint_t);
     typedef typename ElemSzTraits<elem_sz>::bitwidth_t bitwidth_t;
@@ -1095,7 +1054,7 @@ int64_t decompress_rowmajor_delta(const int_t* src, uint_t* dest) {
 
     int gDebug = debug;
     int debug = (elem_sz == 2) ? gDebug : 0;
-    // int debug = false;
+    debug = false;
 
     // ================================ one-time initialization
 
@@ -1270,23 +1229,6 @@ int64_t decompress_rowmajor_delta(const int_t* src, uint_t* dest) {
                 uint8_t* store_addr2 = ((uint8_t*)data_masks) + 2*v_offset;
                 _mm256_storeu_si256((__m256i*)store_addr2, masks0);
                 _mm256_storeu_si256((__m256i*)(store_addr2 + vector_sz_nbytes), masks1);
-
-                // if (debug) {
-                //     printf("storing mask 0 at byte offset:  %d\n", (int)(store_addr2 - (uint8_t*)data_masks));
-                //     printf("storing mask 1 at byte offset:  %d\n", (int)(store_addr2 + v_offset - (uint8_t*)data_masks));
-                //     // printf("raw    header: "); dump_m256i<uint8_t>(raw_header);
-                //     // printf("raw == 15?   : "); dump_m256i<uint8_t>(_mm256_cmpeq_epi8(raw_header, fifteens));
-                //     printf("vector header: "); dump_m256i<uint8_t>(header);
-                //     // printf("u32 masks: "); dump_m256i<uint8_t>(u32_masks);
-                //     // printf("even u32s: "); dump_m256i<uint8_t>(even_u32s);
-                //     // printf("odd u32s: "); dump_m256i<uint8_t>(odd_u32s);
-                //     // printf("even bitwidths: "); dump_m256i<uint64_t>(even_bitwidths);
-                //     // printf("odd bitwidths: "); dump_m256i<uint64_t>(odd_bitwidths);
-                    // printf("stripe bitwidths: "); dump_m256i<uint32_t>(bitwidths);
-                    // printf("vector masks0: "); dump_m256i<uint16_t>(masks0);
-                    // printf("vector masks1: "); dump_m256i<uint16_t>(masks1);
-                //     printf("\n");
-                // }
             }
         }
 
@@ -1316,7 +1258,7 @@ int64_t decompress_rowmajor_delta(const int_t* src, uint_t* dest) {
             uint32_t in_row_nbits = (uint32_t)(stripe_bitoffsets[nstripes - 1] +
                 bitwidths[nstripes - 1]);
             uint32_t in_row_nbytes = DIV_ROUND_UP(in_row_nbits, 8);
-            uint32_t out_row_nbytes = ndims * elem_sz;
+            uint32_t out_row_nbytes = padded_ndims * elem_sz;
 
             // ------------------------ unpack data for each stripe
             // for (uint32_t stripe = 0; stripe < nstripes; stripe++) {
@@ -1340,7 +1282,7 @@ int64_t decompress_rowmajor_delta(const int_t* src, uint_t* dest) {
                 // uint8_t* outptr = dest + (stripe * stripe_sz);
                 // uint32_t out_row_nbytes = ndims;
                 // uint8_t* outptr = ((uint8_t*)deltas) + (stripe * stripe_sz);
-                uint32_t out_row_nbytes = padded_ndims * elem_sz;
+                // uint32_t out_row_nbytes = padded_ndims * elem_sz;
 
                 if (debug) {
                     // printf("nbits at idx %d = %d\n", stripe + nstripes * b, nbits);
@@ -1352,19 +1294,15 @@ int64_t decompress_rowmajor_delta(const int_t* src, uint_t* dest) {
                 if (total_bits <= 64) { // input guaranteed to fit in 8B
                     for (int i = 0; i < block_sz; i++) {
                         uint64_t packed_data = (*(uint64_t*)inptr) >> offset_bits;
-                        // printf("packed_data "); dump_bytes(packed_data);
                         *(uint64_t*)outptr = _pdep_u64(packed_data, mask);
                         inptr += in_row_nbytes;
                         outptr += out_row_nbytes;
                     }
                 } else { // input spans 9 bytes
-                    // printf(">>> executing the slow path!\n");
                     uint8_t nbits_lost = total_bits - 64;
                     for (int i = 0; i < block_sz; i++) {
                         uint64_t packed_data = (*(uint64_t*)inptr) >> offset_bits;
-                        // printf("packed_data "); dump_bytes(packed_data);
                         packed_data |= (*(uint64_t*)(inptr + 8)) << (nbits - nbits_lost);
-                        // printf("packed_data after OR "); dump_bytes(packed_data);
                         *(uint64_t*)outptr = _pdep_u64(packed_data, mask);
                         inptr += in_row_nbytes;
                         outptr += out_row_nbytes;
@@ -1383,10 +1321,9 @@ int64_t decompress_rowmajor_delta(const int_t* src, uint_t* dest) {
                 printf("prev vals:\n"); dump_elements(prev_vals_ar, padded_ndims);
             }
 
-            // TODO uncomment after debug
+            // zigzag + delta decode
             for (int32_t v = nvectors - 1; v >= 0; v--) {
                 uint32_t vstripe_start = v * vector_sz;
-                // uint32_t prev_vals_offset = v * vector_sz_nbytes;
                 __m256i prev_vals = _mm256_loadu_si256((const __m256i*)
                     (prev_vals_ar + vstripe_start));
                 if (debug) { printf("========\ninitial prev vals: "); dump_m256i(prev_vals); }
@@ -1398,7 +1335,6 @@ int64_t decompress_rowmajor_delta(const int_t* src, uint_t* dest) {
                     __m256i raw_vdeltas = _mm256_loadu_si256(
                         (const __m256i*)(deltas + in_offset));
 
-                    // zigzag + delta decode
                     __m256i vdeltas = _mm256_undefined_si256();
                     if (elem_sz == 1) {
                         vdeltas = mm256_zigzag_decode_epi8(raw_vdeltas);
@@ -1421,7 +1357,7 @@ int64_t decompress_rowmajor_delta(const int_t* src, uint_t* dest) {
             }
 
             src += block_sz * in_row_nbytes / elem_sz;
-            dest += block_sz * out_row_nbytes / elem_sz;
+            dest += block_sz * ndims;
             masks += nstripes;
             bitwidths += nstripes;
         } // for each block

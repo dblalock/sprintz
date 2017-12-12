@@ -584,7 +584,7 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(
     const int8_t* src, uint8_t* dest)
 {
     uint16_t ndims;
-    uint64_t ngroups;
+    uint32_t ngroups;
     uint16_t remaining_len;
     src += read_metadata_rle(src, &ndims, &ngroups, &remaining_len);
     return decompress8b_rowmajor_delta_rle_lowdim(
