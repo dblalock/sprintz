@@ -31,7 +31,7 @@ static const int kDefaultGroupSzBlocks = 2;
 // static const int kDefaultGroupSzBlocks = 8;  // slight pareto improvement
 
 static const int debug = 0;
-// static const int debug = 1;
+// static const int debug = 4;
 
 // ------------------------------------------------ delta + rle low ndims
 
@@ -61,6 +61,17 @@ int64_t compress_rowmajor_delta_rle_lowdim(const uint_t* src, uint32_t len,
     const uint_t* src_end = src + len;
     int_t* orig_dest = dest;
 
+    bool invalid_ndims = ndims == 0;
+    invalid_ndims |= (elem_sz == 1 && ndims > 4);
+    invalid_ndims |= (elem_sz == 2 && ndims > 2);
+    if (invalid_ndims) {
+        printf("ERROR: compress_rowmajor_delta_rle_lowdim: invalid ndims: %d\n", ndims);
+        return -1;
+    }
+
+    int gDebug = debug;
+    int debug = (elem_sz == 2) ? gDebug : 0;
+
     // ================================ one-time initialization
 
     // ------------------------ stats derived from ndims
@@ -73,7 +84,8 @@ int64_t compress_rowmajor_delta_rle_lowdim(const uint_t* src, uint32_t len,
     if (debug > 0) {
         printf("-------- compression (len = %lld)\n", (int64_t)len);
         if (debug > 2) {
-            printf("saw original data:\n"); dump_elements(src, len, ndims);
+            // printf("saw original data:\n"); dump_elements(src, len, ndims);
+            printf("saw original data:\n"); dump_elements(src, 16, ndims);
         }
     }
     if (debug > 1) { printf("total header bits, bytes: %d, %d\n", total_header_bits, total_header_bytes); }
@@ -91,11 +103,6 @@ int64_t compress_rowmajor_delta_rle_lowdim(const uint_t* src, uint32_t len,
     }
     if (write_size) {
         dest += length_header_nbytes / elem_sz;
-    }
-
-    if (debug) {
-        printf("------------ comp (len = %lld)\n", (int64_t)len);
-        if (debug > 2) { printf("saw original data:\n"); dump_bytes(src, len); }
     }
 
     // ------------------------ temp storage
@@ -119,6 +126,8 @@ int64_t compress_rowmajor_delta_rle_lowdim(const uint_t* src, uint32_t len,
 
         // printf("==== group %d\n", (int)ngroups - 1);
 
+        debug &= ngroups <= 2;
+
         // int8_t* header_dest = dest;
         // dest += total_header_bytes;
         int8_t* header_dest = (int8_t*)dest;
@@ -130,6 +139,7 @@ int64_t compress_rowmajor_delta_rle_lowdim(const uint_t* src, uint32_t len,
         uint32_t header_bit_offset = 0;
         int b = 0;
         while (b < group_sz_blocks) { // for each block
+
             // ------------------------ compute info for each stripe
             uint32_t total_dims_nbits = 0;
             for (uint16_t dim = 0; dim < ndims; dim++) {
@@ -152,6 +162,7 @@ int64_t compress_rowmajor_delta_rle_lowdim(const uint_t* src, uint32_t len,
                 prev_vals_ar[dim] = prev_val;
 
                 // mask = 255;  // TODO rm
+                if (elem_sz == 2) { mask = 0xffff; }  // TODO rm
                 // if (mask > 0) { mask = 255; } // TODO rm
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
                 max_nbits += max_nbits == (elem_sz_nbits - 1); // 7->8 or 15->16
@@ -264,7 +275,8 @@ do_rle:
 
             // ------------------------ write out header bits for this block
 
-            if (debug) { printf("%d.%d nbits: ", (int)ngroups - 1, b); dump_bytes(dims_nbits, ndims); }
+            // if (debug) { printf("---- %d.%d\n", ngroups - 1, b); }
+            if (debug) { printf("--- %d.%d nbits: ", (int)ngroups - 1, b); dump_bytes(dims_nbits, ndims); }
 
             for (uint16_t dim = 0; dim < ndims; dim++) {
                 uint16_t byte_offset = header_bit_offset >> 3;
@@ -291,16 +303,23 @@ do_rle:
             uint32_t data_sz = total_dims_nbits * block_sz / 8;
             memset(dest, 0, data_sz * elem_sz);
 
+            if (debug) {
+                printf("deltas: \n"); dump_elements(deltas, ndims * block_sz, block_sz);
+            }
+
             uint64_t* delta_buff_u64 = (uint64_t*)deltas;
             for (uint16_t dim = 0; dim < ndims; dim++) {
                 uint8_t nbits = dims_nbits[dim];
-                uint64_t mask = kBitpackMasks8[nbits];
                 if (elem_sz == 1) {
+                    uint64_t mask = kBitpackMasks8[nbits];
                     *((uint64_t*)dest) = _pext_u64(delta_buff_u64[dim], mask);
                 } else if (elem_sz == 2) {
+                    uint64_t mask = kBitpackMasks16[nbits];
                     static const uint8_t stripe_sz = stripe_sz_nbytes / elem_sz;
                     static const uint8_t nstripes =
                         elem_sz * block_sz / stripe_sz_nbytes;
+
+                    if (debug) { printf("using mask: "); dump_bits(mask); }
 
                     // TODO try switch to unroll each nbits case here for 16b;
                     // cases where nbits is a multiple of 2 will fall on byte
@@ -311,17 +330,24 @@ do_rle:
                     // and the largest odd number is 13, which yields 52b
                     // and therefore fits in 8B for any bit offset
                     uint16_t total_bit_offset = 0;
+                    int8_t* dest8 = (int8_t*)dest;
                     for (uint8_t s = 0; s < nstripes; s++) {
                         uint32_t in_idx = dim * nstripes + s;
                         uint8_t byte_offset = total_bit_offset >> 3;
                         uint8_t bit_offset = total_bit_offset & 0x07;
+                        if (debug) { printf("packing deltas: "); dump_bytes(delta_buff_u64[in_idx]); }
                         uint64_t packed_data = _pext_u64(
                             delta_buff_u64[in_idx], mask);
-                        *(uint64_t*)(dest + byte_offset) |= packed_data << bit_offset;
+                        *(uint64_t*)(dest8 + byte_offset) |= packed_data << bit_offset;
                         total_bit_offset += nbits * stripe_sz;
                     }
                 }
-                dest += nbits;
+                if (debug) {
+                    printf("packed deltas: \n"); dump_elements(dest, block_sz, block_sz);
+                }
+                int8_t* dest8 = ((int8_t*)dest) + nbits * block_sz / 8;
+                dest = (int_t*)dest8;
+                // dest += nbits * block_sz / 8;
             }
             src += block_sz * ndims;
             b++;
@@ -344,6 +370,11 @@ main_loop_end:
 
 int64_t compress_rowmajor_delta_rle_lowdim_8b(const uint8_t* src, uint32_t len,
     int8_t* dest, uint16_t ndims, bool write_size)
+{
+    return compress_rowmajor_delta_rle_lowdim(src, len, dest, ndims, write_size);
+}
+int64_t compress_rowmajor_delta_rle_lowdim_16b(const uint16_t* src, uint32_t len,
+    int16_t* dest, uint16_t ndims, bool write_size)
 {
     return compress_rowmajor_delta_rle_lowdim(src, len, dest, ndims, write_size);
 }
@@ -376,18 +407,25 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
     // const int8_t* orig_src = src;
     uint_t* orig_dest = dest;
 
+    bool invalid_ndims = ndims == 0;
+    invalid_ndims |= (elem_sz == 1 && ndims > 4);
+    invalid_ndims |= (elem_sz == 2 && ndims > 2);
+    if (invalid_ndims) {
+        printf("ERROR: decompress_rowmajor_delta_rle_lowdim: invalid ndims: %d\n", ndims);
+        return -1;
+    }
+
+    int gDebug = debug;
+    int debug = (elem_sz == 2) ? gDebug : 0;
+
     // ================================ one-time initialization
 
     // ------------------------ read original data size, ndims
 
     bool just_cpy = (ngroups == 0) && remaining_len < min_data_size;
     if (just_cpy) { // if data was too small or failed to compress
-        memcpy(dest, src, (size_t)remaining_len);
+        memcpy(dest, src, (size_t)remaining_len * elem_sz);
         return remaining_len;
-    }
-    if (ndims == 0) {
-        perror("ERROR: decompress8b_rowmajor_delta_rle_lowdim: Received ndims of 0!");
-        return 0;
     }
 
     if (debug) {
@@ -395,9 +433,12 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
         printf("-------- decompression (orig_len = %lld)\n", (int64_t)min_orig_len);
         if (debug > 2) {
             printf("saw compressed data (with possible missing data if runs):\n");
-            dump_bytes(src, min_orig_len + 8);
+            // dump_bytes(src, min_orig_len + 8, ndims * elem_sz);
+            // dump_elements(src, min_orig_len + 4, ndims);
+            dump_elements(src, 17, ndims);
         }
     }
+    // debug = false; // TODO rm
 
     // ------------------------ stats derived from ndims
     // header stats
@@ -429,6 +470,8 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
 
         uint32_t header_bit_offset = 0;
 
+        // debug &= g <= 2;
+
         // printf("==== group %d\n", (int)g);
 
         // ------------------------ create unpacked headers array
@@ -456,7 +499,9 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
         // uint8_t* header_ptr = headers;
         for (int b = 0; b < group_sz_blocks; b++) { // for each block in group
             uint8_t* header_ptr = headers + (b * ndims);
-            if (debug) { printf("%d.%d nbits: ", (int)g, b); dump_bytes(header_ptr); }
+            if (debug) { printf("---- %d.%d nbits: ", (int)g, b); dump_bytes(header_ptr); }
+
+            if (debug) { printf("contents of src at block start: \n"); dump_elements(src, block_sz*ndims, block_sz); }
 
             // run-length decode if necessary
             bool all_zeros = true;
@@ -472,7 +517,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
 
                 // write out the run
                 if (g > 0 || b > 0) { // if not at very beginning of data
-                    const uint8_t* inptr = dest - ndims;
+                    const uint_t* inptr = dest - ndims;
                     uint32_t ncopies = length * block_sz;
                     memrep(dest, inptr, ndims * elem_sz, ncopies);
                     dest += ndims * ncopies;
@@ -492,15 +537,20 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
 
             // ------------------------ unpack data for each dim
 
+            if (debug) { printf("contents of src before unpack: \n"); dump_elements(src, block_sz*ndims, block_sz); }
+
             // uint8_t* delta_buff = deltas + (dim * block_sz);
             for (uint16_t dim = 0; dim < ndims; dim++) {
                 uint8_t nbits = header_ptr[dim];
-                uint64_t mask = kBitpackMasks8[nbits];
                 uint8_t true_nbits = nbits + (nbits == (elem_sz_nbits - 1));
                 if (elem_sz == 1) {
+                    uint64_t mask = kBitpackMasks8[nbits];
                     int8_t* outptr = ((int8_t*)deltas) + (dim * block_sz);
                     *((uint64_t*)outptr) = _pdep_u64(*(uint64_t*)src, mask);
                 } else if (elem_sz == 2) {
+                    uint64_t mask = kBitpackMasks16[nbits];
+                    if (debug) { printf("true nbits: %d;  ", true_nbits); }
+                    if (debug) { printf("mask: "); dump_bits(mask); }
                     static const uint8_t stripe_sz = stripe_nbytes / elem_sz;
                     static const uint8_t nstripes =
                         elem_sz * block_sz / stripe_nbytes;
@@ -515,10 +565,15 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
                         uint64_t packed_data = *(uint64_t*)(src8 + byte_offset);
                         delta_buff_u64[out_idx] = _pext_u64(
                             packed_data >> bit_offset, mask);
-                        total_bit_offset += nbits * stripe_sz;
+                        if (debug) { printf(" unpacked data: "); dump_bytes(delta_buff_u64[out_idx]); }
+                        total_bit_offset += true_nbits * stripe_sz;
+                        if (debug) printf("new total bit offset: %d\n", total_bit_offset);
                     }
                 }
-                src += true_nbits * block_sz / 8;
+                if (debug) { printf("contents of src after unpack: \n"); dump_elements(src, block_sz*ndims, block_sz); }
+                int8_t* src8 = ((int8_t*)src) + true_nbits * block_sz / 8;
+                src = (int_t*)src8;
+                // src += true_nbits * block_sz / 8;
                 // printf("%d.%d-%d: nbits=%d\t", (int)g, b, dim, nbits);
                 // // printf("src:   "); dump_bytes(src, 8, false);
                 // // printf(" -> dest:   "); dump_bytes(outptr, 8);
@@ -527,7 +582,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
             // ------------------------ transpose
 
             if (elem_sz == 1) {
-                uint8_t* deltas8 = deltas; // still compile if uint_t != uint8_t
+                uint8_t* deltas8 = (uint8_t*)deltas; // still compile if uint_t != uint8_t
                 switch (ndims) {
                     // no zigzag or delta coding
                     // case 1: memcpy(dest, deltas, ndims*block_sz*elem_sz); break;
@@ -609,11 +664,21 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
             #undef LOOP_BODY
                 }
             } else if (elem_sz == 2) {
+
+                if (debug && g <= 2) {
+                    printf("deltas before transpose: \n"); dump_elements(deltas, ndims * block_sz, block_sz);
+                }
+
                 if (ndims == 2) {
                     // deltas were already u16s if this gets called, but
                     // compiler doesn't know that
                     transpose_2x8_16b((uint16_t*)deltas, (uint16_t*)deltas);
                 }
+
+                if (debug && g <= 2) {
+                    printf("deltas after transpose: \n"); dump_elements(deltas, ndims * block_sz, ndims);
+                }
+
                 __m256i raw_vdeltas = _mm256_loadu_si256((const __m256i*)deltas);
                 __m256i vdeltas = mm256_zigzag_decode_epi16(raw_vdeltas);
                 __m256i swapped128_vdeltas = _mm256_permute2x128_si256(
@@ -664,8 +729,10 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
     memcpy(dest, src, remaining_len * elem_sz);
 
     if (debug > 2) {
-        size_t dest_sz = (dest + remaining_len - orig_dest) * elem_sz;
-        printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz);
+        size_t dest_sz = (dest + remaining_len - orig_dest);
+        // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz * elem_sz);
+        // printf("decompressed data:\n"); dump_elements(orig_dest, dest_sz, ndims);
+        printf("decompressed data:\n"); dump_elements(orig_dest, 16, ndims);
     }
 
     return dest + remaining_len - orig_dest;
@@ -678,15 +745,25 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim_8b(
     return decompress_rowmajor_delta_rle_lowdim(src, dest, ndims, ngroups, remaining_len);
 }
 
-// SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim_16b(
-//     const int16_t* src, uint16_t* dest, uint16_t ndims, uint64_t ngroups,
-//     uint16_t remaining_len)
-// {
-//     return decompress_rowmajor_delta_rle_lowdim(src, dest, ndims, ngroups, remaining_len);
-// }
+SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim_16b(
+    const int16_t* src, uint16_t* dest, uint16_t ndims, uint64_t ngroups,
+    uint16_t remaining_len)
+{
+    return decompress_rowmajor_delta_rle_lowdim(src, dest, ndims, ngroups, remaining_len);
+}
 
 int64_t decompress_rowmajor_delta_rle_lowdim_8b(
     const int8_t* src, uint8_t* dest)
+{
+    uint16_t ndims;
+    uint32_t ngroups;
+    uint16_t remaining_len;
+    src += read_metadata_rle(src, &ndims, &ngroups, &remaining_len);
+    return decompress_rowmajor_delta_rle_lowdim(
+        src, dest, ndims, ngroups, remaining_len);
+}
+int64_t decompress_rowmajor_delta_rle_lowdim_16b(
+    const int16_t* src, uint16_t* dest)
 {
     uint16_t ndims;
     uint32_t ngroups;
