@@ -49,14 +49,6 @@ static const __m256i nbits_to_mask_16b_high = _mm256_setr_epi8(
 
 static const int kDefaultGroupSzBlocks = 2;
 
-// TODO this should just be in one header
-#define CHECK_INT_UINT_TYPES_VALID(int_t, uint_t)               \
-    static_assert(sizeof(uint_t) == sizeof(int_t),              \
-        "uint type and int type sizes must be the same!");      \
-    static_assert(sizeof(uint_t) == 1 || sizeof(uint_t) == 2,   \
-        "Only element sizes of 1 and 2 bytes are supported!");  \
-
-
 // ========================================================== rowmajor delta rle
 
 template<typename int_t, typename uint_t>
@@ -106,7 +98,6 @@ int64_t compress_rowmajor_delta_rle(const uint_t* src, uint64_t len,
         }
     }
     if (debug > 1) { printf("total header bits, bytes: %d, %d\n", total_header_bits, total_header_bytes); }
-
 
     // handle low dims and low length; we'd read way past the end of the
     // input in this case
@@ -412,11 +403,7 @@ main_loop_end:
     uint32_t remaining_len = (uint32_t)(src_end - src);
     if (write_size) {
         write_metadata_rle(orig_dest, ndims, ngroups, remaining_len);
-        // *(uint32_t*)orig_dest = ngroups;
-        // *(uint16_t*)(orig_dest + 4) = (uint16_t)remaining_len;
-        // *(uint16_t*)(orig_dest + 6) = ndims;
     }
-    // printf("trailing len: %d\n", (int)remaining_len);
     memcpy(dest, src, remaining_len * elem_sz);
     return dest + remaining_len - orig_dest;
 }

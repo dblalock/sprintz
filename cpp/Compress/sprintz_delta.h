@@ -66,14 +66,14 @@ int64_t decompress_rowmajor_delta_rle_16b(const int16_t* src, uint16_t* dest);
 
 // ------------------------ delta + rle low dimensional
 
-int64_t compress8b_rowmajor_delta_rle_lowdim(const uint8_t* src, uint64_t len,
+int64_t compress_rowmajor_delta_rle_lowdim_8b(const uint8_t* src, uint32_t len,
     int8_t* dest, uint16_t ndims, bool write_size=true);
 
-SPRINTZ_FORCE_INLINE int64_t decompress8b_rowmajor_delta_rle_lowdim(
+SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim_8b(
     const int8_t* src, uint8_t* dest, uint16_t ndims, uint64_t ngroups,
     uint16_t remaining_len);
 
-int64_t decompress8b_rowmajor_delta_rle_lowdim(
+int64_t decompress_rowmajor_delta_rle_lowdim_8b(
     const int8_t* src, uint8_t* dest);
 
 // ------------------------ misc
@@ -82,6 +82,13 @@ int64_t decompress8b_rowmajor_delta_rle_lowdim(
 template<int elem_sz> struct ElemSzTraits {};
 template<> struct ElemSzTraits<1> { typedef uint64_t bitwidth_t; };
 template<> struct ElemSzTraits<2> { typedef uint32_t bitwidth_t; };
+
+// TODO also not a good place for this
+#define CHECK_INT_UINT_TYPES_VALID(int_t, uint_t)               \
+    static_assert(sizeof(uint_t) == sizeof(int_t),              \
+        "uint type and int type sizes must be the same!");      \
+    static_assert(sizeof(uint_t) == 1 || sizeof(uint_t) == 2,   \
+        "Only element sizes of 1 and 2 bytes are supported!");  \
 
 
 #endif

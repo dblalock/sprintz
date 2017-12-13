@@ -47,12 +47,12 @@ static const __m256i nbits_to_mask_16b_high = _mm256_setr_epi8(
 
 static const int kDefaultGroupSzBlocks = 2;
 
-// TODO this should just be in one header
-#define CHECK_INT_UINT_TYPES_VALID(int_t, uint_t)               \
-    static_assert(sizeof(uint_t) == sizeof(int_t),              \
-        "uint type and int type sizes must be the same!");      \
-    static_assert(sizeof(uint_t) == 1 || sizeof(uint_t) == 2,   \
-        "Only element sizes of 1 and 2 bytes are supported!");  \
+// // TODO this should just be in one header
+// #define CHECK_INT_UINT_TYPES_VALID(int_t, uint_t)               \
+//     static_assert(sizeof(uint_t) == sizeof(int_t),              \
+//         "uint type and int type sizes must be the same!");      \
+//     static_assert(sizeof(uint_t) == 1 || sizeof(uint_t) == 2,   \
+//         "Only element sizes of 1 and 2 bytes are supported!");  \
 
 // TODO move to debug utils
 #define PTR_DIFF_NBYTES(P1, P2) \
