@@ -187,14 +187,14 @@ TEST_CASE("compress rowmajor delta 16b", "[rowmajor][delta][16b]") {
 // ============================================================ rowmajor delta rle
 
 // TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][rle]") {
-TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][rle]") {
+TEST_CASE("compress8b_rowmajor_delta_rle", "[rowmajor][delta][rle][dbg]") {
     printf("executing rowmajor delta rle 8b test\n");
     TEST_CODEC_MANY_NDIMS_8b(compress_rowmajor_delta_rle_8b, decompress_rowmajor_delta_rle_8b);
     // TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_delta_rle_8b, decompress_rowmajor_delta_rle_8b, 1, 41);
     // TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_delta_rle_8b, decompress_rowmajor_delta_rle_8b, 1, 3);
 }
 
-TEST_CASE("compress rowmajor delta rle 16b", "[rowmajor][delta][rle][16b]") {
+TEST_CASE("compress rowmajor delta rle 16b", "[rowmajor][delta][rle][16b][dbg]") {
     printf("executing rowmajor delta rle 16b test\n");
     // TEST_CODEC_MANY_NDIMS_16b(compress_rowmajor_16b, decompress_rowmajor_16b);
 
@@ -243,7 +243,23 @@ TEST_CASE("compress rowmajor delta rle lowdim 16b", "[rowmajor][delta][rle][16b]
         };
 
        test_codec<2>(comp, decomp);
-        //  // auto SZ = ndims * 16;
+
+        // uint32_t sz = 128;
+        // static const int ElemSz = 2;
+        // using UVec = typename elemsize_traits<ElemSz>::uvec_t;
+        // uint32_t denominator_shift = 8 * (ElemSz - 1);
+        // UVec orig(sz);
+        // UVec raw(sz);
+        // srand(12345);
+        // orig.setRandom();
+        // // raw = orig / (193 << denominator_shift);
+        // // test_compressor<ElemSz>(raw, f_comp, f_decomp, "sparse 56/256");
+        // raw = orig / (250 << denominator_shift);
+        // test_compressor<ElemSz>(raw, comp, decomp, "sparse 6/256");
+        // // raw = orig / (254 << denominator_shift);
+        // // test_compressor<ElemSz>(raw, f_comp, f_decomp, "fuzz 0-64");
+
+        //  // auto SZ = ndim s * 16;
         // auto SZ = 128;
         // srand(123);
         // Vec_u16 raw(SZ);
@@ -251,11 +267,12 @@ TEST_CASE("compress rowmajor delta rle lowdim 16b", "[rowmajor][delta][rle][16b]
         //     for (int i = 0; i < SZ; i++) {
         //         // raw(i) = i % 64;
         //         // raw(i) = (i % 2) ? (i + 64) % 128 : 0;
-        //         raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
+        //         // raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
         //     //     raw(i) = (i % 64);
         //     //     // raw(i) = 128;
         //         // raw(i) = (i % 2) ? (i + 64) % 128 : 72;
-        //         // raw(i) = (i % 2) ? (i * 1024) % 65536 : 64;
+        //         raw(i) = (i % 2) ? (i * 512) % 65536 : 64;
+        //         // raw(i) = (i % 2) ? (i * 4096) % 65536 : 64;
         //         // raw(i) = (i % 2) ? 32768 : 64;
         //     }
         //     // raw.setRandom();

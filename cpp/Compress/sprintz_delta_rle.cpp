@@ -300,7 +300,16 @@ do_rle:
                     header_bit_offset = 0;
                     b = 0;
                     header_dest = (int8_t*)dest;
-                    dest += total_header_bytes;
+                    // dest += total_header_bytes;
+
+
+                    // TODO pretty sure we want this, not the above line...
+                    dest = (int_t*)(((int8_t*)dest) + total_header_bytes);
+                    // dest_u8 += total_header_bytes;
+                    // dest = (int_t8)dest_u8;
+
+
+
                     memset(header_bytes, 0, total_header_bytes_padded);
                     memset(header_dest, 0, total_header_bytes);
 

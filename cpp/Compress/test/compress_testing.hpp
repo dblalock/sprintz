@@ -348,9 +348,9 @@ void test_sparse(size_t sz, CompF&& f_comp, DecompF&& f_decomp) {
     raw = orig / (193 << denominator_shift);
     test_compressor<ElemSz>(raw, f_comp, f_decomp, "sparse 56/256");
     raw = orig / (250 << denominator_shift);
-    test_compressor<ElemSz>(raw, f_comp, f_decomp, "sparse ");
+    test_compressor<ElemSz>(raw, f_comp, f_decomp, "sparse 6/256");
     raw = orig / (254 << denominator_shift);
-    test_compressor<ElemSz>(raw, f_comp, f_decomp, "fuzz 0-64");
+    test_compressor<ElemSz>(raw, f_comp, f_decomp, "sparse 2/256");
 }
 
 #define TEST_COMP_DECOMP_PAIR(COMP_FUNC, DECOMP_FUNC)                       \
