@@ -26,7 +26,26 @@
 
 #include "immintrin.h"  // TODO memrep impl without avx2
 
+
 #define DIV_ROUND_UP(X, Y) ( ((X) / (Y)) + (((X) % (Y)) > 0) )
+
+#define CHECK_INT_UINT_TYPES_VALID(int_t, uint_t)               \
+    static_assert(sizeof(uint_t) == sizeof(int_t),              \
+        "uint type and int type sizes must be the same!");      \
+    static_assert(sizeof(uint_t) == 1 || sizeof(uint_t) == 2,   \
+        "Only element sizes of 1 and 2 bytes are supported!");
+
+
+template<int elem_sz> struct ElemSzTraits {};
+template<> struct ElemSzTraits<1> {
+    typedef uint64_t bitwidth_t;
+    typedef int16_t counter_t;
+};
+template<> struct ElemSzTraits<2> {
+    typedef uint32_t bitwidth_t;
+    typedef int32_t counter_t;
+};
+
 
 template<typename T, typename T2>
 static CONSTEXPR inline T round_up_to_multiple(T x, T2 multipleof) {
@@ -41,6 +60,13 @@ static CONSTEXPR inline auto div_round_up(T x, T2 y) -> decltype(x + y) {
     // return remainder ? (x + multipleof - remainder) : x;
 }
 
+
+template<typename int_t>
+static inline int_t icopysign(int_t sign_of, int_t val) {
+    int_t mask = sign_of >> ((8 * sizeof(int_t)) - 1);
+    int_t maybe_negated = (val ^ mask) - mask;
+    return sign_of != 0 ? maybe_negated : 0; // let compiler optimize this
+}
 
 static inline int8_t copysign_i8(int8_t sign_of, int8_t val) {
     int8_t mask = sign_of >> 7; // technically UB, but sane compilers do this

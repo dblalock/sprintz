@@ -88,19 +88,5 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim_16b(
 int64_t decompress_rowmajor_delta_rle_lowdim_16b(
     const int16_t* src, uint16_t* dest);
 
-// ------------------------ misc
-
-// TODO this isn't a great place for this since not part of the API
-template<int elem_sz> struct ElemSzTraits {};
-template<> struct ElemSzTraits<1> { typedef uint64_t bitwidth_t; };
-template<> struct ElemSzTraits<2> { typedef uint32_t bitwidth_t; };
-
-// TODO also not a good place for this
-#define CHECK_INT_UINT_TYPES_VALID(int_t, uint_t)               \
-    static_assert(sizeof(uint_t) == sizeof(int_t),              \
-        "uint type and int type sizes must be the same!");      \
-    static_assert(sizeof(uint_t) == 1 || sizeof(uint_t) == 2,   \
-        "Only element sizes of 1 and 2 bytes are supported!");  \
-
 
 #endif

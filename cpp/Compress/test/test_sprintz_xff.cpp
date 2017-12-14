@@ -148,7 +148,9 @@ TEST_CASE("xff_rle_rowmajor_8b (with compression)", "[rowmajor][xff][rle]") {
     }
 }
 
-TEST_CASE("xff_rle_rowmajor_lowdim_8b (with compression)", "[rowmajor][xff][rle][lowdim]") {
+TEST_CASE("xff_rle_rowmajor_lowdim_8b (with compression)",
+    "[rowmajor][xff][rle][lowdim][dbg]")
+{
     printf("executing rowmajor compress xff + rle lowdim test\n");
 
     // int ndims = 4;
@@ -159,11 +161,11 @@ TEST_CASE("xff_rle_rowmajor_lowdim_8b (with compression)", "[rowmajor][xff][rle]
         printf("---- ndims = %d\n", ndims);
         CAPTURE(ndims);
         auto comp = [ndims](uint8_t* src, size_t len, int8_t* dest) {
-            return compress8b_rowmajor_xff_rle_lowdim(src, (uint32_t)len, dest, ndims);
+            return compress_rowmajor_xff_rle_lowdim_8b(src, (uint32_t)len, dest, ndims);
 //            return compress8b_rowmajor_xff(src, (uint32_t)len, dest, ndims);
         };
         auto decomp = [](int8_t* src, uint8_t* dest) {
-            return decompress8b_rowmajor_xff_rle_lowdim(src, dest);
+            return decompress_rowmajor_xff_rle_lowdim_8b(src, dest);
 //            return decompress8b_rowmajor_xff(src, dest);
         };
 

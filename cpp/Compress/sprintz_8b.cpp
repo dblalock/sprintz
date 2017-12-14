@@ -86,7 +86,7 @@ int64_t sprintz_compress_xff_8b(const uint8_t* src, uint32_t len, int8_t* dest,
                                   uint16_t ndims, bool write_size)
 {
     #define LOW_DIMS_CASE(NDIMS)                                    \
-        case NDIMS: return compress8b_rowmajor_xff_rle_lowdim(      \
+        case NDIMS: return compress_rowmajor_xff_rle_lowdim_8b(      \
             src, len, dest, NDIMS, write_size);
 
     #define CASE(NDIMS)                                             \
@@ -106,7 +106,7 @@ int64_t sprintz_decompress_xff_8b(const int8_t* src, uint8_t* dest) {
     src += read_metadata_rle_8b(src, &ndims, &ngroups, &remaining_len);
 
     #define LOW_DIMS_CASE(NDIMS)                                    \
-        case NDIMS: return decompress8b_rowmajor_xff_rle_lowdim(    \
+        case NDIMS: return decompress_rowmajor_xff_rle_lowdim_8b(    \
             src, dest, NDIMS, ngroups, remaining_len);
 
     #define CASE(NDIMS)                                             \

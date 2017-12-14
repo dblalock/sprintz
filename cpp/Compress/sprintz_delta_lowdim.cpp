@@ -145,8 +145,6 @@ int64_t compress_rowmajor_delta_rle_lowdim(const uint_t* src, uint32_t len,
         int b = 0;
         while (b < group_sz_blocks) { // for each block
 
-            // if (debug) printf("made it to here... b = %d\n", b);
-
             // ------------------------ compute info for each stripe
             uint32_t total_dims_nbits = 0;
             for (uint16_t dim = 0; dim < ndims; dim++) {
@@ -230,16 +228,13 @@ do_rle:
             if (run_length_nblocks > 0) { // just finished a run
                 if (debug) { printf("---- %d.%d nbits: ", (int)ngroups - 1, b); dump_bytes(dims_nbits, ndims); }
                 if (debug) { printf("compressing rle block of length %d ending at offset %d\n", run_length_nblocks, (int)(src - orig_src)); }
-                // printf("initial header bit offset: %d\n", header_bit_offset);
                 b++;
 
                 uint8_t* dest_u8 = (uint8_t*)dest;
                 *dest_u8 = run_length_nblocks & 0x7f; // bottom 7 bits
-                // printf("wrote low byte: "); dump_bits(*dest);
                 dest_u8++;
                 if (run_length_nblocks > 0x7f) { // need another byte
                     *(dest_u8-1) |= 0x80; // set MSB of previous byte
-                    // printf("adding another byte to encode run length\n");
                     *dest_u8 = (uint8_t)(run_length_nblocks >> 7);
                     dest_u8++;
                 }
@@ -290,20 +285,11 @@ do_rle:
             for (uint16_t dim = 0; dim < ndims; dim++) {
                 uint16_t byte_offset = header_bit_offset >> 3;
                 uint8_t bit_offset = header_bit_offset & 0x07;
-
                 uint8_t write_nbits = dims_nbits[dim] - (dims_nbits[dim] == elem_sz_nbits);
                 *(uint32_t*)(header_dest + byte_offset) |= \
                         write_nbits << bit_offset;
-                // if (elem_sz == 1) {
-                //     *(uint32_t*)(header_dest + byte_offset) |= \
-                //         write_nbits << bit_offset;
-                // } else {
-                //     *(uint64_t*)(header_dest + byte_offset) |= \
-                //         write_nbits << bit_offset;
-                // }
                 header_bit_offset += nbits_sz_bits;
             }
-            // if (debug) { printf("dims nbits: "); dump_
 
             // ------------------------ write out block data
 
