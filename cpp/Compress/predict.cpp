@@ -422,7 +422,7 @@ uint32_t decode_xff_rowmajor(const int_t* src, uint32_t len, uint_t* dest,
                     prev_vals = vals;
                 }
                 // mean of gradients in block, for even and odd indices
-                const uint8_t rshift = 8 + log2_block_sz;
+                const uint8_t rshift = 8 + (log2_block_sz - log2_learning_downsample);
                 __m256i even_grads = _mm256_srai_epi16(
                     _mm256_slli_epi16(gradients_sum, 8), rshift);
                 __m256i odd_grads = _mm256_srai_epi16(gradients_sum, rshift);

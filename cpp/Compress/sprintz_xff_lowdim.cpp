@@ -63,20 +63,16 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
     static const uint8_t block_sz = 1 << log2_block_sz;
     static const uint32_t min_data_size = 8 * block_sz * group_sz_blocks;
 
-    // const uint8_t* orig_src = src;
-    // int8_t* orig_dest = dest;
-    // const uint8_t* src_end = src + len;
     const uint_t* orig_src = src;
     const uint_t* src_end = src + len;
     int_t* orig_dest = dest;
 
-    // int gDebug = debug;
-    // int debug = (elem_sz == 2) ? gDebug : 0;
+     int gDebug = debug;
+     int debug = (elem_sz == 1) ? gDebug : 0;
 
     // ================================ one-time initialization
 
     // ------------------------ stats derived from ndims
-    // uint16_t nstripes = ndims / stripe_sz + ((ndims % stripe_sz) > 0);
     uint32_t group_sz = ndims * block_sz * group_sz_blocks;
     uint32_t total_header_bits = ndims * nbits_sz_bits * group_sz_blocks;
     uint32_t total_header_bytes = DIV_ROUND_UP(total_header_bits, 8);
@@ -89,11 +85,11 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
             // printf("saw original data:\n"); dump_elements(src, len, ndims);
             // printf("saw original data:\n"); dump_elements(src, 16, ndims);
             // printf("saw original data:\n"); dump_bytes(src, 32, ndims * elem_sz);
-            printf("saw original data:\n"); dump_bytes(src, 96, ndims * elem_sz);
+            // printf("saw original data:\n"); dump_bytes(src, 96, ndims * elem_sz);
+            printf("saw original data:\n"); dump_bytes(src, 48, ndims * elem_sz);
         }
     }
     if (debug > 1) { printf("total header bits, bytes: %d, %d\n", total_header_bits, total_header_bytes); }
-
 
     bool invalid_ndims = ndims == 0;
     invalid_ndims |= (elem_sz == 1 && ndims > 4);
@@ -128,7 +124,6 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
     int_t*  errs             = (int_t* )calloc(elem_sz, (block_sz + 2) * ndims);
     uint_t* prev_vals_ar     = (uint_t*)(errs + (block_sz + 0) * ndims);
     int_t*  prev_deltas_ar   = (int_t* )(errs + (block_sz + 1) * ndims);
-    // counter_t* coef_counters_ar = (counter_t*)(errs + (block_sz + 2) * ndims);
     counter_t* coef_counters_ar = (counter_t*)calloc(sizeof(counter_t), ndims);
 
     // ================================ main loop
@@ -142,6 +137,8 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
 
         // printf("==== group %d\n", (int)ngroups - 1);
 
+        debug = debug && (ngroups <= 2);
+
         // int8_t* header_dest = dest;
         // dest += total_header_bytes;
         int8_t* header_dest = (int8_t*)dest;
@@ -154,7 +151,7 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
         int b = 0;
         while (b < group_sz_blocks) { // for each block
 
-            // printf("---- %d.%d\n", ngroups - 1, b);
+            if (debug) printf("---- %d.%d\n", ngroups - 1, b);
 
             // ------------------------ compute info for each stripe
             uint32_t total_dims_nbits = 0;
@@ -182,6 +179,7 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
                     uint_t bits = ZIGZAG_ENCODE_SCALAR(err);
 
                     if (i % learning_downsample == learning_downsample - 1) {
+                        if (debug) printf("prev delta: %d\n", prev_delta);
                         grad_sum += icopysign(err, prev_delta);
                     }
 
@@ -201,14 +199,16 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
                 dims_nbits[dim] = max_nbits;
                 total_dims_nbits += max_nbits;
 
-                // printf("grad_sum: %d\n", grad_sum);
-                // printf("counter before write: %d\n", coef_counters_ar[0]);
+                if (debug) { printf("counter before write: %d\n", coef_counters_ar[dim]); }
 
                 static const uint8_t shift_to_get_mean =
                     log2_block_sz - log2_learning_downsample;
                 coef_counters_ar[dim] += grad_sum >> shift_to_get_mean;
 
-                // printf("counter: %d\n", coef_counters_ar[dim]);
+                if (debug) {
+                    printf("grad_sum: %d\n", grad_sum);
+                    printf("counter: %d\n", coef_counters_ar[dim]);
+                }
             }
 
 just_read_block:
@@ -312,7 +312,7 @@ do_rle:
 
             // ------------------------ write out header bits for this block
 
-            if (debug) { printf("--- %d.%d nbits: ", (int)ngroups - 1, b); dump_bytes(dims_nbits, ndims); }
+            // if (debug) { printf("--- %d.%d nbits: ", (int)ngroups - 1, b); dump_bytes(dims_nbits, ndims); }
 
             for (uint16_t dim = 0; dim < ndims; dim++) {
                 uint16_t byte_offset = header_bit_offset >> 3;
@@ -438,8 +438,8 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
         return -1;
     }
 
-    // int gDebug = debug;
-    // int debug = (elem_sz == 2) ? gDebug : 0;
+    int gDebug = debug;
+    int debug = (elem_sz == 1) ? gDebug : 0;
 
     // ================================ one-time initialization
 
@@ -452,10 +452,11 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
     if (debug) {
         int64_t min_orig_len = ngroups * group_sz_blocks * block_sz * ndims;
         printf("-------- decompression (orig_len = %lld)\n", (int64_t)min_orig_len);
-        if (debug > 2) {
+        if (debug > 3) {
             printf("saw compressed data (with possible missing data if runs):\n");
             // dump_bytes(src, min_orig_len + 8, ndims * elem_sz);
-            dump_bytes(src, 32, ndims * elem_sz);
+            // dump_bytes(src, 32, ndims * elem_sz);
+            dump_bytes(src, 48, ndims * elem_sz);
             // dump_elements(src, min_orig_len + 4, ndims);
         }
     }
@@ -501,6 +502,8 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
         src = (int_t*)(((int8_t*)src) + total_header_bytes);
 
         uint32_t header_bit_offset = 0;
+
+        debug = debug && (g <= 2);
 
         // ------------------------ create unpacked headers array
         // unpack headers for all the blocks; note that this is tricky
@@ -781,28 +784,37 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
             _mm256_storeu_si256((__m256i*)(dest + I * ndims), vals);            \
             prev_vals = vals; }
     /*/
-        #define LOOP_BODY(I, SHIFT, DELTA_ARRAY)                                \
-        {   __m256i shifted_errs = _mm256_srli_si256(DELTA_ARRAY, SHIFT);       \
-            __m256i even_prev_deltas = _mm256_srai_epi16(                       \
-                _mm256_slli_epi16(prev_deltas, 8), 8);                          \
-            __m256i odd_prev_deltas = _mm256_srai_epi16(                        \
-                prev_deltas, 8);                                                \
-                                                                                \
-            __m256i even_predictions = _mm256_mullo_epi16(                      \
-                even_prev_deltas, filter_coeffs_even);                          \
-            __m256i odd_predictions = _mm256_mullo_epi16(                       \
-                odd_prev_deltas, filter_coeffs_odd);                            \
-            __m256i vpredictions = _mm256_blendv_epi8(odd_predictions,          \
-                _mm256_srli_epi16(even_predictions, 8), low_mask);              \
-                                                                                \
-            __m256i vdeltas = _mm256_add_epi8(shifted_errs, vpredictions);      \
-            vals = _mm256_add_epi8(prev_vals, vdeltas);                         \
-                                                                                \
-            _mm256_storeu_si256((__m256i*)(dest + I * ndims), vals);            \
-            prev_deltas = vdeltas;                                              \
-            prev_vals = vals;                                                   \
-        }
+            #define LOOP_BODY(I, SHIFT, DELTA_ARRAY)                          \
+            {   __m256i shifted_errs = _mm256_srli_si256(DELTA_ARRAY, SHIFT); \
+                __m256i even_prev_deltas = _mm256_srai_epi16(                 \
+                    _mm256_slli_epi16(prev_deltas, 8), 8);                    \
+                __m256i odd_prev_deltas = _mm256_srai_epi16(                  \
+                    prev_deltas, 8);                                          \
+                                                                              \
+                __m256i even_predictions = _mm256_mullo_epi16(                \
+                    even_prev_deltas, filter_coeffs_even);                    \
+                __m256i odd_predictions = _mm256_mullo_epi16(                 \
+                    odd_prev_deltas, filter_coeffs_odd);                      \
+                __m256i vpredictions = _mm256_blendv_epi8(odd_predictions,    \
+                    _mm256_srli_epi16(even_predictions, 8), low_mask);        \
+                                                                              \
+                if (I % learning_downsample == learning_downsample - 1) {     \
+                    __m256i gradients = _mm256_sign_epi8(prev_deltas, shifted_errs); \
+                    gradients_sum = _mm256_add_epi8(gradients_sum, gradients);\
+                }                                                             \
+                                                                              \
+                __m256i vdeltas = _mm256_add_epi8(shifted_errs, vpredictions);\
+                vals = _mm256_add_epi8(prev_vals, vdeltas);                   \
+                                                                              \
+                _mm256_storeu_si256((__m256i*)(dest + I * ndims), vals);      \
+                prev_deltas = vdeltas;                                        \
+                prev_vals = vals;                                             \
+            }
     //*/
+
+        /*if (debug) dump_m256i<int8_t>(prev_deltas);               \
+        if (debug) dump_m256i<int8_t>(shifted_errs);                     \*/
+
                 case 1:
                     // printf("---- %d.%d\n", g, b);
                     // printf("coef: %d\n", coef);
@@ -870,7 +882,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                     _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
                     break;
 
-        #undef LOOP_BODY
+            #undef LOOP_BODY
                 }
 
                 if (ndims > 1) {
@@ -885,6 +897,15 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                     coef_counters_odd = _mm256_add_epi16(coef_counters_odd, odd_grads);
                     _mm256_storeu_si256(even_counters_ptr, coef_counters_even);
                     _mm256_storeu_si256(odd_counters_ptr, coef_counters_odd);
+
+                    if (debug) {
+                        dump_m256i<int8_t>(gradients_sum);
+                        printf("grad_sum[0], grad_sum[1] = %d, %d\n",
+                            _mm256_extract_epi8(gradients_sum, 0),
+                            _mm256_extract_epi8(gradients_sum, 1));
+                        printf("counters[0], counters[1] = %d, %d\n",
+                            *(counter_t*)coeffs_ar_even, *(counter_t*)coeffs_ar_odd);
+                    }
                 }
 
             } else if (elem_sz == 2) {

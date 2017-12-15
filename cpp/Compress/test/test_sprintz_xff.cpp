@@ -153,9 +153,9 @@ TEST_CASE("xff_rle_rowmajor_lowdim_8b (with compression)",
 {
     printf("executing rowmajor compress xff + rle lowdim test\n");
 
-    int ndims = 1;
-    auto ndims_list = ar::range(ndims, ndims + 1);
-    // auto ndims_list = ar::range(1, 4 + 1);
+    // int ndims = 2;
+    // auto ndims_list = ar::range(ndims, ndims + 1);
+    auto ndims_list = ar::range(1, 4 + 1);
     for (auto _ndims : ndims_list) {
         auto ndims = (uint16_t)_ndims;
         printf("---- ndims = %d\n", ndims);
@@ -191,9 +191,9 @@ TEST_CASE("xff_rle_rowmajor_lowdim_8b (with compression)",
         // Vec_u8 raw(SZ);
         // {
         //     for (int i = 0; i < SZ; i++) {
-        //         raw(i) = i % 64;
+        //         // raw(i) = i % 64;
         //         // raw(i) = (i % 2) ? (i + 64) % 128 : 0;
-        //         // raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
+        //         raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
         //     //     // raw(i) = 128;
         //         // raw(i) = (i % 2) ? (i + 64) % 128 : 72;
         //         // raw(i) = (i % 2) ? (i * 512) % 65536 : 64;
