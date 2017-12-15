@@ -153,14 +153,14 @@ TEST_CASE("xff_rle_rowmajor_lowdim_8b (with compression)",
 {
     printf("executing rowmajor compress xff + rle lowdim test\n");
 
-    // int ndims = 4;
-    // auto ndims_list = ar::range(ndims, ndims + 1);
-    auto ndims_list = ar::range(1, 4 + 1);
+    int ndims = 1;
+    auto ndims_list = ar::range(ndims, ndims + 1);
+    // auto ndims_list = ar::range(1, 4 + 1);
     for (auto _ndims : ndims_list) {
         auto ndims = (uint16_t)_ndims;
         printf("---- ndims = %d\n", ndims);
         CAPTURE(ndims);
-        auto comp = [ndims](uint8_t* src, size_t len, int8_t* dest) {
+        auto comp = [ndims](const uint8_t* src, size_t len, int8_t* dest) {
             return compress_rowmajor_xff_rle_lowdim_8b(src, (uint32_t)len, dest, ndims);
 //            return compress8b_rowmajor_xff(src, (uint32_t)len, dest, ndims);
         };
@@ -168,34 +168,42 @@ TEST_CASE("xff_rle_rowmajor_lowdim_8b (with compression)",
             return decompress_rowmajor_xff_rle_lowdim_8b(src, dest);
 //            return decompress8b_rowmajor_xff(src, dest);
         };
+        test_codec<1>(comp, decomp);
 
-        // TEST_SQUARES_INPUT(7, comp, decomp);
-//         TEST_SQUARES_INPUT(16 * ndims, comp, decomp);
-        //        TEST_SQUARES_INPUT(16 * ndims, comp, decomp);
-        // TEST_SQUARES_INPUT(24 * ndims, comp, decomp);
-        //                 TEST_SQUARES_INPUT(ndims * 8, comp, decomp);
-        //         TEST_SIMPLE_INPUTS(ndims * 2, comp, decomp);
-        //         TEST_SIMPLE_INPUTS(ndims * 16, comp, decomp);
-        //         TEST_KNOWN_INPUT(ndims * 16, comp, decomp);
-        // TEST_KNOWN_INPUT(ndims * 32, comp, decomp);
-//        TEST_SPARSE(120 * ndims, comp, decomp);
-//        TEST_SPARSE(300 * ndims, comp, decomp);
-//        TEST_SPARSE(4096 * ndims, comp, decomp);
-        TEST_COMP_DECOMP_PAIR_NO_SECTIONS(comp, decomp);
-//        TEST_FUZZ(128 * ndims, comp, decomp);
-//        TEST_COMP_DECOMP_PAIR(comp, decomp);
+        // uint32_t sz = 128;
+        // static const int ElemSz = 2;
+        // using UVec = typename elemsize_traits<ElemSz>::uvec_t;
+        // uint32_t denominator_shift = 8 * (ElemSz - 1);
+        // UVec orig(sz);
+        // UVec raw(sz);
+        // srand(12345);
+        // orig.setRandom();
+        // // raw = orig / (193 << denominator_shift);
+        // // test_compressor<ElemSz>(raw, f_comp, f_decomp, "sparse 56/256");
+        // raw = orig / (250 << denominator_shift);
+        // test_compressor<ElemSz>(raw, comp, decomp, "sparse 6/256");
+        // // raw = orig / (254 << denominator_shift);
+        // // test_compressor<ElemSz>(raw, f_comp, f_decomp, "fuzz 0-64");
 
-        // #define COMP_FUNC comp
-        // #define DECOMP_FUNC decomp
-
-        // size_t SZ = 128;
+        //  // auto SZ = ndim s * 16;
+        // auto SZ = 128;
+        // srand(123);
         // Vec_u8 raw(SZ);
         // {
-        //     // for (int i = 0; i < SZ; i++) { raw(i) = i % 64; }
-        //     // for (int i = 0; i < SZ; i++) { raw(i) = (i % 8) * (i % 8); }
-        //     for (int i = 0; i < SZ; i++) { raw(i) = (i % 6) * (i % 6); }
-        //     // for (int i = 0; i < SZ; i++) { raw(i) = 6; }
-        //     TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);
+        //     for (int i = 0; i < SZ; i++) {
+        //         raw(i) = i % 64;
+        //         // raw(i) = (i % 2) ? (i + 64) % 128 : 0;
+        //         // raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
+        //     //     // raw(i) = 128;
+        //         // raw(i) = (i % 2) ? (i + 64) % 128 : 72;
+        //         // raw(i) = (i % 2) ? (i * 512) % 65536 : 64;
+        //         // raw(i) = (i % 2) ? (i * 4096) % 65536 : 64;
+        //         // raw(i) = (i % 2) ? 32768 : 64;
+        //     }
+        //     // raw.setRandom();
+
+        //     // test_compressor<2>(raw, comp, decomp, "debug test", true);
+        //     test_compressor<1>(raw, comp, decomp, "debug test");
         // }
     }
 }

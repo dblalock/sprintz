@@ -33,6 +33,7 @@ static const int kDefaultGroupSzBlocks = 2;
 
 static const int debug = 0;
 // static const int debug = 3;
+// static const int debug = 4;
 
 // ------------------------------------------------ delta + rle low ndims
 
@@ -69,8 +70,8 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
     const uint_t* src_end = src + len;
     int_t* orig_dest = dest;
 
-    int gDebug = debug;
-    int debug = (elem_sz == 2) ? gDebug : 0;
+    // int gDebug = debug;
+    // int debug = (elem_sz == 2) ? gDebug : 0;
 
     // ================================ one-time initialization
 
@@ -153,6 +154,8 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
         int b = 0;
         while (b < group_sz_blocks) { // for each block
 
+            // printf("---- %d.%d\n", ngroups - 1, b);
+
             // ------------------------ compute info for each stripe
             uint32_t total_dims_nbits = 0;
             for (uint16_t dim = 0; dim < ndims; dim++) {
@@ -163,8 +166,11 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
                 int_t prev_delta = prev_deltas_ar[dim];
 
                 const uint8_t shft = elem_sz_nbits - 4;
+                counter_t counter = coef_counters_ar[dim];
                 counter_t coef = (coef_counters_ar[dim] >> (learning_shift + shft)) << shft;
                 int_t grad_sum = 0;
+
+                // printf("coef: %d\n", coef);
 
                 for (uint8_t i = 0; i < block_sz; i++) {
                     uint32_t in_offset = (i * ndims) + dim; // rowmajor
@@ -195,11 +201,14 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
                 dims_nbits[dim] = max_nbits;
                 total_dims_nbits += max_nbits;
 
-                // TODO uncomment this
-                //
-                // static const uint8_t shift_to_get_mean =
-                //     log2_block_sz - log2_learning_downsample;
-                // coef_counters_ar[dim] += grad_sum >> shift_to_get_mean;
+                // printf("grad_sum: %d\n", grad_sum);
+                // printf("counter before write: %d\n", coef_counters_ar[0]);
+
+                static const uint8_t shift_to_get_mean =
+                    log2_block_sz - log2_learning_downsample;
+                coef_counters_ar[dim] += grad_sum >> shift_to_get_mean;
+
+                // printf("counter: %d\n", coef_counters_ar[dim]);
             }
 
 just_read_block:
@@ -371,9 +380,6 @@ main_loop_end:
     uint16_t remaining_len = (uint16_t)(src_end - src);
     if (write_size) {
         write_metadata_rle(orig_dest, ndims, ngroups, remaining_len);
-        // *(uint32_t*)orig_dest = ngroups;
-        // *(uint16_t*)(orig_dest + 4) = (uint16_t)remaining_len;
-        // *(uint16_t*)(orig_dest + 6) = ndims;
     }
     // printf("trailing len: %d\n", (int)remaining_len);
     memcpy(dest, src, remaining_len * elem_sz);
@@ -432,8 +438,8 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
         return -1;
     }
 
-    int gDebug = debug;
-    int debug = (elem_sz == 2) ? gDebug : 0;
+    // int gDebug = debug;
+    // int debug = (elem_sz == 2) ? gDebug : 0;
 
     // ================================ one-time initialization
 
@@ -488,7 +494,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
 
     // ================================ main loop
 
-    for (uint64_t g = 0; g < ngroups; g++) {
+    for (uint32_t g = 0; g < ngroups; g++) {
         // const uint8_t* header_src = (uint8_t*)src;
         // src += total_header_bytes;
         const uint8_t* header_src = (const uint8_t*)src;
@@ -755,7 +761,12 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                 // variables for 1D case
                 uint8_t prev_val = prev_vals_ar[0];
                 int8_t prev_delta = prev_deltas_ar[0];
-                int16_t coef = filter_coeffs_even[0];
+                const uint8_t shft = elem_sz_nbits - 4;
+                counter_t* counters_ar = (counter_t*)coeffs_ar_even;
+                counter_t counter = counters_ar[0];
+                // printf("raw counter: %d\n", counter);
+                // printf("raw counter: %d\n", counter);
+                counter_t coef = (counter >> (learning_shift + shft)) << shft;
                 int_t grad_sum = 0;
 
                 switch (ndims) {
@@ -793,6 +804,8 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
         }
     //*/
                 case 1:
+                    // printf("---- %d.%d\n", g, b);
+                    // printf("coef: %d\n", coef);
                     for (uint8_t i = 0; i < block_sz; i++) {
                         int_t err = _mm256_extract_epi8(verrs, i);
                         int_t prediction = (((int16_t)prev_delta) * coef) >> 8;
@@ -810,9 +823,15 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                     prev_vals_ar[0] = prev_val;
                     prev_deltas_ar[0] = prev_delta;
 
+                    // printf("grad_sum: %d\n", grad_sum);
+                    // printf("counter before write: %d\n", coeffs_ar_even[0]);
+
                     static const uint8_t shift_to_get_mean =
                         log2_block_sz - log2_learning_downsample;
-                    coeffs_ar_even[0] += grad_sum >> shift_to_get_mean;
+                    // *(counter_t*)coeffs_ar_even += grad_sum >> shift_to_get_mean;
+                    counters_ar[0] += grad_sum >> shift_to_get_mean;
+
+                    // printf("counter: %d\n", coeffs_ar_even[0]);
 
                     break;
                 case 2: // everything fits in lower 128b
@@ -854,17 +873,19 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
         #undef LOOP_BODY
                 }
 
-                // mean of gradients in block, for even and odd indices
-                const uint8_t rshift = 8 + log2_block_sz - log2_learning_downsample;
-                __m256i even_grads = _mm256_srai_epi16(
-                    _mm256_slli_epi16(gradients_sum, 8), rshift);
-                __m256i odd_grads = _mm256_srai_epi16(gradients_sum, rshift);
+                if (ndims > 1) {
+                    // mean of gradients in block, for even and odd indices
+                    const uint8_t rshift = 8 + log2_block_sz - log2_learning_downsample;
+                    __m256i even_grads = _mm256_srai_epi16(
+                        _mm256_slli_epi16(gradients_sum, 8), rshift);
+                    __m256i odd_grads = _mm256_srai_epi16(gradients_sum, rshift);
 
-                // store updated coefficients (or, technically, the counters)
-                coef_counters_even = _mm256_add_epi16(coef_counters_even, even_grads);
-                coef_counters_odd = _mm256_add_epi16(coef_counters_odd, odd_grads);
-                _mm256_storeu_si256(even_counters_ptr, coef_counters_even);
-                _mm256_storeu_si256(odd_counters_ptr, coef_counters_odd);
+                    // store updated coefficients (or, technically, the counters)
+                    coef_counters_even = _mm256_add_epi16(coef_counters_even, even_grads);
+                    coef_counters_odd = _mm256_add_epi16(coef_counters_odd, odd_grads);
+                    _mm256_storeu_si256(even_counters_ptr, coef_counters_even);
+                    _mm256_storeu_si256(odd_counters_ptr, coef_counters_odd);
+                }
 
             } else if (elem_sz == 2) {
 
