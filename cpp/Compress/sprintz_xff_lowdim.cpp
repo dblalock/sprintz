@@ -162,7 +162,8 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
                 uint_t prev_val = prev_vals_ar[dim];
                 int_t prev_delta = prev_deltas_ar[dim];
 
-                counter_t coef = (coef_counters_ar[dim] >> (learning_shift + 4)) << 4;
+                const uint8_t shft = elem_sz_nbits - 4;
+                counter_t coef = (coef_counters_ar[dim] >> (learning_shift + shft)) << shft;
                 int_t grad_sum = 0;
 
                 for (uint8_t i = 0; i < block_sz; i++) {
@@ -175,7 +176,6 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
                     uint_t bits = ZIGZAG_ENCODE_SCALAR(err);
 
                     if (i % learning_downsample == learning_downsample - 1) {
-                        // grad_sum += copysign_i8(err, prev_delta);
                         grad_sum += icopysign(err, prev_delta);
                     }
 
@@ -194,6 +194,12 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
 
                 dims_nbits[dim] = max_nbits;
                 total_dims_nbits += max_nbits;
+
+                // TODO uncomment this
+                //
+                // static const uint8_t shift_to_get_mean =
+                //     log2_block_sz - log2_learning_downsample;
+                // coef_counters_ar[dim] += grad_sum >> shift_to_get_mean;
             }
 
 just_read_block:
@@ -380,69 +386,83 @@ int64_t compress_rowmajor_xff_rle_lowdim_8b(const uint8_t* src, uint32_t len,
     return compress_rowmajor_xff_rle_lowdim(src, len, dest, ndims, write_size);
 }
 
-// int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src, uint8_t* dest) {
-// int64_t decompress8b_rowmajor_xff_rle_lowdim(const int8_t* src,
+template<typename int_t, typename uint_t>
 SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
-    const int8_t* src, uint8_t* dest, uint16_t ndims, uint64_t ngroups,
+    const int_t* src, uint_t* dest, uint16_t ndims, uint64_t ngroups,
     uint16_t remaining_len)
 {
-    // constants that could, in principle, be changed (but not in this impl)
-    static const uint8_t log2_block_sz = 3;
-    // static const uint8_t block_sz = 8;
-    static const uint8_t vector_sz = 32;
-    static const uint8_t stripe_sz = 8;
-    static const uint8_t nbits_sz_bits = 3;
-    static const __m256i low_mask = _mm256_set1_epi16(0xff);
-    // constants that could actually be changed in this impl
-    static const uint8_t group_sz_blocks = kDefaultGroupSzBlocks;
-    static const uint8_t learning_shift = 1;
+    CHECK_INT_UINT_TYPES_VALID(int_t, uint_t);
+    static const uint8_t elem_sz = sizeof(uint_t);
+    static const uint8_t elem_sz_nbits = 8 * elem_sz;
+    static const uint8_t nbits_sz_bits = elem_sz == 1 ? 3 : 4; // XXX {8,16}b
+    typedef typename ElemSzTraits<elem_sz>::bitwidth_t bitwidth_t;
+    typedef typename ElemSzTraits<elem_sz>::counter_t counter_t;
+    // xff constants
     static const uint8_t log2_learning_downsample = 1;
-    // derived constants
+    static const uint8_t learning_shift = 1;
+    static const uint8_t learning_downsample = 1 << log2_learning_downsample;
+    // other constants that could actually be changed in this impl
+    static const uint8_t group_sz_blocks = kDefaultGroupSzBlocks;
+    // misc constants
+    static const uint8_t log2_block_sz = 3;
+    static const uint8_t length_header_nbytes = 8;  // TODO indirect to format.h
+    static const uint8_t stripe_nbytes = 8;
+    static const uint8_t vector_sz_nbytes = 32;
+    static const __m256i low_mask = _mm256_set1_epi16(0xff);
+    static const __m256i low_mask_epi32 = _mm256_set1_epi32(0xffff);
+    // misc derived consts
     static const uint8_t block_sz = 1 << log2_block_sz;
     static const int group_sz_per_dim = block_sz * group_sz_blocks;
-    const uint8_t elem_sz = sizeof(*src);
-    static const uint8_t learning_downsample = 1 << log2_learning_downsample;
-    static const uint8_t stripe_header_sz = nbits_sz_bits * stripe_sz / 8;
+    static const uint8_t stripe_sz = stripe_nbytes / elem_sz;
+    static const uint8_t stripe_header_sz = nbits_sz_bits * stripe_nbytes / 8;
     static const uint8_t nbits_sz_mask = (1 << nbits_sz_bits) - 1;
     static const uint64_t kHeaderUnpackMask = TILE_BYTE(nbits_sz_mask);
     static const size_t min_data_size = 8 * block_sz * group_sz_blocks;
+    static const uint8_t vector_sz = vector_sz_nbytes / elem_sz;
 
-    uint8_t* orig_dest = dest;
+    // uint8_t* orig_dest = dest;
     // const int8_t* orig_src = src;
+    uint_t* orig_dest = dest;
+
+    bool invalid_ndims = ndims == 0;
+    invalid_ndims |= (elem_sz == 1 && ndims > 4);
+    invalid_ndims |= (elem_sz == 2 && ndims > 2);
+    if (invalid_ndims) {
+        printf("ERROR: decompress_rowmajor_delta_rle_lowdim: invalid ndims: %d\n", ndims);
+        return -1;
+    }
+
+    int gDebug = debug;
+    int debug = (elem_sz == 2) ? gDebug : 0;
 
     // ================================ one-time initialization
 
     bool just_cpy = (ngroups == 0) && remaining_len < min_data_size;
     if (just_cpy) { // if data was too small or failed to compress
-        memcpy(dest, src, (size_t)remaining_len);
+        memcpy(dest, src, (size_t)remaining_len * elem_sz);
         return remaining_len;
-    }
-    if (ndims == 0) {
-        perror("ERROR: decompress8b_rowmajor_xff_rle_lowdim: Received ndims of 0!");
-        return 0;
     }
 
     if (debug) {
         int64_t min_orig_len = ngroups * group_sz_blocks * block_sz * ndims;
         printf("-------- decompression (orig_len = %lld)\n", (int64_t)min_orig_len);
-        if (debug > 3) {
+        if (debug > 2) {
             printf("saw compressed data (with possible missing data if runs):\n");
-            dump_bytes(src, min_orig_len + 8);
+            // dump_bytes(src, min_orig_len + 8, ndims * elem_sz);
+            dump_bytes(src, 32, ndims * elem_sz);
+            // dump_elements(src, min_orig_len + 4, ndims);
         }
     }
 
     // ------------------------ stats derived from ndims
     // header stats
     uint32_t nheader_vals = ndims * group_sz_blocks;
-    uint32_t nheader_stripes = nheader_vals / stripe_sz + \
-        ((nheader_vals % stripe_sz) > 0);
+    uint32_t nheader_stripes = DIV_ROUND_UP(nheader_vals, stripe_nbytes);
     uint32_t total_header_bits = ndims * nbits_sz_bits * group_sz_blocks;
-    uint32_t total_header_bytes = (total_header_bits / 8) + ((total_header_bits % 8) > 0);
-    uint32_t group_header_sz = nheader_vals * elem_sz;
+    uint32_t total_header_bytes = DIV_ROUND_UP(total_header_bits, 8);
 
     // stats for main decompression loop
     uint32_t group_sz = ndims * group_sz_per_dim;
-    // uint16_t nstripes = ndims / stripe_sz + ((ndims % stripe_sz) > 0);
     uint32_t padded_ndims = round_up_to_multiple(ndims, vector_sz);
     uint16_t nvectors = padded_ndims / vector_sz + ((padded_ndims % vector_sz) > 0);
 
@@ -450,27 +470,31 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
     // allocate temp vars of minimal possible size such that we can
     // do vector loads and stores (except bitwidths, which are u64s so
     // that we can store directly after sad_epu8)
-    uint8_t*  headers = (uint8_t*) calloc(1, group_header_sz);
+    // uint8_t*  headers = (uint8_t*) calloc(1, group_header_sz);
+    uint8_t*  headers = (uint8_t*)calloc(1, total_header_bytes);
 
     // extra row in errs is to store last decoded values
     // TODO just special case very first row
-    // uint8_t* errs = (uint8_t*)calloc(block_sz * padded_ndims, 1);
-    // uint8_t* prev_vals_ar = (uint8_t*)calloc(padded_ndims, 1);
-    int8_t* errs_ar = (int8_t*)calloc((block_sz + 4) * padded_ndims, 1);
-    uint8_t* prev_vals_ar = (uint8_t*)(errs_ar + (block_sz + 0) * padded_ndims);
-    int8_t* prev_deltas_ar = (int8_t*)(errs_ar + (block_sz + 1) * padded_ndims);
-    int8_t* coeffs_ar_even = (int8_t*)(errs_ar + (block_sz + 2) * padded_ndims);
-    int8_t* coeffs_ar_odd =  (int8_t*)(errs_ar + (block_sz + 3) * padded_ndims);
+    int_t*  errs_ar          = (int_t* )calloc(elem_sz, (block_sz + 2) * padded_ndims);
+    uint_t* prev_vals_ar     = (uint_t*)(errs_ar + (block_sz + 0) * padded_ndims);
+    int_t*  prev_deltas_ar   = (int_t* )(errs_ar + (block_sz + 1) * padded_ndims);
+    // int8_t* errs_ar = (int8_t*)calloc((block_sz + 4) * padded_ndims, 1);
+    // uint8_t* prev_vals_ar = (uint8_t*)(errs_ar + (block_sz + 0) * padded_ndims);
+    // int8_t* prev_deltas_ar = (int8_t*)(errs_ar + (block_sz + 1) * padded_ndims);
+    int8_t* coeffs_ar_even = (int8_t*)calloc(elem_sz, padded_ndims);
+    int8_t* coeffs_ar_odd = (int8_t*)calloc(elem_sz, padded_ndims);
+    // int8_t* coeffs_ar_even = (int8_t*)(errs_ar + (block_sz + 2) * padded_ndims);
+    // int8_t* coeffs_ar_odd =  (int8_t*)(errs_ar + (block_sz + 3) * padded_ndims);
 
     // ================================ main loop
 
     for (uint64_t g = 0; g < ngroups; g++) {
-        const uint8_t* header_src = (uint8_t*)src;
-        src += total_header_bytes;
+        // const uint8_t* header_src = (uint8_t*)src;
+        // src += total_header_bytes;
+        const uint8_t* header_src = (const uint8_t*)src;
+        src = (int_t*)(((int8_t*)src) + total_header_bytes);
 
         uint32_t header_bit_offset = 0;
-
-        // printf("==== group %d\n", (int)g);
 
         // ------------------------ create unpacked headers array
         // unpack headers for all the blocks; note that this is tricky
@@ -498,7 +522,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
         // uint8_t* header_ptr = headers;
         for (int b = 0; b < group_sz_blocks; b++) { // for each block in group
             uint8_t* header_ptr = headers + (b * ndims);
-            if (debug) { printf("%d.%d nbits: ", (int)g, b); dump_bytes(header_ptr); }
+            if (debug) { printf("---- %d.%d nbits: ", (int)g, b); dump_bytes(header_ptr, ndims); }
 
             // run-length decode if necessary
             bool all_zeros = true;
@@ -506,18 +530,16 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                 all_zeros = all_zeros && (header_ptr[dim] == 0);
             }
             if (all_zeros) {
-                int8_t low_byte = (int8_t)*src;
-                uint8_t high_byte = (uint8_t)*(src + 1);
+                int8_t* src8 = (int8_t*)src;
+                int8_t low_byte = *src8;
+                uint8_t high_byte = (uint8_t)*(src8 + 1);
                 high_byte = high_byte & (low_byte >> 7); // 0 if low msb == 0
                 uint16_t length = (low_byte & 0x7f) | (((uint16_t)high_byte) << 7);
 
                 // write out the run
-                if (g > 0 || b > 0) { // if not at very beginning of data
-                    // const uint8_t* inptr = dest - ndims;
-                    // uint32_t ncopies = length * block_sz;
-                    // memrep(dest, inptr, ndims * elem_sz, ncopies);
-                    // dest += ndims * ncopies;
-
+                bool past_data_start = g > 0 || b > 0;
+                // if (past_data_start) { // if not at very beginning of data
+                if (past_data_start && elem_sz == 1) {
                     __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar);
                     __m256i* prev_deltas_ptr = (__m256i*)(prev_deltas_ar);
 
@@ -537,7 +559,6 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                     filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 4);
 
                     for (int32_t bb = 0; bb < length; bb++) {
-                        // uint8_t prev_val = prev_vals_ar[0];
                         __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
                         __m256i prev_deltas = _mm256_loadu_si256(prev_deltas_ptr);
                         __m256i vals = _mm256_setzero_si256();
@@ -570,8 +591,53 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                         } // for each row
                         _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
                         _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
-
                         dest += ndims * block_sz;
+                    } // for each block
+                } else if (past_data_start && elem_sz == 2) { // errs of 0 at very start -> all zeros
+                    const uint8_t shft = elem_sz_nbits - 4;
+                    if (ndims == 1) {
+                        // const counter_t* counters = (const counter_t*)coeffs_ar_even;
+                        counter_t counter = *(counter_t*)coeffs_ar_even;
+                        counter_t coef = (counter >> (learning_shift + shft)) << shft;
+                        uint_t prev_val = prev_vals_ar[0];
+                        uint_t prev_delta = prev_deltas_ar[0];
+                        for (uint32_t i = 0; i < length * block_sz; i++) {
+                            int_t prediction = (((int32_t)prev_delta) * coef) >> 8;
+                            uint_t val = prev_val + prediction;
+                            *dest = val;
+                            prev_delta = prediction; // since err is 0
+                            prev_val = val;
+                            dest++;
+                        }
+                        prev_deltas_ar[0] = prev_delta;
+                        prev_vals_ar[0] = prev_val;
+                    } else { // assumes ndims == 2
+                        counter_t counter0 = *(counter_t*)coeffs_ar_even;
+                        counter_t counter1 = *(counter_t*)coeffs_ar_odd;
+                        counter_t coef0 = (counter0 >> (learning_shift + shft)) << shft;
+                        counter_t coef1 = (counter1 >> (learning_shift + shft)) << shft;
+                        uint_t prev_val0 = prev_vals_ar[0];
+                        uint_t prev_val1 = prev_vals_ar[1];
+                        uint_t prev_delta0 = prev_deltas_ar[0];
+                        uint_t prev_delta1 = prev_deltas_ar[1];
+                        for (uint32_t i = 0; i < length * block_sz; i++) {
+                            int_t prediction0 = (((int32_t)prev_delta0) * coef0) >> 8;
+                            int_t prediction1 = (((int32_t)prev_delta1) * coef1) >> 8;
+                            uint_t val0 = prev_val0 + prediction0;
+                            uint_t val1 = prev_val1 + prediction1;
+                            *dest = val0;
+                            dest++;
+                            *dest = val1;
+                            dest++;
+                            prev_delta0 = prediction0; // since err is 0
+                            prev_delta1 = prediction1;
+                            prev_val0 = val0;
+                            prev_val1 = val1;
+                        }
+                        prev_deltas_ar[0] = prev_delta0;
+                        prev_deltas_ar[1] = prev_delta1;
+                        prev_vals_ar[0] = prev_val0;
+                        prev_vals_ar[1] = prev_val1;
                     }
                 } else { // errs of 0 at very start -> all zeros
                     size_t num_zeros = length * block_sz * ndims;
@@ -580,8 +646,9 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                 }
                 if (debug) { printf("decompressed rle block of length %d at offset %d\n", length, (int)(dest - orig_dest)); }
 
-                src++;
-                src += (high_byte > 0); // if 0, wasn't used for run length
+                src8++;
+                src8 += (high_byte > 0); // if 0, wasn't used for run length
+                src = (int_t*)src8;
 
                 continue;
             }
@@ -590,177 +657,315 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
 
             // uint8_t* delta_buff = errs + (dim * block_sz);
             for (uint16_t dim = 0; dim < ndims; dim++) {
-                int8_t* outptr = errs_ar + (dim * block_sz);
                 uint8_t nbits = header_ptr[dim];
-                uint64_t mask = kBitpackMasks8[nbits];
-                *((uint64_t*)outptr) = _pdep_u64(*(uint64_t*)src, mask);
+                uint8_t true_nbits = nbits + (nbits == (elem_sz_nbits - 1));
+                if (elem_sz == 1) {
+                    uint64_t mask = kBitpackMasks8[nbits];
+                    int8_t* outptr = errs_ar + (dim * block_sz);
+                    *((uint64_t*)outptr) = _pdep_u64(*(uint64_t*)src, mask);
+                } else if (elem_sz == 2) {
+                    uint64_t mask = kBitpackMasks16[nbits];
+                    // if (debug) { printf("true nbits: %d;  ", true_nbits); }
+                    // if (debug) { printf("mask: "); dump_bits(mask); }
+                    static const uint8_t stripe_sz = stripe_nbytes / elem_sz;
+                    static const uint8_t nstripes =
+                        elem_sz * block_sz / stripe_nbytes;
+
+                    uint64_t* delta_buff_u64 = (uint64_t*)errs_ar;
+                    int8_t* src8 = (int8_t*)src;
+                    uint16_t total_bit_offset = 0;
+                    for (uint8_t s = 0; s < nstripes; s++) {
+                        uint32_t out_idx = dim * nstripes + s;
+                        uint8_t byte_offset = total_bit_offset >> 3;
+                        uint8_t bit_offset = total_bit_offset & 0x07;
+                        uint64_t packed_data = *(uint64_t*)(src8 + byte_offset);
+                        uint64_t unpacked_data = _pdep_u64(
+                            packed_data >> bit_offset, mask);
+                        delta_buff_u64[out_idx] = unpacked_data;
+                        total_bit_offset += true_nbits * stripe_sz;
+                        // delta_buff_u64[out_idx] = _pext_u64(
+                            // packed_data >> bit_offset, mask);
+                        // if (debug) { printf("packed data:   "); dump_bytes(*(uint64_t*)(src8 + byte_offset)); }
+                        // if (debug) { printf("unpacked data: "); dump_bytes(unpacked_data); }
+                        // if (debug) { printf("unpacked data in buff: "); dump_bytes(delta_buff_u64[out_idx]); }
+                        // if (debug) printf("new total bit offset: %d\n", total_bit_offset);
+                    }
+                }
+
                 // printf("%d.%d-%d: nbits=%d\t", (int)g, b, dim, nbits);
                 // // printf("src:   "); dump_bytes(src, 8, false);
                 // // printf(" -> dest:   "); dump_bytes(outptr, 8);
-                src += (nbits + (nbits == 7)) * elem_sz; // assumes block_sz == 8
+                // src += (nbits + (nbits == 7)) * elem_sz; // assumes block_sz == 8
+                int8_t* src8 = ((int8_t*)src) + true_nbits * block_sz / 8;
+                src = (int_t*)src8;
             }
 
             // ------------------------ transpose
 
-            uint8_t* errs_bytes = (uint8_t*)errs_ar;
-            switch (ndims) {
-                // no zigzag or delta coding
-                // case 1: memcpy(dest, errs, ndims*block_sz*elem_sz); break;
-                // case 2: transpose_2x8_8b(errs, dest); break;
-                // case 3: transpose_3x8_8b(errs, dest); break;
-                // case 4: transpose_4x8_8b(errs, dest); break;
+            if (elem_sz == 1) {
+                uint8_t* errs_bytes = (uint8_t*)errs_ar;
+                switch (ndims) {
+                    // no zigzag or delta coding
+                    // case 1: memcpy(dest, errs, ndims*block_sz*elem_sz); break;
+                    // case 2: transpose_2x8_8b(errs, dest); break;
+                    // case 3: transpose_3x8_8b(errs, dest); break;
+                    // case 4: transpose_4x8_8b(errs, dest); break;
 
-                case 1: break;
-                case 2: transpose_2x8_8b(errs_bytes, errs_bytes); break;
-                case 3: transpose_3x8_8b(errs_bytes, errs_bytes); break;
-                case 4: transpose_4x8_8b(errs_bytes, errs_bytes); break;
-                default:
-                    printf("ERROR: decompress8b_rowmajor_xff_rle_lowdim: "
-                        "received invalid ndims: %d\n", ndims);
-            }
-
-            __m256i raw_verrs = _mm256_loadu_si256((const __m256i*)errs_ar);
-            __m256i verrs = mm256_zigzag_decode_epi8(raw_verrs);
-
-            // vars that would have been initialized in various cases
-            __m256i swapped128_verrs = _mm256_permute2x128_si256(
-                verrs, verrs, 0x01);
-            __m256i shifted15_verrs = _mm256_alignr_epi8(
-                swapped128_verrs, verrs, 15);
-
-            uint8_t prev_val = prev_vals_ar[0];
-            uint8_t prev_delta = prev_deltas_ar[0];
-            __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar);
-            __m256i* prev_deltas_ptr = (__m256i*)(prev_deltas_ar);
-            __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
-            __m256i prev_deltas = _mm256_loadu_si256(prev_deltas_ptr);
-            __m256i vals = _mm256_setzero_si256();
-
-            __m256i* even_counters_ptr = (__m256i*)(coeffs_ar_even);
-            __m256i* odd_counters_ptr = (__m256i*)(coeffs_ar_odd);
-            __m256i coef_counters_even = _mm256_loadu_si256(
-                (const __m256i*)even_counters_ptr);
-            __m256i coef_counters_odd = _mm256_loadu_si256(
-                (const __m256i*)odd_counters_ptr);
-
-            // set coef[i] to ((counter[i] >> learn_shift) >> 4) << 4)
-            __m256i filter_coeffs_even  = _mm256_srai_epi16(
-                coef_counters_even, learning_shift + 4);
-            __m256i filter_coeffs_odd  = _mm256_srai_epi16(
-                coef_counters_odd, learning_shift + 4);
-            filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 4);
-            filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 4);
-
-            __m256i gradients_sum = _mm256_setzero_si256();
-
-            switch (ndims) {
-
-            // can't just use a loop because _mm256_srli_si256 demands that
-            // the shift amount be a compile-time constant (which it is
-            // if the loop is unrolled, but apparently that's insufficient)
-/*
-    #define LOOP_BODY(I, SHIFT, DELTA_ARRAY)                                \
-        { __m256i shifted_errs = _mm256_srli_si256(DELTA_ARRAY, SHIFT);   \
-        vals = _mm256_add_epi8(prev_vals, shifted_errs);                  \
-        _mm256_storeu_si256((__m256i*)(dest + I * ndims), vals);            \
-        prev_vals = vals; }
-/*/
-    #define LOOP_BODY(I, SHIFT, DELTA_ARRAY)                                \
-    {   __m256i shifted_errs = _mm256_srli_si256(DELTA_ARRAY, SHIFT);       \
-        __m256i even_prev_deltas = _mm256_srai_epi16(                       \
-            _mm256_slli_epi16(prev_deltas, 8), 8);                          \
-        __m256i odd_prev_deltas = _mm256_srai_epi16(                        \
-            prev_deltas, 8);                                                \
-                                                                            \
-        __m256i even_predictions = _mm256_mullo_epi16(                      \
-            even_prev_deltas, filter_coeffs_even);                          \
-        __m256i odd_predictions = _mm256_mullo_epi16(                       \
-            odd_prev_deltas, filter_coeffs_odd);                            \
-        __m256i vpredictions = _mm256_blendv_epi8(odd_predictions,          \
-            _mm256_srli_epi16(even_predictions, 8), low_mask);              \
-                                                                            \
-        __m256i vdeltas = _mm256_add_epi8(shifted_errs, vpredictions);      \
-        vals = _mm256_add_epi8(prev_vals, vdeltas);                         \
-                                                                            \
-        _mm256_storeu_si256((__m256i*)(dest + I * ndims), vals);            \
-        prev_deltas = vdeltas;                                              \
-        prev_vals = vals;                                                   \
-    }
-//*/
-            case 1:
-                for (uint8_t i = 0; i < block_sz; i++) {
-                    int8_t delta = _mm256_extract_epi8(verrs, i);
-                    uint8_t val = prev_val + delta;
-                    dest[i] = val;
-                    prev_val = val;
+                    case 1: break;
+                    case 2: transpose_2x8_8b(errs_bytes, errs_bytes); break;
+                    case 3: transpose_3x8_8b(errs_bytes, errs_bytes); break;
+                    case 4: transpose_4x8_8b(errs_bytes, errs_bytes); break;
+                    default:
+                        printf("ERROR: decompress8b_rowmajor_xff_rle_lowdim: "
+                            "received invalid ndims: %d\n", ndims);
                 }
-                prev_vals_ar[0] = prev_val;
-                prev_deltas_ar[0] = prev_delta;
-                break;
-            case 2: // everything fits in lower 128b
-                LOOP_BODY(0, 0, verrs); LOOP_BODY(1, 2, verrs);
-                LOOP_BODY(2, 4, verrs); LOOP_BODY(3, 6, verrs);
-                LOOP_BODY(4, 8, verrs); LOOP_BODY(5, 10, verrs);
-                LOOP_BODY(6, 12, verrs); LOOP_BODY(7, 14, verrs);
-                // _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
-                _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
-                _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
-                break;
-            case 3:
-                LOOP_BODY(0, 0, verrs);
-                LOOP_BODY(1, 3, verrs);
-                LOOP_BODY(2, 6, verrs);
-                LOOP_BODY(3, 9, verrs);
-                LOOP_BODY(4, 12, verrs);
-                LOOP_BODY(5, 0, shifted15_verrs);
-                LOOP_BODY(6, 3, shifted15_verrs);
-                LOOP_BODY(7, 6, shifted15_verrs);
-                // _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
-                _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
-                _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
-                break;
-            case 4:
-                LOOP_BODY(0, 0, verrs);
-                LOOP_BODY(1, 4, verrs);
-                LOOP_BODY(2, 8, verrs);
-                LOOP_BODY(3, 12, verrs);
-                LOOP_BODY(4, 0, swapped128_verrs);
-                LOOP_BODY(5, 4, swapped128_verrs);
-                LOOP_BODY(6, 8, swapped128_verrs);
-                LOOP_BODY(7, 12, swapped128_verrs);
-                // _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
-                _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
-                _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
-                break;
 
-    #undef LOOP_BODY
-            }
+                __m256i raw_verrs = _mm256_loadu_si256((const __m256i*)errs_ar);
+                __m256i verrs = mm256_zigzag_decode_epi8(raw_verrs);
 
-            // mean of gradients in block, for even and odd indices
-            const uint8_t rshift = 8 + log2_block_sz - log2_learning_downsample;
-            __m256i even_grads = _mm256_srai_epi16(
-                _mm256_slli_epi16(gradients_sum, 8), rshift);
-            __m256i odd_grads = _mm256_srai_epi16(gradients_sum, rshift);
+                // vars that would have been initialized in various cases
+                __m256i swapped128_verrs = _mm256_permute2x128_si256(
+                    verrs, verrs, 0x01);
+                __m256i shifted15_verrs = _mm256_alignr_epi8(
+                    swapped128_verrs, verrs, 15);
 
-            // store updated coefficients (or, technically, the counters)
-            coef_counters_even = _mm256_add_epi16(coef_counters_even, even_grads);
-            coef_counters_odd = _mm256_add_epi16(coef_counters_odd, odd_grads);
-            _mm256_storeu_si256(even_counters_ptr, coef_counters_even);
-            _mm256_storeu_si256(odd_counters_ptr, coef_counters_odd);
+                __m256i* prev_vals_ptr = (__m256i*)(prev_vals_ar);
+                __m256i* prev_deltas_ptr = (__m256i*)(prev_deltas_ar);
+                __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
+                __m256i prev_deltas = _mm256_loadu_si256(prev_deltas_ptr);
+                __m256i vals = _mm256_setzero_si256();
 
+                __m256i* even_counters_ptr = (__m256i*)(coeffs_ar_even);
+                __m256i* odd_counters_ptr = (__m256i*)(coeffs_ar_odd);
+                __m256i coef_counters_even = _mm256_loadu_si256(
+                    (const __m256i*)even_counters_ptr);
+                __m256i coef_counters_odd = _mm256_loadu_si256(
+                    (const __m256i*)odd_counters_ptr);
+
+                // set coef[i] to ((counter[i] >> learn_shift) >> 4) << 4)
+                __m256i filter_coeffs_even  = _mm256_srai_epi16(
+                    coef_counters_even, learning_shift + 4);
+                __m256i filter_coeffs_odd  = _mm256_srai_epi16(
+                    coef_counters_odd, learning_shift + 4);
+                filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 4);
+                filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 4);
+
+                __m256i gradients_sum = _mm256_setzero_si256();
+
+                // variables for 1D case
+                uint8_t prev_val = prev_vals_ar[0];
+                int8_t prev_delta = prev_deltas_ar[0];
+                int16_t coef = filter_coeffs_even[0];
+                int_t grad_sum = 0;
+
+                switch (ndims) {
+
+                // can't just use a loop because _mm256_srli_si256 demands that
+                // the shift amount be a compile-time constant (which it is
+                // if the loop is unrolled, but apparently that's insufficient)
+    /*
+        #define LOOP_BODY(I, SHIFT, DELTA_ARRAY)                                \
+            { __m256i shifted_errs = _mm256_srli_si256(DELTA_ARRAY, SHIFT);   \
+            vals = _mm256_add_epi8(prev_vals, shifted_errs);                  \
+            _mm256_storeu_si256((__m256i*)(dest + I * ndims), vals);            \
+            prev_vals = vals; }
+    /*/
+        #define LOOP_BODY(I, SHIFT, DELTA_ARRAY)                                \
+        {   __m256i shifted_errs = _mm256_srli_si256(DELTA_ARRAY, SHIFT);       \
+            __m256i even_prev_deltas = _mm256_srai_epi16(                       \
+                _mm256_slli_epi16(prev_deltas, 8), 8);                          \
+            __m256i odd_prev_deltas = _mm256_srai_epi16(                        \
+                prev_deltas, 8);                                                \
+                                                                                \
+            __m256i even_predictions = _mm256_mullo_epi16(                      \
+                even_prev_deltas, filter_coeffs_even);                          \
+            __m256i odd_predictions = _mm256_mullo_epi16(                       \
+                odd_prev_deltas, filter_coeffs_odd);                            \
+            __m256i vpredictions = _mm256_blendv_epi8(odd_predictions,          \
+                _mm256_srli_epi16(even_predictions, 8), low_mask);              \
+                                                                                \
+            __m256i vdeltas = _mm256_add_epi8(shifted_errs, vpredictions);      \
+            vals = _mm256_add_epi8(prev_vals, vdeltas);                         \
+                                                                                \
+            _mm256_storeu_si256((__m256i*)(dest + I * ndims), vals);            \
+            prev_deltas = vdeltas;                                              \
+            prev_vals = vals;                                                   \
+        }
+    //*/
+                case 1:
+                    for (uint8_t i = 0; i < block_sz; i++) {
+                        int_t err = _mm256_extract_epi8(verrs, i);
+                        int_t prediction = (((int16_t)prev_delta) * coef) >> 8;
+                        int_t delta = err + (uint_t)prediction;
+                        uint_t val = prev_val + delta;
+
+                        if (i % learning_downsample == learning_downsample - 1) {
+                            grad_sum += icopysign(err, prev_delta);
+                        }
+
+                        dest[i] = val;
+                        prev_delta = delta;
+                        prev_val = val;
+                    }
+                    prev_vals_ar[0] = prev_val;
+                    prev_deltas_ar[0] = prev_delta;
+
+                    static const uint8_t shift_to_get_mean =
+                        log2_block_sz - log2_learning_downsample;
+                    coeffs_ar_even[0] += grad_sum >> shift_to_get_mean;
+
+                    break;
+                case 2: // everything fits in lower 128b
+                    LOOP_BODY(0, 0, verrs); LOOP_BODY(1, 2, verrs);
+                    LOOP_BODY(2, 4, verrs); LOOP_BODY(3, 6, verrs);
+                    LOOP_BODY(4, 8, verrs); LOOP_BODY(5, 10, verrs);
+                    LOOP_BODY(6, 12, verrs); LOOP_BODY(7, 14, verrs);
+                    // _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
+                    _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
+                    _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
+                    break;
+                case 3:
+                    LOOP_BODY(0, 0, verrs);
+                    LOOP_BODY(1, 3, verrs);
+                    LOOP_BODY(2, 6, verrs);
+                    LOOP_BODY(3, 9, verrs);
+                    LOOP_BODY(4, 12, verrs);
+                    LOOP_BODY(5, 0, shifted15_verrs);
+                    LOOP_BODY(6, 3, shifted15_verrs);
+                    LOOP_BODY(7, 6, shifted15_verrs);
+                    // _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
+                    _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
+                    _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
+                    break;
+                case 4:
+                    LOOP_BODY(0, 0, verrs);
+                    LOOP_BODY(1, 4, verrs);
+                    LOOP_BODY(2, 8, verrs);
+                    LOOP_BODY(3, 12, verrs);
+                    LOOP_BODY(4, 0, swapped128_verrs);
+                    LOOP_BODY(5, 4, swapped128_verrs);
+                    LOOP_BODY(6, 8, swapped128_verrs);
+                    LOOP_BODY(7, 12, swapped128_verrs);
+                    // _mm256_storeu_si256((__m256i*)prev_vals_ar, vals);
+                    _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
+                    _mm256_storeu_si256((__m256i*)prev_deltas_ptr, prev_deltas);
+                    break;
+
+        #undef LOOP_BODY
+                }
+
+                // mean of gradients in block, for even and odd indices
+                const uint8_t rshift = 8 + log2_block_sz - log2_learning_downsample;
+                __m256i even_grads = _mm256_srai_epi16(
+                    _mm256_slli_epi16(gradients_sum, 8), rshift);
+                __m256i odd_grads = _mm256_srai_epi16(gradients_sum, rshift);
+
+                // store updated coefficients (or, technically, the counters)
+                coef_counters_even = _mm256_add_epi16(coef_counters_even, even_grads);
+                coef_counters_odd = _mm256_add_epi16(coef_counters_odd, odd_grads);
+                _mm256_storeu_si256(even_counters_ptr, coef_counters_even);
+                _mm256_storeu_si256(odd_counters_ptr, coef_counters_odd);
+
+            } else if (elem_sz == 2) {
+
+                if (ndims == 2) {
+                    transpose_2x8_16b((uint16_t*)errs_ar, (uint16_t*)errs_ar);
+                }
+
+                __m256i raw_verrs = _mm256_loadu_si256((const __m256i*)errs_ar);
+                __m256i verrs = mm256_zigzag_decode_epi16(raw_verrs);
+                // _mm256_storeu_si256((__m256i*)errs_ar, verrs);
+                // __m256i swapped128_verrs = _mm256_permute2x128_si256(
+                //     verrs, verrs, 0x01);
+
+                const uint8_t quantize_shft = elem_sz_nbits - 4;
+                if (ndims == 1) {
+                    counter_t counter = *(counter_t*)coeffs_ar_even;
+                    counter_t coef = (counter >> (learning_shift + quantize_shft)) << quantize_shft;
+                    int_t grad_sum = 0;
+
+                    uint_t prev_val = prev_vals_ar[0];
+                    int_t prev_delta = prev_deltas_ar[0];
+                    for (uint32_t i = 0; i < block_sz; i++) {
+                        int_t prediction = (((int32_t)prev_delta) * coef) >> 8;
+                        int_t err = _mm256_extract_epi16(verrs, i);
+                        int_t delta = err + (uint_t)prediction;
+                        uint_t val = prev_val + delta;
+
+                        if (i % learning_downsample == learning_downsample - 1) {
+                            grad_sum += icopysign(err, prev_delta);
+                        }
+
+                        dest[i] = val;
+                        prev_delta = delta;
+                        prev_val = val;
+                    }
+                    prev_deltas_ar[0] = prev_delta;
+                    prev_vals_ar[0] = prev_val;
+
+                    static const uint8_t shift_to_get_mean =
+                        log2_block_sz - log2_learning_downsample;
+                    coeffs_ar_even[0] += grad_sum >> shift_to_get_mean;
+
+                } else { // assumes ndims == 2
+                    counter_t counter0 = *(counter_t*)coeffs_ar_even;
+                    counter_t counter1 = *(counter_t*)coeffs_ar_odd;
+                    counter_t coef0 = (counter0 >> (learning_shift + quantize_shft)) << quantize_shft;
+                    counter_t coef1 = (counter1 >> (learning_shift + quantize_shft)) << quantize_shft;
+                    int_t grad_sum0 = 0;
+                    int_t grad_sum1 = 0;
+                    uint_t prev_val0 = prev_vals_ar[0];
+                    uint_t prev_val1 = prev_vals_ar[1];
+                    int_t prev_delta0 = prev_deltas_ar[0];
+                    int_t prev_delta1 = prev_deltas_ar[1];
+                    for (uint32_t i = 0; i < block_sz; i++) {
+                        int_t prediction0 = (((int32_t)prev_delta0) * coef0) >> 8;
+                        int_t prediction1 = (((int32_t)prev_delta1) * coef1) >> 8;
+
+                        int_t err0 = _mm256_extract_epi16(verrs, 2 * i);
+                        int_t err1 = _mm256_extract_epi16(verrs, 2 * i + 1);
+                        int_t delta0 = err0 + prediction0;
+                        int_t delta1 = err1 + prediction1;
+                        uint_t val0 = prev_val0 + delta0;
+                        uint_t val1 = prev_val1 + delta1;
+
+                        if (i % learning_downsample == learning_downsample - 1) {
+                            grad_sum0 += icopysign(err0, prev_delta0);
+                            grad_sum1 += icopysign(err1, prev_delta1);
+                        }
+
+                        dest[2 * i] = val0;
+                        dest[2 * i + 1] = val1;
+                        prev_delta0 = delta0;
+                        prev_delta1 = delta1;
+                        prev_val0 = val0;
+                        prev_val1 = val1;
+                    }
+                    prev_deltas_ar[0] = prev_delta0;
+                    prev_deltas_ar[1] = prev_delta1;
+                    prev_vals_ar[0] = prev_val0;
+                    prev_vals_ar[1] = prev_val1;
+
+                    static const uint8_t shift_to_get_mean =
+                        log2_block_sz - log2_learning_downsample;
+                    coeffs_ar_even[0] += grad_sum0 >> shift_to_get_mean;
+                    coeffs_ar_odd[0] += grad_sum1 >> shift_to_get_mean;
+                }
+            } // elem_sz
             dest += block_sz * ndims;
         } // for each block
     } // for each group
 
     free(headers);
     free(errs_ar);
-    // free(prev_vals_ar);
+    free(coeffs_ar_even);
+    free(coeffs_ar_odd);
 
-    memcpy(dest, src, remaining_len);
+    memcpy(dest, src, remaining_len * elem_sz);
 
     if (debug > 2) {
         size_t dest_sz = dest + remaining_len - orig_dest;
-        printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz);
+        printf("decompressed data:\n"); dump_bytes((uint8_t*)orig_dest, 192, ndims * elem_sz);
     }
     // // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, ndims);
     // // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz, 16);

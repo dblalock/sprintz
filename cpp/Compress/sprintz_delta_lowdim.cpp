@@ -450,7 +450,8 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
     // stats for main decompression loop
     uint32_t group_sz = ndims * group_sz_per_dim;
     uint32_t padded_ndims = round_up_to_multiple(ndims, vector_sz);
-    uint16_t nvectors = padded_ndims / vector_sz + ((padded_ndims % vector_sz) > 0);
+    // uint16_t nvectors = padded_ndims / vector_sz + ((padded_ndims % vector_sz) > 0);
+    uint16_t nvectors = DIV_ROUND_UP(padded_ndims, vector_sz);
 
     // ------------------------ temp storage
     // allocate temp vars of minimal possible size such that we can
@@ -471,8 +472,6 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
         uint32_t header_bit_offset = 0;
 
         // debug = debug && (g <= 2);
-
-        // printf("==== group %d\n", (int)g);
 
         // ------------------------ create unpacked headers array
         // unpack headers for all the blocks; note that this is tricky
@@ -723,7 +722,6 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
                     break;
         #undef LOOP_BODY
                 }
-
             } // elem_sz
             dest += block_sz * ndims;
         } // for each block

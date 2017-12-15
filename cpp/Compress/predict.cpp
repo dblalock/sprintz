@@ -186,6 +186,12 @@ uint32_t encode_xff_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
 
                 // mean of gradients in block, for even and odd indices
                 const uint8_t rshift = 8 + log2_block_sz;
+                // const uint8_t rshift = 8 + (log2_block_sz - log2_learning_downsample);
+
+
+                // TODO pretty sure we want to use lower line, not current one
+
+
                 __m256i even_grads = _mm256_srai_epi16(
                     _mm256_slli_epi16(gradients_sum, 8), rshift);
                 __m256i odd_grads = _mm256_srai_epi16(gradients_sum, rshift);
@@ -233,6 +239,12 @@ uint32_t encode_xff_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
                 }
                 // mean of gradients in block, for even and odd indices
                 const uint8_t rshift = 16 + log2_block_sz;
+                // const uint8_t rshift = 16 + (log2_block_sz - log2_learning_downsample);
+
+
+                // TODO pretty sure we want to use lower line ^, not current one
+
+
                 __m256i even_grads = _mm256_srai_epi32(
                     _mm256_slli_epi32(gradients_sum, 16), rshift);
                 __m256i odd_grads = _mm256_srai_epi32(gradients_sum, rshift);
