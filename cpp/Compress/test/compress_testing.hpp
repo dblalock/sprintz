@@ -116,12 +116,13 @@ static inline void test_compressor(const RawT& raw, CompF&& f_comp,
     }
     if (check_overrun) {
         bool fail = false;
-        for (uint64_t i = 0; i < decomp_padding * ElemSz; i++) {
+        for (uint64_t i = 0; i < decomp_padding; i++) {
             if (decompressed(sz + i) != decomp_poison) {
                 fail = true;
                 printf("\n**** Test Failed: '%s' ****\n", name);
                 printf("First wrote past end of decompress buffer " \
-                    "at element %lld", i - sz);
+                    "at element %lld\n", i + sz);
+                break;
             }
         }
         if (fail) {

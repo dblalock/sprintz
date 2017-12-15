@@ -149,26 +149,33 @@ TEST_CASE("xff_rle_rowmajor_8b (with compression)", "[rowmajor][xff][rle]") {
 }
 
 TEST_CASE("xff_rle_rowmajor_lowdim_8b (with compression)",
-    "[rowmajor][xff][rle][lowdim][dbg]")
+    "[rowmajor][xff][rle][lowdim][8b][dbg]")
 {
-    printf("executing rowmajor compress xff + rle lowdim test\n");
+    printf("executing rowmajor compress xff + rle lowdim 8b test\n");
+    TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_xff_rle_lowdim_8b, decompress_rowmajor_xff_rle_lowdim_8b, 1, 4);
+    // TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_xff_rle_lowdim_8b, decompress_rowmajor_xff_rle_lowdim_8b, 1, 2);
+}
 
+TEST_CASE("xff_rle_rowmajor_lowdim_16b (with compression)",
+    "[rowmajor][xff][rle][lowdim][16b][dbg]")
+{
+    printf("executing rowmajor compress xff + rle lowdim 16b test\n");
     // int ndims = 2;
     // auto ndims_list = ar::range(ndims, ndims + 1);
-    auto ndims_list = ar::range(1, 4 + 1);
+    auto ndims_list = ar::range(1, 2 + 1);
     for (auto _ndims : ndims_list) {
         auto ndims = (uint16_t)_ndims;
         printf("---- ndims = %d\n", ndims);
         CAPTURE(ndims);
-        auto comp = [ndims](const uint8_t* src, size_t len, int8_t* dest) {
-            return compress_rowmajor_xff_rle_lowdim_8b(src, (uint32_t)len, dest, ndims);
+        auto comp = [ndims](const uint16_t* src, size_t len, int16_t* dest) {
+            return compress_rowmajor_xff_rle_lowdim_16b(src, (uint32_t)len, dest, ndims);
 //            return compress8b_rowmajor_xff(src, (uint32_t)len, dest, ndims);
         };
-        auto decomp = [](int8_t* src, uint8_t* dest) {
-            return decompress_rowmajor_xff_rle_lowdim_8b(src, dest);
+        auto decomp = [](int16_t* src, uint16_t* dest) {
+            return decompress_rowmajor_xff_rle_lowdim_16b(src, dest);
 //            return decompress8b_rowmajor_xff(src, dest);
         };
-        test_codec<1>(comp, decomp);
+        test_codec<2>(comp, decomp);
 
         // uint32_t sz = 128;
         // static const int ElemSz = 2;
@@ -185,10 +192,9 @@ TEST_CASE("xff_rle_rowmajor_lowdim_8b (with compression)",
         // // raw = orig / (254 << denominator_shift);
         // // test_compressor<ElemSz>(raw, f_comp, f_decomp, "fuzz 0-64");
 
-        //  // auto SZ = ndim s * 16;
         // auto SZ = 128;
         // srand(123);
-        // Vec_u8 raw(SZ);
+        // Vec_u16 raw(SZ);
         // {
         //     for (int i = 0; i < SZ; i++) {
         //         // raw(i) = i % 64;
@@ -202,8 +208,8 @@ TEST_CASE("xff_rle_rowmajor_lowdim_8b (with compression)",
         //     }
         //     // raw.setRandom();
 
-        //     // test_compressor<2>(raw, comp, decomp, "debug test", true);
-        //     test_compressor<1>(raw, comp, decomp, "debug test");
+        //     test_compressor<2>(raw, comp, decomp, "debug test", true);
+        //     // test_compressor<2>(raw, comp, decomp, "debug test");
         // }
     }
 }

@@ -68,7 +68,7 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
     int_t* orig_dest = dest;
 
      int gDebug = debug;
-     int debug = (elem_sz == 1) ? gDebug : 0;
+     int debug = (elem_sz == 2) ? gDebug : 0;
 
     // ================================ one-time initialization
 
@@ -111,7 +111,7 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
         return (dest - orig_dest) + len;
     }
     if (write_size) {
-        dest += length_header_nbytes;
+        dest += length_header_nbytes / elem_sz; // XXX must evenly divide
     }
 
     // ------------------------ temp storage
@@ -137,7 +137,7 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
 
         // printf("==== group %d\n", (int)ngroups - 1);
 
-        debug = debug && (ngroups <= 2);
+        debug = debug && (ngroups <= 4);
 
         // int8_t* header_dest = dest;
         // dest += total_header_bytes;
@@ -179,7 +179,7 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
                     uint_t bits = ZIGZAG_ENCODE_SCALAR(err);
 
                     if (i % learning_downsample == learning_downsample - 1) {
-                        if (debug) printf("prev delta: %d\n", prev_delta);
+                        // if (debug) printf("prev delta: %d\n", prev_delta);
                         grad_sum += icopysign(err, prev_delta);
                     }
 
@@ -199,7 +199,7 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
                 dims_nbits[dim] = max_nbits;
                 total_dims_nbits += max_nbits;
 
-                if (debug) { printf("counter before write: %d\n", coef_counters_ar[dim]); }
+                // if (debug) { printf("counter before write: %d\n", coef_counters_ar[dim]); }
 
                 static const uint8_t shift_to_get_mean =
                     log2_block_sz - log2_learning_downsample;
@@ -313,6 +313,7 @@ do_rle:
             // ------------------------ write out header bits for this block
 
             // if (debug) { printf("--- %d.%d nbits: ", (int)ngroups - 1, b); dump_bytes(dims_nbits, ndims); }
+            if (debug) { printf("nbits: "); dump_bytes(dims_nbits, ndims); }
 
             for (uint16_t dim = 0; dim < ndims; dim++) {
                 uint16_t byte_offset = header_bit_offset >> 3;
@@ -381,13 +382,19 @@ main_loop_end:
     if (write_size) {
         write_metadata_rle(orig_dest, ndims, ngroups, remaining_len);
     }
-    // printf("trailing len: %d\n", (int)remaining_len);
+    // if (elem_sz == 2) printf("trailing len: %d\n", (int)remaining_len);
+    if (debug) printf("trailing len: %d\n", (int)remaining_len);
     memcpy(dest, src, remaining_len * elem_sz);
     return dest + remaining_len - orig_dest;
 }
 
 int64_t compress_rowmajor_xff_rle_lowdim_8b(const uint8_t* src, uint32_t len,
     int8_t* dest, uint16_t ndims, bool write_size)
+{
+    return compress_rowmajor_xff_rle_lowdim(src, len, dest, ndims, write_size);
+}
+int64_t compress_rowmajor_xff_rle_lowdim_16b(const uint16_t* src, uint32_t len,
+    int16_t* dest, uint16_t ndims, bool write_size)
 {
     return compress_rowmajor_xff_rle_lowdim(src, len, dest, ndims, write_size);
 }
@@ -411,7 +418,6 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
     static const uint8_t group_sz_blocks = kDefaultGroupSzBlocks;
     // misc constants
     static const uint8_t log2_block_sz = 3;
-    static const uint8_t length_header_nbytes = 8;  // TODO indirect to format.h
     static const uint8_t stripe_nbytes = 8;
     static const uint8_t vector_sz_nbytes = 32;
     static const __m256i low_mask = _mm256_set1_epi16(0xff);
@@ -439,7 +445,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
     }
 
     int gDebug = debug;
-    int debug = (elem_sz == 1) ? gDebug : 0;
+    int debug = (elem_sz == 2) ? gDebug : 0;
 
     // ================================ one-time initialization
 
@@ -460,6 +466,8 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
             // dump_elements(src, min_orig_len + 4, ndims);
         }
     }
+
+    // debug = false;
 
     // ------------------------ stats derived from ndims
     // header stats
@@ -670,7 +678,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                 uint8_t true_nbits = nbits + (nbits == (elem_sz_nbits - 1));
                 if (elem_sz == 1) {
                     uint64_t mask = kBitpackMasks8[nbits];
-                    int8_t* outptr = errs_ar + (dim * block_sz);
+                    int8_t* outptr = ((int8_t*)errs_ar) + (dim * block_sz);
                     *((uint64_t*)outptr) = _pdep_u64(*(uint64_t*)src, mask);
                 } else if (elem_sz == 2) {
                     uint64_t mask = kBitpackMasks16[nbits];
@@ -777,13 +785,13 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                 // can't just use a loop because _mm256_srli_si256 demands that
                 // the shift amount be a compile-time constant (which it is
                 // if the loop is unrolled, but apparently that's insufficient)
-    /*
+        /*
         #define LOOP_BODY(I, SHIFT, DELTA_ARRAY)                                \
             { __m256i shifted_errs = _mm256_srli_si256(DELTA_ARRAY, SHIFT);   \
             vals = _mm256_add_epi8(prev_vals, shifted_errs);                  \
             _mm256_storeu_si256((__m256i*)(dest + I * ndims), vals);            \
             prev_vals = vals; }
-    /*/
+        /*/
             #define LOOP_BODY(I, SHIFT, DELTA_ARRAY)                          \
             {   __m256i shifted_errs = _mm256_srli_si256(DELTA_ARRAY, SHIFT); \
                 __m256i even_prev_deltas = _mm256_srai_epi16(                 \
@@ -810,19 +818,19 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                 prev_deltas = vdeltas;                                        \
                 prev_vals = vals;                                             \
             }
-    //*/
+        //*/
 
-        /*if (debug) dump_m256i<int8_t>(prev_deltas);               \
-        if (debug) dump_m256i<int8_t>(shifted_errs);                     \*/
+            /*if (debug) dump_m256i<int8_t>(prev_deltas);               \
+            if (debug) dump_m256i<int8_t>(shifted_errs);                     \*/
 
                 case 1:
                     // printf("---- %d.%d\n", g, b);
                     // printf("coef: %d\n", coef);
                     for (uint8_t i = 0; i < block_sz; i++) {
-                        int_t err = _mm256_extract_epi8(verrs, i);
-                        int_t prediction = (((int16_t)prev_delta) * coef) >> 8;
-                        int_t delta = err + (uint_t)prediction;
-                        uint_t val = prev_val + delta;
+                        int8_t err = _mm256_extract_epi8(verrs, i);
+                        int8_t prediction = (((int16_t)prev_delta) * coef) >> 8;
+                        int8_t delta = err + (uint8_t)prediction;
+                        uint8_t val = prev_val + delta;
 
                         if (i % learning_downsample == learning_downsample - 1) {
                             grad_sum += icopysign(err, prev_delta);
@@ -916,13 +924,11 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
 
                 __m256i raw_verrs = _mm256_loadu_si256((const __m256i*)errs_ar);
                 __m256i verrs = mm256_zigzag_decode_epi16(raw_verrs);
-                // _mm256_storeu_si256((__m256i*)errs_ar, verrs);
-                // __m256i swapped128_verrs = _mm256_permute2x128_si256(
-                //     verrs, verrs, 0x01);
 
                 const uint8_t quantize_shft = elem_sz_nbits - 4;
                 if (ndims == 1) {
-                    counter_t counter = *(counter_t*)coeffs_ar_even;
+                    counter_t* counters_ar = (counter_t*)coeffs_ar_even;
+                    counter_t counter = counters_ar[0];
                     counter_t coef = (counter >> (learning_shift + quantize_shft)) << quantize_shft;
                     int_t grad_sum = 0;
 
@@ -947,7 +953,12 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
 
                     static const uint8_t shift_to_get_mean =
                         log2_block_sz - log2_learning_downsample;
-                    coeffs_ar_even[0] += grad_sum >> shift_to_get_mean;
+                    counters_ar[0] += grad_sum >> shift_to_get_mean;
+
+                    if (debug) {
+                        printf("grad_sum: %d\n", grad_sum);
+                        printf("counter: %d\n", counters_ar[0]);
+                    }
 
                 } else { // assumes ndims == 2
                     counter_t counter0 = *(counter_t*)coeffs_ar_even;
@@ -990,10 +1001,11 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
 
                     static const uint8_t shift_to_get_mean =
                         log2_block_sz - log2_learning_downsample;
-                    coeffs_ar_even[0] += grad_sum0 >> shift_to_get_mean;
-                    coeffs_ar_odd[0] += grad_sum1 >> shift_to_get_mean;
+                    *(counter_t*)coeffs_ar_even += grad_sum0 >> shift_to_get_mean;
+                    *(counter_t*)coeffs_ar_odd += grad_sum1 >> shift_to_get_mean;
                 }
             } // elem_sz
+            // if (debug) { printf("wrote data in block:\n"); dump_bytes(dest, block_sz*ndims, ndims*elem_sz); }
             dest += block_sz * ndims;
         } // for each block
     } // for each group
@@ -1035,6 +1047,16 @@ int64_t decompress_rowmajor_xff_rle_lowdim_8b(const int8_t* src, uint8_t* dest) 
     uint32_t ngroups;
     uint16_t remaining_len;
     src += read_metadata_rle(src, &ndims, &ngroups, &remaining_len);
-    return decompress_rowmajor_xff_rle_lowdim_8b(
+    return decompress_rowmajor_xff_rle_lowdim(
+        src, dest, ndims, ngroups, remaining_len);
+}
+int64_t decompress_rowmajor_xff_rle_lowdim_16b(
+    const int16_t* src, uint16_t* dest)
+{
+    uint16_t ndims;
+    uint32_t ngroups;
+    uint16_t remaining_len;
+    src += read_metadata_rle(src, &ndims, &ngroups, &remaining_len);
+    return decompress_rowmajor_xff_rle_lowdim(
         src, dest, ndims, ngroups, remaining_len);
 }
