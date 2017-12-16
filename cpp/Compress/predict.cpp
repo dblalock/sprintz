@@ -434,7 +434,7 @@ uint32_t decode_xff_rowmajor(const int_t* src, uint32_t len, uint_t* dest,
             } else if (elem_sz == 2) {
                 static const __m256i low_mask_epi32 = _mm256_set1_epi32(0xffff);
 
-                // set coef[i] to ((counter[i] >> learn_shift) >> 4) << 4)
+                // set coef[i] to ((counter[i] >> learn_shift) >> 12) << 12)
                 const uint8_t shft = elem_sz_nbits - 4;
                 __m256i filter_coeffs_even  = _mm256_srai_epi32(
                     coef_counters_even, learning_shift + shft);
