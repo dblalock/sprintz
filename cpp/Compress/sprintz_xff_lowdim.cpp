@@ -67,8 +67,8 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
     const uint_t* src_end = src + len;
     int_t* orig_dest = dest;
 
-     int gDebug = debug;
-     int debug = (elem_sz == 2) ? gDebug : 0;
+    int gDebug = debug;
+    int debug = (elem_sz == 2) ? gDebug : 0;
 
     // ================================ one-time initialization
 
@@ -174,7 +174,11 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
                     uint32_t out_offset = (dim * block_sz) + i; // colmajor
                     uint_t val = src[in_offset];
                     int_t delta = (int_t)(val - prev_val);
-                    int_t prediction = (((int32_t)prev_delta) * coef) >> 8;
+                    int_t prediction = (((counter_t)prev_delta) * coef) >> elem_sz_nbits;
+
+                    // int_t prediction = (((int32_t)prev_delta) * coef) >> 8; // TODO rm
+
+
                     int_t err = delta - prediction;
                     uint_t bits = ZIGZAG_ENCODE_SCALAR(err);
 
@@ -192,7 +196,7 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
                 prev_vals_ar[dim] = prev_val;
                 prev_deltas_ar[dim] = prev_delta;
 
-                // if (elem_sz == 2) { mask = 0xffff; }  // TODO rm
+                // if (elem_sz == 2 && mask > 0) { mask = 0xffff; }  // TODO rm
                 uint8_t max_nbits = (32 - _lzcnt_u32((uint32_t)mask));
                 max_nbits += max_nbits == (elem_sz_nbits - 1); // 7->8 or 15->16
 
@@ -617,9 +621,12 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                         counter_t counter = *(counter_t*)coeffs_ar_even;
                         counter_t coef = (counter >> (learning_shift + shft)) << shft;
                         uint_t prev_val = prev_vals_ar[0];
-                        uint_t prev_delta = prev_deltas_ar[0];
+                        int_t prev_delta = prev_deltas_ar[0];
                         for (uint32_t i = 0; i < length * block_sz; i++) {
-                            int_t prediction = (((int32_t)prev_delta) * coef) >> 8;
+                            int_t prediction = (((int32_t)prev_delta) * coef) >> elem_sz_nbits;
+
+                            // int_t prediction = (((int32_t)prev_delta) * coef) >> 8; // TODO rm
+
                             uint_t val = prev_val + prediction;
                             *dest = val;
                             prev_delta = prediction; // since err is 0
@@ -635,11 +642,11 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                         counter_t coef1 = (counter1 >> (learning_shift + shft)) << shft;
                         uint_t prev_val0 = prev_vals_ar[0];
                         uint_t prev_val1 = prev_vals_ar[1];
-                        uint_t prev_delta0 = prev_deltas_ar[0];
-                        uint_t prev_delta1 = prev_deltas_ar[1];
+                        int_t prev_delta0 = prev_deltas_ar[0];
+                        int_t prev_delta1 = prev_deltas_ar[1];
                         for (uint32_t i = 0; i < length * block_sz; i++) {
-                            int_t prediction0 = (((int32_t)prev_delta0) * coef0) >> 8;
-                            int_t prediction1 = (((int32_t)prev_delta1) * coef1) >> 8;
+                            int_t prediction0 = (((int32_t)prev_delta0) * coef0) >> elem_sz_nbits;
+                            int_t prediction1 = (((int32_t)prev_delta1) * coef1) >> elem_sz_nbits;
                             uint_t val0 = prev_val0 + prediction0;
                             uint_t val1 = prev_val1 + prediction1;
                             *dest = val0;
@@ -828,7 +835,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                     // printf("coef: %d\n", coef);
                     for (uint8_t i = 0; i < block_sz; i++) {
                         int8_t err = _mm256_extract_epi8(verrs, i);
-                        int8_t prediction = (((int16_t)prev_delta) * coef) >> 8;
+                        int8_t prediction = (((int32_t)prev_delta) * coef) >> elem_sz_nbits;
                         int8_t delta = err + (uint8_t)prediction;
                         uint8_t val = prev_val + delta;
 
@@ -935,7 +942,8 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                     uint_t prev_val = prev_vals_ar[0];
                     int_t prev_delta = prev_deltas_ar[0];
                     for (uint32_t i = 0; i < block_sz; i++) {
-                        int_t prediction = (((int32_t)prev_delta) * coef) >> 8;
+                        int_t prediction = (((int32_t)prev_delta) * coef) >> elem_sz_nbits;
+                        // int_t prediction = (((int32_t)prev_delta) * coef) >> 8; // TODO rm
                         int_t err = _mm256_extract_epi16(verrs, i);
                         int_t delta = err + (uint_t)prediction;
                         uint_t val = prev_val + delta;
@@ -972,8 +980,8 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                     int_t prev_delta0 = prev_deltas_ar[0];
                     int_t prev_delta1 = prev_deltas_ar[1];
                     for (uint32_t i = 0; i < block_sz; i++) {
-                        int_t prediction0 = (((int32_t)prev_delta0) * coef0) >> 8;
-                        int_t prediction1 = (((int32_t)prev_delta1) * coef1) >> 8;
+                        int_t prediction0 = (((int32_t)prev_delta0) * coef0) >> elem_sz_nbits;
+                        int_t prediction1 = (((int32_t)prev_delta1) * coef1) >> elem_sz_nbits;
 
                         int_t err0 = _mm256_extract_epi16(verrs, 2 * i);
                         int_t err1 = _mm256_extract_epi16(verrs, 2 * i + 1);
@@ -1005,7 +1013,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                     *(counter_t*)coeffs_ar_odd += grad_sum1 >> shift_to_get_mean;
                 }
             } // elem_sz
-            // if (debug) { printf("wrote data in block:\n"); dump_bytes(dest, block_sz*ndims, ndims*elem_sz); }
+            if (debug) { printf("wrote data in block:\n"); dump_bytes(dest, block_sz*ndims, ndims*elem_sz); }
             dest += block_sz * ndims;
         } // for each block
     } // for each group

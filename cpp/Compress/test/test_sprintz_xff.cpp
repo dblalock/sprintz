@@ -124,7 +124,7 @@ TEST_CASE("xff_rle_rowmajor_lowdim_16b (with compression)",
 {
     printf("executing rowmajor compress xff + rle lowdim 16b test\n");
     TEST_CODEC_NDIMS_RANGE(2, compress_rowmajor_xff_rle_lowdim_16b, decompress_rowmajor_xff_rle_lowdim_16b, 1, 2);
-    // // int ndims = 2;
+    // // int ndims = 1;
     // // auto ndims_list = ar::range(ndims, ndims + 1);
     // auto ndims_list = ar::range(1, 2 + 1);
     // for (auto _ndims : ndims_list) {
@@ -138,6 +138,21 @@ TEST_CASE("xff_rle_rowmajor_lowdim_16b (with compression)",
     //         return decompress_rowmajor_xff_rle_lowdim_16b(src, dest);
     //     };
     //     test_codec<2>(comp, decomp);
+
+    //     // static const int ElemSz = 2;
+    //     // uint32_t sz = 128;
+    //     // using UVec = typename elemsize_traits<ElemSz>::uvec_t;
+    //     // uint32_t denominator_shift = 8 * (ElemSz - 1);
+    //     // UVec orig(sz);
+    //     // UVec raw(sz);
+    //     // srand(12345);
+    //     // orig.setRandom();
+    //     // // raw = orig / (193 << denominator_shift);
+    //     // // test_compressor<ElemSz>(raw, comp, decomp, "sparse 56/256");
+    //     // raw = orig / (250 << denominator_shift);
+    //     // test_compressor<ElemSz>(raw, comp, decomp, "sparse 6/256");
+    //     // // raw = orig / (254 << denominator_shift);
+    //     // // test_compressor<ElemSz>(raw, comp, decomp, "sparse 2/256");
     // }
 }
 
