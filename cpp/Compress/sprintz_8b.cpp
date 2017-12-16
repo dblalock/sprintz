@@ -90,10 +90,10 @@ int64_t sprintz_compress_xff_8b(const uint8_t* src, uint32_t len, int8_t* dest,
             src, len, dest, NDIMS, write_size);
 
     #define CASE(NDIMS)                                             \
-        case NDIMS: return compress8b_rowmajor_xff_rle(             \
+        case NDIMS: return compress_rowmajor_xff_rle_8b(             \
             src, len, dest, NDIMS, write_size);
 
-    SWITCH_ON_NDIMS(ndims, compress8b_rowmajor_xff_rle(
+    SWITCH_ON_NDIMS(ndims, compress_rowmajor_xff_rle_8b(
         src, len, dest, ndims, write_size));
 
     #undef LOW_DIMS_CASE
@@ -110,10 +110,10 @@ int64_t sprintz_decompress_xff_8b(const int8_t* src, uint8_t* dest) {
             src, dest, NDIMS, ngroups, remaining_len);
 
     #define CASE(NDIMS)                                             \
-        case NDIMS: return decompress8b_rowmajor_xff_rle(           \
+        case NDIMS: return decompress_rowmajor_xff_rle_8b(           \
             src, dest, NDIMS, ngroups, remaining_len);
 
-    SWITCH_ON_NDIMS(ndims, decompress8b_rowmajor_xff_rle(
+    SWITCH_ON_NDIMS(ndims, decompress_rowmajor_xff_rle_8b(
         src, dest, ndims, ngroups, remaining_len));
 
     #undef LOW_DIMS_CASE

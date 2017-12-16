@@ -335,9 +335,9 @@ uint32_t decode_xff_rowmajor(const int_t* src, uint32_t len, uint_t* dest,
     // uint8_t* coeffs_ar_odd  = (uint8_t*)prev_vals_ar + vector_sz * 3 * nvectors;
 
     uint32_t row_sz = nvectors * vector_sz;
-    uint_t* prev_vals_ar   = (uint_t*)calloc(2 * row_sz * elem_sz, 1);
+    uint_t* prev_vals_ar   = (uint_t*)calloc(2 * row_sz, elem_sz);
     int_t*  prev_deltas_ar = (int_t* )prev_vals_ar + row_sz;
-    uint_t* coeffs_ar_even = (uint_t*)calloc(2 * row_sz * elem_sz, 1);
+    uint_t* coeffs_ar_even = (uint_t*)calloc(2 * row_sz, elem_sz);
     uint_t* coeffs_ar_odd = coeffs_ar_even + row_sz;
 
     // printf("-------- decompression (len = %lld, ndims = %d)\n", (int64_t)len, ndims);
