@@ -59,7 +59,7 @@ uint32_t encode_xff_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
 {
     CHECK_INT_UINT_TYPES_VALID(int_t, uint_t);
     static const uint8_t elem_sz = sizeof(uint_t);
-    static const uint8_t learning_shift = 1;
+    static const uint8_t learning_shift = elem_sz == 1 ? 1 : 3;
     static const uint8_t log2_block_sz = 3;
     static const uint8_t log2_learning_downsample = 1;
     static const uint8_t vector_nbytes = 32;
@@ -185,13 +185,7 @@ uint32_t encode_xff_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
                 }
 
                 // mean of gradients in block, for even and odd indices
-                const uint8_t rshift = 8 + log2_block_sz;
-                // const uint8_t rshift = 8 + (log2_block_sz - log2_learning_downsample);
-
-
-                // TODO pretty sure we want to use lower line, not current one
-
-
+                const uint8_t rshift = 8 + (log2_block_sz - log2_learning_downsample);
                 __m256i even_grads = _mm256_srai_epi16(
                     _mm256_slli_epi16(gradients_sum, 8), rshift);
                 __m256i odd_grads = _mm256_srai_epi16(gradients_sum, rshift);
@@ -207,15 +201,25 @@ uint32_t encode_xff_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
                 static const __m256i low_mask_epi32 = _mm256_set1_epi32(0xffff);
 
                 // set coef[i] to ((counter[i] >> learn_shift) >> 4) << 4)
+                // const uint8_t shft = elem_sz_nbits - 4;
+                // __m256i filter_coeffs_even  = _mm256_srai_epi32(
+                //     coef_counters_even, learning_shift + shft);
+                // __m256i filter_coeffs_odd  = _mm256_srai_epi32(
+                //     coef_counters_odd, learning_shift + shft);
+                // __m256i filter_coeffs = _mm256_blendv_epi8(
+                //     filter_coeffs_odd, filter_coeffs_even, low_mask_epi32);
+                // filter_coeffs = _mm256_slli_epi16(
+                //     filter_coeffs, elem_sz_nbits - shft);
                 const uint8_t shft = elem_sz_nbits - 4;
                 __m256i filter_coeffs_even  = _mm256_srai_epi32(
                     coef_counters_even, learning_shift + shft);
                 __m256i filter_coeffs_odd  = _mm256_srai_epi32(
                     coef_counters_odd, learning_shift + shft);
+                filter_coeffs_odd = _mm256_slli_epi32(filter_coeffs_odd, elem_sz_nbits);
                 __m256i filter_coeffs = _mm256_blendv_epi8(
                     filter_coeffs_odd, filter_coeffs_even, low_mask_epi32);
                 filter_coeffs = _mm256_slli_epi16(
-                    filter_coeffs, elem_sz_nbits - shft);
+                    filter_coeffs, shft);
 
                 for (uint8_t i = 0; i < block_sz; i++) {
                     const uint_t* in_ptr = src + i * ndims + v_offset;
@@ -225,6 +229,7 @@ uint32_t encode_xff_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
 
                     __m256i vpredictions = _mm256_mulhi_epi16(
                         prev_deltas, filter_coeffs);
+                    vpredictions = _mm256_slli_epi16(vpredictions, 2);
 
                     __m256i verrs = _mm256_sub_epi16(vdeltas, vpredictions);
 
@@ -238,13 +243,7 @@ uint32_t encode_xff_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
                     prev_vals = vals;
                 }
                 // mean of gradients in block, for even and odd indices
-                const uint8_t rshift = 16 + log2_block_sz;
-                // const uint8_t rshift = 16 + (log2_block_sz - log2_learning_downsample);
-
-
-                // TODO pretty sure we want to use lower line ^, not current one
-
-
+                const uint8_t rshift = 16 + (log2_block_sz - log2_learning_downsample);
                 __m256i even_grads = _mm256_srai_epi32(
                     _mm256_slli_epi32(gradients_sum, 16), rshift);
                 __m256i odd_grads = _mm256_srai_epi32(gradients_sum, rshift);
@@ -301,7 +300,7 @@ uint32_t decode_xff_rowmajor(const int_t* src, uint32_t len, uint_t* dest,
 {
     CHECK_INT_UINT_TYPES_VALID(int_t, uint_t);
     static const uint8_t elem_sz = sizeof(uint_t);
-    static const uint8_t learning_shift = 1;
+    static const uint8_t learning_shift = elem_sz == 1 ? 1 : 3;
     static const uint8_t log2_block_sz = 3;
     static const uint8_t log2_learning_downsample = 1;
     static const uint8_t vector_nbytes = 32;
@@ -422,7 +421,7 @@ uint32_t decode_xff_rowmajor(const int_t* src, uint32_t len, uint_t* dest,
                     prev_vals = vals;
                 }
                 // mean of gradients in block, for even and odd indices
-                const uint8_t rshift = 8 + (log2_block_sz - log2_learning_downsample);
+                const uint8_t rshift = 8 + log2_block_sz - log2_learning_downsample;
                 __m256i even_grads = _mm256_srai_epi16(
                     _mm256_slli_epi16(gradients_sum, 8), rshift);
                 __m256i odd_grads = _mm256_srai_epi16(gradients_sum, rshift);
@@ -435,15 +434,26 @@ uint32_t decode_xff_rowmajor(const int_t* src, uint32_t len, uint_t* dest,
                 static const __m256i low_mask_epi32 = _mm256_set1_epi32(0xffff);
 
                 // set coef[i] to ((counter[i] >> learn_shift) >> 12) << 12)
+                // const uint8_t shft = elem_sz_nbits - 4;
+                // __m256i filter_coeffs_even  = _mm256_srai_epi32(
+                //     coef_counters_even, learning_shift + shft);
+                // __m256i filter_coeffs_odd  = _mm256_srai_epi32(
+                //     coef_counters_odd, learning_shift + shft);
+                // __m256i filter_coeffs = _mm256_blendv_epi8(
+                //     filter_coeffs_odd, filter_coeffs_even, low_mask_epi32);
+                // filter_coeffs = _mm256_slli_epi16(
+                //     filter_coeffs, elem_sz_nbits - shft);
+
                 const uint8_t shft = elem_sz_nbits - 4;
                 __m256i filter_coeffs_even  = _mm256_srai_epi32(
                     coef_counters_even, learning_shift + shft);
                 __m256i filter_coeffs_odd  = _mm256_srai_epi32(
                     coef_counters_odd, learning_shift + shft);
+                filter_coeffs_odd = _mm256_slli_epi32(filter_coeffs_odd, elem_sz_nbits);
                 __m256i filter_coeffs = _mm256_blendv_epi8(
                     filter_coeffs_odd, filter_coeffs_even, low_mask_epi32);
                 filter_coeffs = _mm256_slli_epi16(
-                    filter_coeffs, elem_sz_nbits - shft);
+                    filter_coeffs, shft);
 
                 for (uint8_t i = 0; i < block_sz; i++) {
                     const int_t* in_ptr = src + i * ndims + v_offset;
@@ -452,6 +462,7 @@ uint32_t decode_xff_rowmajor(const int_t* src, uint32_t len, uint_t* dest,
 
                     __m256i vpredictions = _mm256_mulhi_epi16(
                         prev_deltas, filter_coeffs);
+                    vpredictions = _mm256_slli_epi16(vpredictions, 2);
 
                     if (i % learning_downsample == learning_downsample - 1) {
                         __m256i gradients = _mm256_sign_epi16(prev_deltas, verrs);
@@ -466,7 +477,7 @@ uint32_t decode_xff_rowmajor(const int_t* src, uint32_t len, uint_t* dest,
                     prev_vals = vals;
                 }
                 // mean of gradients in block, for even and odd indices
-                const uint8_t rshift = 16 + log2_block_sz;
+                const uint8_t rshift = 16 + log2_block_sz - log2_learning_downsample;
                 __m256i even_grads = _mm256_srai_epi32(
                     _mm256_slli_epi32(gradients_sum, 16), rshift);
                 __m256i odd_grads = _mm256_srai_epi32(gradients_sum, rshift);
