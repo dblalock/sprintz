@@ -70,7 +70,7 @@ int64_t compress_rowmajor_xff_rle(const uint_t* src, uint32_t len,
     static const uint8_t group_sz_blocks = kDefaultGroupSzBlocks;
     static const uint16_t max_run_nblocks = 0x7fff; // 15 bit counter
     // xff constants
-    static const uint8_t learning_shift = 1;
+    static const uint8_t learning_shift = elem_sz == 1 ? 1 : 3;
     static const uint8_t log2_learning_downsample = 1;
     static const uint8_t learning_downsample = 1 << log2_learning_downsample;
     // misc constants
@@ -211,7 +211,7 @@ int64_t compress_rowmajor_xff_rle(const uint_t* src, uint32_t len,
                 // XXX 16b coef matches simd impl, but means that it will
                 // be very hard for 16b data to get double delta coded; i.e.:
                 //  floor(32767 / (2^12)) * 2^(12) = 28,672
-                // which is only 15/16 of actual double delta coding
+                // which is only 14/15 of actual double delta coding
                 //
                 int16_t coef = (coef_counters_ar[dim] >> (learning_shift + shft)) << shft;
                 // counter_t coef = (coef_counters_ar[dim] >> (learning_shift + shft)) << shft;
@@ -222,17 +222,19 @@ int64_t compress_rowmajor_xff_rle(const uint_t* src, uint32_t len,
                     uint_t val = src[offset];
                     int_t delta = (int_t)(val - prev_val);
                     int_t prediction = (((counter_t)prev_delta) * coef) >> elem_sz_nbits;
+                    if (elem_sz == 2) {
+                        // can't just rshift by one less since that wouldn't
+                        // zero the LSB
+                        prediction = prediction << 2;
+                    }
                     int_t err = delta - prediction;
                     uint_t bits = ZIGZAG_ENCODE_SCALAR(err);
 
                     if (i % learning_downsample == learning_downsample - 1) {
                         grad_sum += icopysign(err, prev_delta);
-
-                        // grad_sum += 0;  // TODO rm
                         if (debug) {
                             printf("prev delta, err:\t%d\t\t%d\n", prev_delta, err);
                         }
-
                     }
                     // int8_t grad = copysign_i8(err, prev_delta);
                     // grad_sums[(i * ndims) + dim] = grad_sum;
@@ -567,7 +569,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle(const int_t* src,
     typedef typename ElemSzTraits<elem_sz>::bitwidth_t bitwidth_t;
     typedef typename ElemSzTraits<elem_sz>::counter_t counter_t;
     // xff constants
-    static const uint8_t learning_shift = 1;
+    static const uint8_t learning_shift = elem_sz == 1 ? 1 : 3;
     static const uint8_t log2_learning_downsample = 1;
     static const uint8_t learning_downsample = 1 << log2_learning_downsample;
     // constants that could actually be changed in this impl
@@ -895,6 +897,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle(const int_t* src,
 
                                     __m256i vpredictions = _mm256_mulhi_epi16(
                                         prev_deltas, filter_coeffs);
+                                    vpredictions = _mm256_slli_epi16(vpredictions, 2);
 
                                     __m256i vdeltas = vpredictions; // since err of 0
                                     __m256i vals = _mm256_add_epi16(vdeltas, prev_vals);
@@ -1078,6 +1081,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle(const int_t* src,
 
                         __m256i vpredictions = _mm256_mulhi_epi16(
                             prev_deltas, filter_coeffs);
+                        vpredictions = _mm256_slli_epi16(vpredictions, 2);
 
                         // zigzag decode
                         __m256i verrs = mm256_zigzag_decode_epi16(raw_verrs);

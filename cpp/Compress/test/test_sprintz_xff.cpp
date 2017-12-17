@@ -160,8 +160,8 @@ TEST_CASE("xff_rle_rowmajor_8b (with compression)",
     "[rowmajor][xff][rle][8b][dbg]")
 {
     printf("executing rowmajor compress xff + rle test\n");
-    TEST_CODEC_MANY_NDIMS_8b(compress_rowmajor_xff_rle_8b, decompress_rowmajor_xff_rle_8b);
-    // TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_xff_rle_8b, decompress_rowmajor_xff_rle_8b, 1, 5);
+    // TEST_CODEC_MANY_NDIMS_8b(compress_rowmajor_xff_rle_8b, decompress_rowmajor_xff_rle_8b);
+    TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_xff_rle_8b, decompress_rowmajor_xff_rle_8b, 1, 5);
     // TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_xff_rle_8b, decompress_rowmajor_xff_rle_8b, 1, 1);
 }
 
