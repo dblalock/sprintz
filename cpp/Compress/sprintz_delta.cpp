@@ -18,7 +18,7 @@
 #include "format.h"
 #include "util.h" // for memrep
 
-#include "array_utils.hpp" // TODO rm
+// #include "array_utils.hpp" // TODO rm
 #include "debug_utils.hpp" // TODO rm
 
 static const int debug = 0;

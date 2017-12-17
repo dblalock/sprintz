@@ -1042,8 +1042,8 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim_8b(
     return decompress_rowmajor_xff_rle_lowdim(src, dest, ndims, ngroups,
         remaining_len);
 }
-SPRINTZ_FORCE_INLINE int64_t decompress8b_rowmajor_xff_rle_lowdim_16b(
-    const int8_t* src, uint8_t* dest, uint16_t ndims, uint32_t ngroups,
+SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim_16b(
+    const int16_t* src, uint16_t* dest, uint16_t ndims, uint32_t ngroups,
     uint16_t remaining_len)
 {
     return decompress_rowmajor_xff_rle_lowdim(src, dest, ndims, ngroups,

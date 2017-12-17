@@ -11,12 +11,25 @@
 
 #include <stdint.h>
 
-int64_t sprintz_compress_delta_8b(const uint8_t* src, uint32_t len, int8_t* dest,
-                                  uint16_t ndims, bool write_size=true);
+// ================================================================ 8b
+
+int64_t sprintz_compress_delta_8b(const uint8_t* src, uint32_t len,
+    int8_t* dest, uint16_t ndims, bool write_size=true);
 int64_t sprintz_decompress_delta_8b(const int8_t* src, uint8_t* dest);
 
 int64_t sprintz_compress_xff_8b(const uint8_t* src, uint32_t len, int8_t* dest,
                                   uint16_t ndims, bool write_size=true);
 int64_t sprintz_decompress_xff_8b(const int8_t* src, uint8_t* dest);
+
+// ================================================================ 16b
+
+int64_t sprintz_compress_delta_16b(const uint16_t* src, uint32_t len,
+    int16_t* dest, uint16_t ndims, bool write_size=true);
+int64_t sprintz_decompress_delta_16b(const int16_t* src, uint16_t* dest);
+
+int64_t sprintz_compress_xff_16b(const uint16_t* src, uint32_t len,
+    int16_t* dest, uint16_t ndims, bool write_size=true);
+int64_t sprintz_decompress_xff_16b(const int16_t* src, uint16_t* dest);
+
 
 #endif /* sprintz_8b_hpp */

@@ -40,8 +40,19 @@
     };                                                                      \
     return -1; /* unreachable */
 
+#define SWITCH_ON_NDIMS_16B(NDIMS, DEFAULT_CALL)                            \
+    switch (NDIMS) {                                                        \
+        case 0: printf("Received invalid ndims %d\n", NDIMS); break;        \
+        LOW_DIMS_CASE(1); LOW_DIMS_CASE(2);                                 \
+        CASE(3); CASE(4);                                                   \
+        CASES_5_AND_UP(DEFAULT_CALL)                                        \
+    };                                                                      \
+    return -1; /* unreachable */
+
 #undef LOW_DIMS_CASE
 #undef CASE
+
+// ================================================================ 8b delta
 
 int64_t sprintz_compress_delta_8b(const uint8_t* src, uint32_t len, int8_t* dest,
                                   uint16_t ndims, bool write_size)
@@ -82,6 +93,8 @@ int64_t sprintz_decompress_delta_8b(const int8_t* src, uint8_t* dest) {
     #undef CASE
 }
 
+// ================================================================ 8b xff
+
 int64_t sprintz_compress_xff_8b(const uint8_t* src, uint32_t len, int8_t* dest,
                                   uint16_t ndims, bool write_size)
 {
@@ -114,6 +127,88 @@ int64_t sprintz_decompress_xff_8b(const int8_t* src, uint8_t* dest) {
             src, dest, NDIMS, ngroups, remaining_len);
 
     SWITCH_ON_NDIMS(ndims, decompress_rowmajor_xff_rle_8b(
+        src, dest, ndims, ngroups, remaining_len));
+
+    #undef LOW_DIMS_CASE
+    #undef CASE
+}
+
+// ================================================================ 16b delta
+
+int64_t sprintz_compress_delta_16b(const uint16_t* src, uint32_t len,
+    int16_t* dest, uint16_t ndims, bool write_size)
+{
+    // #undef LOW_DIMS_CASE
+    #define LOW_DIMS_CASE(NDIMS)                                    \
+        case NDIMS: return compress_rowmajor_delta_rle_lowdim_16b(  \
+            src, len, dest, NDIMS, write_size);
+
+    #define CASE(NDIMS)                                             \
+        case NDIMS: return compress_rowmajor_delta_rle_16b(         \
+            src, len, dest, NDIMS, write_size);
+
+    SWITCH_ON_NDIMS_16B(ndims, compress_rowmajor_delta_rle_16b(
+        src, len, dest, ndims, write_size));
+
+    #undef LOW_DIMS_CASE
+    #undef CASE
+}
+int64_t sprintz_decompress_delta_16b(const int16_t* src, uint16_t* dest) {
+    uint16_t ndims;
+    uint32_t ngroups;
+    uint16_t remaining_len;
+    src += read_metadata_rle(src, &ndims, &ngroups, &remaining_len);
+
+    #define LOW_DIMS_CASE(NDIMS)                                        \
+        case NDIMS: return decompress_rowmajor_delta_rle_lowdim_16b(    \
+            src, dest, NDIMS, ngroups, remaining_len);
+
+    #define CASE(NDIMS)                                                 \
+        case NDIMS: return decompress_rowmajor_delta_rle_16b(           \
+            src, dest, NDIMS, ngroups, remaining_len);
+
+    SWITCH_ON_NDIMS_16B(ndims, decompress_rowmajor_delta_rle_16b(
+        src, dest, ndims, ngroups, remaining_len));
+
+    #undef LOW_DIMS_CASE
+    #undef CASE
+}
+
+
+// ================================================================ 16b xff
+
+int64_t sprintz_compress_xff_16b(const uint16_t* src, uint32_t len,
+    int16_t* dest, uint16_t ndims, bool write_size)
+{
+    #define LOW_DIMS_CASE(NDIMS)                                    \
+        case NDIMS: return compress_rowmajor_xff_rle_lowdim_16b(    \
+            src, len, dest, NDIMS, write_size);
+
+    #define CASE(NDIMS)                                             \
+        case NDIMS: return compress_rowmajor_xff_rle_16b(           \
+            src, len, dest, NDIMS, write_size);
+
+    SWITCH_ON_NDIMS_16B(ndims, compress_rowmajor_xff_rle_16b(
+        src, len, dest, ndims, write_size));
+
+    #undef LOW_DIMS_CASE
+    #undef CASE
+}
+int64_t sprintz_decompress_xff_16b(const int16_t* src, uint16_t* dest) {
+    uint16_t ndims;
+    uint32_t ngroups;
+    uint16_t remaining_len;
+    src += read_metadata_rle(src, &ndims, &ngroups, &remaining_len);
+
+    #define LOW_DIMS_CASE(NDIMS)                                    \
+        case NDIMS: return decompress_rowmajor_xff_rle_lowdim_16b(  \
+            src, dest, NDIMS, ngroups, remaining_len);
+
+    #define CASE(NDIMS)                                             \
+        case NDIMS: return decompress_rowmajor_xff_rle_16b(         \
+            src, dest, NDIMS, ngroups, remaining_len);
+
+    SWITCH_ON_NDIMS_16B(ndims, decompress_rowmajor_xff_rle_16b(
         src, dest, ndims, ngroups, remaining_len));
 
     #undef LOW_DIMS_CASE
