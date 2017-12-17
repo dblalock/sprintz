@@ -186,7 +186,7 @@ TEST_CASE("xff_rle_rowmajor_16b (with compression)",
         };
         test_codec<2>(comp, decomp);
 
-        // uint32_t sz = 4096;
+        // uint32_t sz = 128;
         // static const int ElemSz = 2;
         // using UVec = typename elemsize_traits<ElemSz>::uvec_t;
         // uint32_t denominator_shift = 8 * (ElemSz - 1);

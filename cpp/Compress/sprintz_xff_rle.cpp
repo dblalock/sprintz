@@ -168,7 +168,7 @@ int64_t compress_rowmajor_xff_rle(const uint_t* src, uint32_t len,
         //     (int)(ngroups - 1), (int)(src - orig_src), (int)(dest - orig_dest - length_header_nbytes));
 
         // debug = debug && (ngroups <= 20);
-        debug = gDebug && (elem_sz == 2) && (ngroups > 16);
+        // debug = gDebug && (elem_sz == 2) && (ngroups > 16);
 
         memset(header_bytes, 0, total_header_bytes_padded);
         memset(header_dest, 0, total_header_bytes);
@@ -252,7 +252,7 @@ int64_t compress_rowmajor_xff_rle(const uint_t* src, uint32_t len,
                 } else if (elem_sz == 2) {
                     uint8_t upper_mask = NBITS_MASKS_U8[mask >> 8];
                     mask = upper_mask > 0 ? (upper_mask << 8) + 255 : NBITS_MASKS_U8[mask];
-                    mask = 0xffff; // TODO rm
+                    // mask = 0xffff; // TODO rm
                 }
                 // mask = mask ? NBITS_MASKS_U8[255] : 0; // TODO rm
                 prev_vals_ar[dim] = prev_val;
@@ -357,8 +357,10 @@ do_rle:
                     // just increment addr at which to write next time
                     header_bit_offset += ndims * nbits_sz_bits;
 
-                    // printf("aborting and compressing rle block of length %d ending at src offset %d\n", run_length_nblocks, (int)(src - orig_src));
-                    // printf("coefs: "); dump_elements(coef_counters_ar, ndims, ndims);
+                    if (debug) {
+                        printf("aborting and compressing rle block of length %d ending at src offset %d\n", run_length_nblocks, (int)(src - orig_src));
+                        printf("coefs: "); dump_elements(coef_counters_ar, ndims, ndims);
+                    }
 
                     b++; // we're finishing off this block
 
@@ -389,8 +391,10 @@ do_rle:
             }
 
             if (run_length_nblocks > 0) { // just finished a run
-                // printf("%d.%d: compressing rle block of length %d ending at offset %d\n",
-                //     (int)ngroups - 1, b, run_length_nblocks, (int)(src - orig_src));
+                if (debug) {
+                    printf("%d.%d: compressing rle block of length %d ending at offset %d\n",
+                        (int)ngroups - 1, b, run_length_nblocks, (int)(src - orig_src));
+                }
                 b++;
 
                 uint8_t* dest_u8 = (uint8_t*)dest;
@@ -533,7 +537,7 @@ main_loop_end:
         // *(uint16_t*)(orig_dest + 4) = (uint16_t)remaining_len;
         // *(uint16_t*)(orig_dest + 6) = ndims;
     }
-    // printf("remaining_len len: %d\n", (int)remaining_len);
+    if (debug)  printf("remaining_len len: %d\n", (int)remaining_len);
     // printf("remaining_len len: %d (%d -> %d)\n",
     //     (int)remaining_len, (int)(src - orig_src), (int)(dest - orig_dest));
 
@@ -673,6 +677,8 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle(const int_t* src,
     uint_t* coeffs_ar_even  = (uint_t*)calloc(2 * padded_ndims, elem_sz);
     uint_t* coeffs_ar_odd   = coeffs_ar_even + padded_ndims;
 
+    if (debug) printf("padded ndims: %d\n", padded_ndims);
+
     // ================================ main loop
 
     // uint64_t ngroups = orig_len / group_sz; // if we get an fp error, it's this
@@ -686,7 +692,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle(const int_t* src,
         //     (int)g, (int)(src - orig_src), (int)(dest - orig_dest));
 
 
-        debug = gDebug && (elem_sz == 2) && (g >= 16);
+        // debug = gDebug && (elem_sz == 2) && (g >= 16);
 
 
         // ------------------------ create unpacked headers array
@@ -844,10 +850,6 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle(const int_t* src,
                                 filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 4);
                                 filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 4);
 
-                                // printf("filter coeffs even at start of block:\n"); dump_m256i(filter_coeffs_even);
-                                // if (g > 10) { printf("even counters for run:\n"); dump_m256i<int16_t>(coef_counters_even); }
-                                // if (g > 10) { printf("even filter coeffs for run:\n"); dump_m256i<int16_t>(filter_coeffs_even); }
-
                                 __m256i even_prev_deltas = _mm256_srai_epi16(
                                     _mm256_slli_epi16(prev_deltas, 8), 8);
                                 __m256i odd_prev_deltas = _mm256_srai_epi16(
@@ -889,19 +891,29 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle(const int_t* src,
                                     filter_coeffs, elem_sz_nbits - shft);
 
                                 for (uint8_t i = 0; i < block_sz; i++) {
-                                    const int_t* in_ptr = src + i * ndims + v_offset;
                                     uint_t* out_ptr = dest + i * ndims + v_offset;
-                                    __m256i verrs = _mm256_loadu_si256((__m256i*)in_ptr);
 
                                     __m256i vpredictions = _mm256_mulhi_epi16(
                                         prev_deltas, filter_coeffs);
 
-                                    __m256i vdeltas = _mm256_add_epi16(verrs, vpredictions);
+                                    __m256i vdeltas = vpredictions; // since err of 0
                                     __m256i vals = _mm256_add_epi16(vdeltas, prev_vals);
+
+                                    if (debug) { printf("prev vals: "); dump_m256i<int16_t>(prev_vals); }
 
                                     _mm256_storeu_si256((__m256i*)out_ptr, vals);
                                     prev_deltas = vdeltas;
                                     prev_vals = vals;
+                                }
+                                if (debug) {
+                                    printf("\tbb=%d\n", bb);
+                                    printf("prev_vals ptr; %p\n", (void*)prev_vals_ptr);
+                                    printf("coeffs[0]: %d\n", (int16_t)_mm256_extract_epi16(filter_coeffs, 0));
+                                    printf("prev_vals[0]: %d\n", (int16_t)_mm256_extract_epi16(prev_vals, 0));
+                                    printf("prev_deltas[0]: %d\n", (int16_t)_mm256_extract_epi16(prev_deltas, 0));
+                                    printf("vals[0]: %d\n", (int16_t)_mm256_extract_epi16(vals, 0));
+                                    // printf("coeffs even: "); dump_m256i<int16_t>(coef_counters_even);
+                                    printf("counter[0]: %d\n", (int32_t)_mm256_extract_epi32(coef_counters_even, 0));
                                 }
                             }
                             _mm256_storeu_si256((__m256i*)prev_vals_ptr, prev_vals);
@@ -919,10 +931,11 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle(const int_t* src,
                     memset(dest, 0, num_zeros * elem_sz);
                     dest += num_zeros;
                 }
-                // if (length == 0) {
-                // printf("%d.%d: decompressed rle block of length %d at offset %d\n",
-                //     (int)g, b, length, (int)(dest - orig_dest));
-                // }
+
+                if (debug) {
+                    printf("%d.%d: decompressed rle block of length %d at offset %d\n",
+                        (int)g, b, length, (int)(dest - orig_dest));
+                }
 
                 src8++;
                 src8 += (high_byte > 0); // if 0, wasn't used for run length
