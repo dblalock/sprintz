@@ -18,7 +18,7 @@
 #include "array_utils.hpp"
 #include "compress_testing.hpp"
 #include "debug_utils.hpp"
-#include "test_utils.hpp"
+#include "testing_utils.hpp"
 
 
 TEST_CASE("mm256_shuffle_epi8_to_epi16", "[util]") {

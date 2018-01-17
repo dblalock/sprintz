@@ -13,7 +13,7 @@
 
 #include "array_utils.hpp"
 #include "compress_testing.hpp"
-#include "test_utils.hpp"
+#include "testing_utils.hpp"
 
 
 TEST_CASE("transpose 8b", "[transpose]") {

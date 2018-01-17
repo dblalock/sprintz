@@ -11,7 +11,7 @@
 #include "compress_testing.hpp"
 #include "univariate_8b.h"
 #include "bitpack.h"
-#include "test_utils.hpp"
+#include "testing_utils.hpp"
 
 #include "debug_utils.hpp" // TODO rm
 

@@ -17,7 +17,7 @@
 //#include "sprintz2.h"
 // #include "bitpack.h"
 #include "delta.h"
-#include "test_utils.hpp"
+#include "testing_utils.hpp"
 
 #include "debug_utils.hpp" // TODO rm
 

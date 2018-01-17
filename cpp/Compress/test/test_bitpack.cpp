@@ -14,7 +14,7 @@
 
 #include "array_utils.hpp"
 #include "debug_utils.hpp"
-#include "test_utils.hpp"
+#include "testing_utils.hpp"
 #include "timing_utils.hpp"
 
 

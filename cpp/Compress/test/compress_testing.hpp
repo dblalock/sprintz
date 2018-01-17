@@ -12,10 +12,10 @@
 #define compress_testing_h
 
 #include "catch.hpp"
-#include "eigen/Eigen"
+#include "eigen/Core"
 
 #include "array_utils.hpp"
-#include "test_utils.hpp"
+#include "testing_utils.hpp"
 
 static const uint16_t kDefaultMinNdims = 1;
 static const uint16_t kDefaultMaxNdims = 129;
