@@ -134,6 +134,7 @@ inline void dump_elements(const T* x, size_t len=1, size_t newline_every=1,
 	int rowmark_every=8)
 {
 	const CastToT* ptr = reinterpret_cast<const CastToT*>(x);
+	if (len == 0) { return; }
 	size_t len_elements = (len * sizeof(T) / sizeof(CastToT));
 	// size_t len_elements = len;
 	if (newline_every == 1) {

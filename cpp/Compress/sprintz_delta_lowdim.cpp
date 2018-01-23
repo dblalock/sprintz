@@ -363,6 +363,15 @@ main_loop_end:
         write_metadata_rle(orig_dest, ndims, ngroups, remaining_len);
     }
     memcpy(dest, src, remaining_len * elem_sz);
+
+    // printf("=== sprintz comp: memcpying remaining_len elements = %d (%d B)\n", (int)remaining_len, (int)remaining_len * 2);
+    // auto ret = dest + remaining_len - orig_dest;
+    // printf("final bytes:\n"); dump_bytes((uint8_t*)dest, remaining_len * elem_sz);
+    // printf("=== sprintz comp: returning length %d (%d B)\n", (int)ret, (int)ret * 2);
+
+    // XXX: if dest and orig_dest not both aligned or not aligned to 2B
+    // (which there's no reason they have to be), this can produce an
+    // off-by-one error
     return dest + remaining_len - orig_dest;
 }
 
@@ -733,14 +742,23 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
 
     memcpy(dest, src, remaining_len * elem_sz);
 
+    // printf("=== sprintz decomp: memcpying remaining_len elements = %d (%d B)\n", (int)remaining_len, (int)remaining_len * 2);
+    // auto ret = dest + remaining_len - orig_dest;
+    // printf("final bytes:\n"); dump_bytes((uint8_t*)dest, remaining_len * elem_sz);
+    // printf("=== sprintz decomp: returning length %d (%d B)\n", (int)ret, (int)ret * 2);
+
+
     if (debug > 2) {
         size_t dest_sz = (dest + remaining_len - orig_dest);
         // printf("decompressed data:\n"); dump_bytes(orig_dest, dest_sz * elem_sz, ndims * elem_sz);
-        printf("decompressed data:\n"); dump_bytes((uint8_t*)orig_dest, 192, ndims * elem_sz);
+        // printf("decompressed data:\n"); dump_bytes((uint8_t*)orig_dest, 192, ndims * elem_sz);
         // printf("decompressed data:\n"); dump_elements(orig_dest, dest_sz, ndims);
         // printf("decompressed data:\n"); dump_elements(orig_dest, 16, ndims);
     }
 
+    // XXX: if dest and orig_dest not both aligned or not aligned to 2B
+    // (which there's no reason they have to be), this can produce an
+    // off-by-one error
     return dest + remaining_len - orig_dest;
 }
 
