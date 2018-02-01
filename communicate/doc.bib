@@ -4,6 +4,48 @@
   note={\url{http://flac.sourceforge.net}},
   year={2008}
 }
+@misc{alac,
+  title={Apple Lossless Audio Codec},
+  author={Apple},
+  note={\url{https://github.com/macosforge/alac}},
+  year={2011}
+}
+@article{vorbis,
+  title={Ogg Vorbis—open, free audio—set your media free},
+  author={Moffitt, Jack},
+  journal={Linux journal},
+  volume={2001},
+  number={81es},
+  pages={9},
+  year={2001},
+  publisher={Belltown Media}
+}
+@misc{shorten,
+  title={SHORTEN: Simple lossless and near-lossless waveform compression},
+  author={Robinson, Tony},
+  year={1994},
+  publisher={University of Cambridge, Department of Engineering}
+}
+@misc{aac,
+  title={Information technology -- Generic coding of moving pictures and associated audio information -- Part 7: Advanced Audio Coding (AAC)},
+  note={\url{https://www.iso.org/standard/43345.html}},
+  year={2006},
+  publisher={International Standards Organization}
+}
+@techreport{opus,
+  title={Definition of the Opus audio codec},
+  author={Valin, Jean-Marc and Vos, Koen and Terriberry, Timothy},
+  year={2012}
+}
+@article{blosc,
+  title={Why modern CPUs are starving and what can be done about it},
+  author={Alted, Francesc},
+  journal={Computing in Science \& Engineering},
+  volume={12},
+  number={2},
+  year={2010},
+  publisher={IEEE}
+}
 @misc{lz4,
   title={LZ4--extremely fast compression},
   author={Collet, Yann},
@@ -22,22 +64,27 @@
   note={\url{https://www.gzip.org/}},
   year={2003}
 }
+@article{lzo,
+  title={LZO-a real-time data compression library},
+  author={Oberhumer, MFXJ},
+  journal={http://www.oberhumer.com/opensource/lzo/},
+  year={2008}
+}
 @misc{snappy,
   title={Snappy: A fast compressor/decompressor},
   author={Gunderson, SH},
   note={\url{https://code.google.com/p/snappy}},
   year={2015}
 }
-@misc{influxdb,
-  title={InfluxDB},
-  author={Beckett, S},
-  note={\url{https://influxdata.com}},
-  year={2017}
-}
-@misc{akumuli,
-  title={Akumuli Time-series database},
-  author={Lazin, Eugene},
-  note={\url{https://akumuli.org}},
+@article{simple8b,
+  title={Index compression using 64-bit words},
+  author={Anh, Vo Ngoc and Moffat, Alistair},
+  journal={Software: Practice and Experience},
+  volume={40},
+  number={2},
+  pages={131--147},
+  year={2010},
+  publisher={Wiley Online Library}
 }
 @misc{fse,
   title={Finite State Entropy},
@@ -50,8 +97,6 @@
   note={\url{https://github.com/kiyo-masui/bitshuffle}},
   year={2017}
 }
-
-
 @misc{quark,
   title={Intel Quark Microcontrollers},
   note={\url{https://www.intel.com/content/www/us/en/embedded/products/quark/overview.html}},
@@ -107,23 +152,6 @@
     Pages = {1--12},
     Year = {2016}
 }
-@article{gorillaDB,
-  title={Gorilla: A fast, scalable, in-memory time series database},
-  author={Pelkonen, Tuomas and Franklin, Scott and Teller, Justin and Cavallaro, Paul and Huang, Qi and Meza, Justin and Veeraraghavan, Kaushik},
-  journal={Proceedings of the VLDB Endowment},
-  volume={8},
-  number={12},
-  pages={1816--1827},
-  year={2015},
-  publisher={VLDB Endowment}
-}
-@inproceedings{chronicleDB,
-  title={ChronicleDB: A High-Performance Event Store.},
-  author={Seidemann, Marc and Seeger, Bernhard},
-  booktitle={EDBT},
-  pages={144--155},
-  year={2017}
-}
 @article{eegCS,
   title={Compressed sensing of multichannel EEG signals: the simultaneous cosparsity and low-rank optimization},
   author={Liu, Yipeng and De Vos, Maarten and Van Huffel, Sabine},
@@ -158,7 +186,7 @@
   year={2012},
   organization={IEEE}
 }
-@article{zhao2015general,
+@article{groupSimd,
   title={A general simd-based approach to accelerating compression algorithms},
   author={Zhao, Wayne Xin and Zhang, Xudong and Lemire, Daniel and Shan, Dongdong and Nie, Jian-Yun and Yan, Hongfei and Wen, Ji-Rong},
   journal={ACM Transactions on Information Systems (TOIS)},
@@ -167,6 +195,61 @@
   pages={15},
   year={2015},
   publisher={ACM}
+}
+@inproceedings{kGamma,
+  title={Fast integer compression using SIMD instructions},
+  author={Schlegel, Benjamin and Gemulla, Rainer and Lehner, Wolfgang},
+  booktitle={Proceedings of the Sixth International Workshop on Data Management on New Hardware},
+  pages={34--40},
+  year={2010},
+  organization={ACM}
+}
+@inproceedings{varintG8IU,
+  title={SIMD-based decoding of posting lists},
+  author={Stepanov, Alexander A and Gangolli, Anil R and Rose, Daniel E and Ernst, Ryan J and Oberoi, Paramjit S},
+  booktitle={Proceedings of the 20th ACM international conference on Information and knowledge management},
+  pages={317--326},
+  year={2011},
+  organization={ACM}
+}
+@article{golomb,
+  title={Run-length encodings},
+  author={Golomb, Solomon},
+  journal={IEEE transactions on information theory},
+  volume={12},
+  number={3},
+  pages={399--401},
+  year={1966},
+  publisher={IEEE}
+}
+@article{rice,
+  title={Some practical universal noiseless coding techniques, part 3, module PSl14, K+},
+  author={Rice, Robert F},
+  year={1991}
+}
+@inproceedings{bbp,
+  title={High Speed Lossless Image Compression},
+  author={Siedelmann, Hendrik and Wender, Alexander and Fuchs, Martin},
+  booktitle={German Conference on Pattern Recognition},
+  pages={343--355},
+  year={2015},
+  organization={Springer}
+}
+@techreport{zlib,
+  title={Zlib compressed data format specification version 3.3},
+  author={Deutsch, Peter and Gailly, Jean-Loup},
+  year={1996}
+}
+@article{dwarf,
+  title={DWARF debugging information format, version 4},
+  author={DWARF Debugging Information Format Committee and others},
+  journal={Free Standards Group},
+  year={2010}
+}
+@techreport{brotli,
+  title={Brotli compressed data format},
+  author={Alakuijala, Jyrki and Szabadka, Zoltan},
+  year={2016}
 }
 @inproceedings{iotCompressCrap,
   title={IoT data compression: Sensor-agnostic approach},
@@ -235,20 +318,6 @@
   author={Damme, Patrick and Habich, Dirk and Hildebrand, J and Lehner, Wolfgang},
   booktitle={Proc. EDBT},
   year={2017}
-}
-@inproceedings{respawnDB,
-  title={Respawn: A distributed multi-resolution time-series datastore},
-  author={Buevich, Maxim and Wright, Anne and Sargent, Randy and Rowe, Anthony},
-  booktitle={Real-Time Systems Symposium (RTSS), 2013 IEEE 34th},
-  pages={288--297},
-  year={2013},
-  organization={IEEE}
-}
-@misc{shorten,
-  title={SHORTEN: Simple lossless and near-lossless waveform compression},
-  author={Robinson, Tony},
-  year={1994},
-  publisher={University of Cambridge, Department of Engineering}
 }
 @article{simdScan,
   title={SIMD-scan: ultra fast in-memory table scan using on-chip vector processing units},
@@ -332,4 +401,154 @@ editor = {Konstan, Joseph A and Chi, Ed H and H{\"o}{\"o}k, Kristina},
 pages = {1737--1746},
 publisher = {ACM}
 }
-
+@inproceedings{sax,
+  title={A symbolic representation of time series, with implications for streaming algorithms},
+  author={Lin, Jessica and Keogh, Eamonn and Lonardi, Stefano and Chiu, Bill},
+  booktitle={Proceedings of the 8th ACM SIGMOD workshop on Research issues in data mining and knowledge discovery},
+  pages={2--11},
+  year={2003},
+  organization={ACM}
+}
+@article{isax,
+  title={iSAX: disk-aware mining and indexing of massive time series datasets},
+  author={Shieh, Jin and Keogh, Eamonn},
+  journal={Data Mining and Knowledge Discovery},
+  volume={19},
+  number={1},
+  pages={24--57},
+  year={2009},
+  publisher={Springer}
+}
+@inproceedings{isax2,
+  title={iSAX 2.0: Indexing and mining one billion time series},
+  author={Camerra, Alessandro and Palpanas, Themis and Shieh, Jin and Keogh, Eamonn},
+  booktitle={Data Mining (ICDM), 2010 IEEE 10th International Conference on},
+  pages={58--67},
+  year={2010},
+  organization={IEEE}
+}
+@article{apca,
+  title={Locally adaptive dimensionality reduction for indexing large time series databases},
+  author={Keogh, Eamonn and Chakrabarti, Kaushik and Pazzani, Michael and Mehrotra, Sharad},
+  journal={ACM Sigmod Record},
+  volume={30},
+  number={2},
+  pages={151--162},
+  year={2001},
+  publisher={ACM}
+}
+@article{paa,
+  title={Dimensionality reduction for fast similarity search in large time series databases},
+  author={Keogh, Eamonn and Chakrabarti, Kaushik and Pazzani, Michael and Mehrotra, Sharad},
+  journal={Knowledge and information Systems},
+  volume={3},
+  number={3},
+  pages={263--286},
+  year={2001},
+  publisher={Springer}
+}
+@inproceedings{swab,
+  title={An online algorithm for segmenting time series},
+  author={Keogh, Eamonn and Chu, Selina and Hart, David and Pazzani, Michael},
+  booktitle={Data Mining, 2001. ICDM 2001, Proceedings IEEE International Conference on},
+  pages={289--296},
+  year={2001},
+  organization={IEEE}
+}
+@inproceedings{lemireSegmentation,
+  title={A better alternative to piecewise linear time series segmentation},
+  author={Lemire, Daniel},
+  booktitle={Proceedings of the 2007 SIAM International Conference on Data Mining},
+  pages={545--550},
+  year={2007},
+  organization={SIAM}
+}
+@article{tsCompressSmartGrid,
+  title={A time-series compression technique and its application to the smart grid},
+  author={Eichinger, Frank and Efros, Pavel and Karnouskos, Stamatis and B{\"o}hm, Klemens},
+  journal={The VLDB Journal},
+  volume={24},
+  number={2},
+  pages={193--218},
+  year={2015},
+  publisher={Springer}
+}
+@inproceedings{hotSax,
+  title={Hot sax: Efficiently finding the most unusual time series subsequence},
+  author={Keogh, Eamonn and Lin, Jessica and Fu, Ada},
+  booktitle={Data mining, fifth IEEE international conference on},
+  pages={8--pp},
+  year={2005},
+  organization={Ieee}
+}
+@inproceedings{fastShapelet,
+  title={Fast shapelets: A scalable algorithm for discovering time series shapelets},
+  author={Rakthanmanon, Thanawin and Keogh, Eamonn},
+  booktitle={Proceedings of the 2013 SIAM International Conference on Data Mining},
+  pages={668--676},
+  year={2013},
+  organization={SIAM}
+}
+@misc{influxDB,
+  title={InfluxDB},
+  author={Beckett, S},
+  note={\url{https://influxdata.com}},
+  year={2017}
+}
+@misc{akumuli,
+  title={Akumuli Time-series database},
+  author={Lazin, Eugene},
+  note={\url{https://akumuli.org}},
+}
+@misc{kairosDB,
+  title={Kairos DB: Fast Time Series Database on Cassandra.},
+  author={Hawkins, Brian},
+  note={\url{https://github.com/kairosdb/kairosdb}},
+}
+@inproceedings{respawnDB,
+  title={Respawn: A distributed multi-resolution time-series datastore},
+  author={Buevich, Maxim and Wright, Anne and Sargent, Randy and Rowe, Anthony},
+  booktitle={Real-Time Systems Symposium (RTSS), 2013 IEEE 34th},
+  pages={288--297},
+  year={2013},
+  organization={IEEE}
+}
+@article{openTSDB,
+  title={OpenTSDB: The distributed, scalable time series database},
+  author={Sigoure, B},
+  journal={Proc. OSCON},
+  volume={11},
+  year={2010}
+}
+@article{gorilla,
+  title={Gorilla: A fast, scalable, in-memory time series database},
+  author={Pelkonen, Tuomas and Franklin, Scott and Teller, Justin and Cavallaro, Paul and Huang, Qi and Meza, Justin and Veeraraghavan, Kaushik},
+  journal={Proceedings of the VLDB Endowment},
+  volume={8},
+  number={12},
+  pages={1816--1827},
+  year={2015},
+  publisher={VLDB Endowment}
+}
+@inproceedings{chronicleDB,
+  title={ChronicleDB: A High-Performance Event Store.},
+  author={Seidemann, Marc and Seeger, Bernhard},
+  booktitle={EDBT},
+  pages={144--155},
+  year={2017}
+}
+@inproceedings{berkeleyTreeDB,
+  title={BTrDB: Optimizing Storage System Design for Timeseries Processing.},
+  author={Andersen, Michael P and Culler, David E},
+  booktitle={FAST},
+  pages={39--52},
+  year={2016}
+}
+@inproceedings{druid,
+  title={Druid: A real-time analytical data store},
+  author={Yang, Fangjin and Tschetter, Eric and L{\'e}aut{\'e}, Xavier and Ray, Nelson and Merlino, Gian and Ganguli, Deep},
+  booktitle={Proceedings of the 2014 ACM SIGMOD international conference on Management of data},
+  pages={157--168},
+  year={2014},
+  organization={ACM}
+}

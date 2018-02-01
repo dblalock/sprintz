@@ -58,46 +58,46 @@
 
 %\textfloatsep: space between last top float or first bottom float and the text (default = 20.0pt plus 2.0pt minus 4.0pt).
 %\intextsep : space left on top and bottom of an in-text float (default = 12.0pt plus 2.0pt minus 2.0pt).
-\setlength{\textfloatsep}{4pt}
-\setlength{\intextsep}{4pt}
+% \setlength{\textfloatsep}{4pt}
+% \setlength{\intextsep}{4pt}
 
 % \usepackage{caption}
 % \usepackage[font={small,it}]{caption}
-\usepackage[font={bf}]{caption}
+% \usepackage[font={bf}]{caption}
 % \setlength{\abovecaptionskip}{-2pt} % less space between captions and figures
-\setlength{\abovecaptionskip}{-5pt}	% less space between captions and figures
+% \setlength{\abovecaptionskip}{-5pt}	% less space between captions and figures
 % \setlength{\belowcaptionskip}{-13pt}  % less space below captions
 % \setlength{\belowcaptionskip}{-10pt}  % less space below captions
-\setlength{\belowcaptionskip}{-4pt}	% less space below captions
+% \setlength{\belowcaptionskip}{-4pt}	% less space below captions
 
-\usepackage{paralist}
-\setdefaultleftmargin{10pt}{10pt}{}{}{}{}
+% \usepackage{paralist}
+% \setdefaultleftmargin{10pt}{10pt}{}{}{}{}
 
 % \usepackage{changepage}
 % \usepackage{tabulary}
 
-\usepackage{outlines}
+% \usepackage{outlines}
 \usepackage{enumitem}
 \newcommand{\ItemSpacing}{0mm}
 \newcommand{\ParSpacing}{0mm}
-\setenumerate[1]{itemsep={\ItemSpacing},parsep={\ParSpacing},label=\arabic*.}
+% \setenumerate[1]{itemsep={\ItemSpacing},parsep={\ParSpacing},label=\arabic*.}
 % \setenumerate[2]{itemsep={\ItemSpacing},parsep={\ParSpacing},label=\arabic*.}
 \setenumerate[2]{itemsep={\ItemSpacing},parsep={\ParSpacing}}
 
-\usepackage[linewidth=1pt]{mdframed}
-\mdfsetup{frametitlealignment=\center, skipabove=0, innertopmargin=1mm,
-innerleftmargin=2mm, leftmargin=0mm, rightmargin=0mm}
+% \usepackage[linewidth=1pt]{mdframed}
+% \mdfsetup{frametitlealignment=\center, skipabove=0, innertopmargin=1mm,
+% innerleftmargin=2mm, leftmargin=0mm, rightmargin=0mm}
 
 %-------------------------------------------------------------- Miscellaneous setup
 
-\newlength\myindent
-\setlength\myindent{2em}
-\newcommand\bindent{%
-  \begingroup
-  \setlength{\itemindent}{\myindent}
-  \addtolength{\algorithmicindent}{\myindent}
-}
-\newcommand\eindent{\endgroup}
+% \newlength\myindent
+% \setlength\myindent{2em}
+% \newcommand\bindent{%
+%   \begingroup
+%   \setlength{\itemindent}{\myindent}
+%   \addtolength{\algorithmicindent}{\myindent}
+% }
+% \newcommand\eindent{\endgroup}
 
 % remove unwanted space between paragraphs;
 % it's set by the IEEE conference format, but no papers from this conference have it
@@ -118,6 +118,8 @@ innerleftmargin=2mm, leftmargin=0mm, rightmargin=0mm}
 \DeclareMathOperator{\infimum}{inf}
 \renewcommand\inf\infty
 
+\renewcommand{\b}[1]{\textbf{#1}}
+
 \renewcommand{\c}{\vec{c}}
 \newcommand{\q}{\vec{q}}
 \renewcommand{\r}{\vec{r}}
@@ -132,7 +134,7 @@ innerleftmargin=2mm, leftmargin=0mm, rightmargin=0mm}
 
 \newcommand{\onehalf}{\frac{1}{2}}
 
-\newcommand{\pie}[1]{\frac{\pi}{#1}}
+\newcommand{\piOver}[1]{\frac{\pi}{#1}}
 % \newcommand{\pitwo}{\frac{\pi}{2}}
 % \newcommand{\pifour}{\frac{\pi}{4}}
 
