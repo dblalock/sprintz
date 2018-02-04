@@ -51,7 +51,8 @@ A final noteworthy method is Blosc \cite{blosc}. While not intended solely for t
 %       -and note: "This means that batching points together is required to achieve high throughput performance. (Optimal batch size seems to be 5,000-10,000 points per batch for many use cases.)"
 % ------------------------ LittleTable
 %   -LZO1X (LZO) compression http://www.oberhumer.com/opensource/lzo/
-
+% ------------------------ RocksDB (not a ts database, but whatever)
+%   -snappy, lz4, zstd
 
 
 \subsection{Compression of integers}
@@ -70,3 +71,9 @@ Before applying any of these coding schemes, it is common to apply some transfor
 \subsection{General-purpose compression}
 While \mine is not intended to be a general-purpose compression algorithm, a reasonable alternative to using a specialized method would be to apply a general-purpose compression algorithm, possibly after delta coding or other preprocessing. Thanks largely to the development of Asymmetric Numeral Systems (ANS) \cite{ans} for entropy coding, general purpose compressors have advanced greatly in recent years. In particular, Zstd \cite{zstd}, Brotli \cite{brotli}, LZ4 \cite{lz4} and others have attained speed-compression tradeoffs significantly better than traditional methods such as GZIP \cite{gzip}, BZIP \cite{lzo}, etc.
 % Also of note is Blosc \cite{blosc}, which is especially applicable to multivariate time series as a result of its grouping correlated bits and/or bytes together during preprocessing.
+
+\subsection{High-speed online learning}
+
+TODO
+
+branch predictors

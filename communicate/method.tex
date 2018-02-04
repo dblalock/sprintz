@@ -1,2 +1,185 @@
 
-We totally have a method. And golly, does it ever method.
+% We totally have a method. And golly, does it ever method.
+
+\mine is a bit packing-based predictive coder. It consists of four components:
+\begin{enumerate}
+\itemsep0em
+\item Forecasting
+\item Bit packing
+\item Run-length encoding
+\item Entropy coding
+\end{enumerate}
+
+At a high level, \mine can be described as follows:
+
+\newcommand{\err}{\texttt{err}}
+\newcommand{\nbits}{\texttt{nbits}}
+\newcommand{\packed}{\texttt{packed}}
+\newcommand{\buff}{$\texttt{buff}$}
+\newcommand{\bytes}{\texttt{bytes}}
+% \newcommand{\header}{\texttt{header}}
+\newcommand{\payload}{\texttt{payload}}
+\newcommand{\f}{\texttt{f}}
+\newcommand{\fore}{\texttt{forecaster}}
+\newcommand{\self}{\texttt{self}}
+
+% ------------------------ compress pseudocode
+\begin{algorithm}[h]
+% \caption{encodeBlock($\{\x_1, \ldots, \x_B \}, \vtheta $)}
+\caption{encodeBlock($\{\x_1, \ldots, \x_B \}, \fore$)}
+\label{algo:overview}
+\begin{algorithmic}[1]
+
+\State{Let \buff \text{ }be a temporary buffer}
+
+\For {$i \leftarrow 1,\ldots,B$} \COMMENTT {For each sample} \label{line:bodyStart}
+    % \State{$ \tilde{\x}_i, \vtheta \leftarrow $predictAndTrain$(\x_{i-1}, \vtheta)  $}
+    \State{$ \tilde{\x}_i \leftarrow $ $\fore$.predict$(\x_{i-1})$}
+    \State{$ \err_i \leftarrow \x_i - \tilde{\x}_i  $}
+    \State{$\fore$.train($\x_{i-1}$, $\x_i$, $\err_i$)}
+\EndFor
+\For {$j \leftarrow 1,\ldots,D$} \COMMENTT {For each column}
+    \State{$ \nbits_j \leftarrow \max_i\{ $requiredNumBits$(\err_{ij}) \} $}
+    \State{$ \packed_j \leftarrow $ bitPack$(\{x_{1j},\ldots,\x_{Bj} \}) $}  \label{line:bodyEnd}
+\EndFor
+
+\LineComment{Run length encode if all errors are zero}
+\If{$\nbits_j$ \texttt{==} $0$, $1 \le j \le D$}
+    \Repeat  \COMMENT{Scan until end of run}
+        \State{Read in another block and run lines \ref{line:bodyStart}-\ref{line:bodyEnd} }
+    \Until {$\exists_j [\nbits_j \neq 0 ]$}
+    % \State{Read in another block and run lines \ref{line:bodyStart}-\ref{line:bodyEnd} until some nbits$_j$ != $0$}
+    \State{Write $D$ $0$s as headers into \buff}
+    \State{Write number of all-zero blocks as payload into \buff}
+    \State{Output huffmanCode(\buff)}
+\EndIf
+
+\State{Write $\nbits_j$, $j = 1,\ldots,D$ as headers into \buff}
+\State{Write $\packed_j$, $j = 1,\ldots,D$ as payload into \buff}
+\State{Output huffmanCode(\buff)}
+
+% \RETURN {$ odds_{event} - \max(odds_{noise}, odds_{next}) $}
+\end{algorithmic}
+\end{algorithm}
+
+% ------------------------ decompress pseudocode
+\begin{algorithm}[h]
+% \caption{decodeBlock(\bytes, $B$, $D$, $\vtheta$)}
+\caption{decodeBlock(\bytes, $B$, $D$, $\fore$)}
+\label{algo:overview}
+\begin{algorithmic}[1]
+
+\State{$\nbits$, $\payload$ $\leftarrow$ huffmanDecode(\bytes, $B$, $D$) }
+
+% \State{$\f \leftarrow \texttt{Forecaster()} $}
+\If{$\nbits_j$ \texttt{==} $0$ $\forall j$} \COMMENT{Run length encoded}
+    \State{$\texttt{numblocks} \leftarrow $ readRunLength()}
+    \For {$i \leftarrow 1,\ldots,(B $ $\cdot$ \texttt{numblocks})}
+        % \State{$ \tilde{\x}_i, \vtheta \leftarrow $ $\fore$.predict$(\x_{i-1}, \vtheta) $}
+        \State{$ \x_i \leftarrow $ $\fore$.predict$(\x_{i-1})$}
+        \State{Output $\tilde{\x}_i$}
+        \State{$\fore$.train($\x_{i-1}$, $\x_i$, 0)}
+    \EndFor
+    % \RETURN {}
+% \EndIf
+\Else \COMMENT{Not run-length encoded}
+% \State{}
+\For {$i \leftarrow 1,\ldots,B$}
+    % \State{$ \tilde{\x}_i, \vtheta \leftarrow $ $\fore$.predict$(\x_{i-1}, \vtheta)  $}
+    \State{$ \tilde{\x}_i \leftarrow $ $\fore$.predict$(\x_{i-1})$}
+    \State{$ \err_i \leftarrow $unpackErrorVector$(i$, \nbits, \payload$) $}
+    \State{$ \x_i \leftarrow \err_i + \tilde{\x}_i  $}
+    \State{Output $\x_i$}
+    \State{$\fore$.train($\x_{i-1}$, $\x_i$, $\err_i$)}
+\EndFor
+\EndIf
+\end{algorithmic}
+\end{algorithm}
+
+% ------------------------------------------------
+\subsection{Forecasting}
+% ------------------------------------------------
+
+\begin{figure*}[t]
+\begin{center}
+    \includegraphics[width=\textwidth]{paper/overview}
+    \caption{Overview of \mine\text{ }using a Delta coding predictor.\textit{ a)} Delta coding of each column, followed by zigzag encoding of resulting errors. The maximum number of significant (nonzero) bits is computed for each column. \textit{b)} These numbers of bits are stored in a header, and the original data is stored as a (byte-aligned) payload, with leading zeros removed. When there are few columns, each column's data is stored contiguously. When there are many columns, each row is stored contiguously, possibly with padding to ensure alignment on a byte boundary.}
+    % With blocks of eight samples (only four shown for clarity), this ensures that each column's data begins on a byte boundary.
+    \label{fig:overview}
+\end{center}
+\end{figure*}
+
+% ------------------------ xff pseudocode
+
+\newenvironment{megaalgorithm}[1][htb]
+  {\renewcommand{\algorithmcfname}{MegaAlgorithm}% Update algorithm name
+   \begin{algorithm}[#1]%
+  }{\end{algorithm}}
+
+% \begin{megaalgorithm}
+%   % \DontPrintSemicolon
+%   \KwData{$G=(X,U)$ such that $G^{tc}$ is an order.}
+%   \KwResult{$G’=(X,V)$ with $V\subseteq U$ such that $G’^{tc}$ is an interval order.}
+%   \caption{\textsc{Fast}SLAM}
+% \end{megaalgorithm}
+
+\begin{algorithm}[h]
+% \begin{struct}[h]
+% \label{algo:xff}
+% \floatname{algorithm}{Algorithm}
+\caption{Class XFF\_Forecaster}
+\begin{algorithmic}[1]
+
+
+\Function{Init}{$D$, $\eta$, $w$}
+\State $\self$.counters $\leftarrow $ zeros($D$)
+\State $\self$.learnShift $\leftarrow \lg(\eta)$
+\State $\self$.deltas $\leftarrow $ zeros($D$)
+\State $\self$.bitWidth $\leftarrow w$ \COMMENT{8-bit or 16-bit}
+\EndFunction
+
+\Function{Predict}{$\x_{i-1}$}
+\State $\texttt{coeffs} \leftarrow \self$.counters \rshift $\self$.learnShift
+% \State $\texttt{coeffs} \leftarrow (\texttt{coeffs} \text{ }\rshift 4) \text{ }\lshift 4$
+\State $\tilde{\vdelta} \leftarrow$ (\texttt{coeffs} $\cdot$ $\self$.deltas) $\rshift \self$.bitWidth
+\RETURN $\x_{i-1} + \tilde{\vdelta}$
+\EndFunction
+
+\Function{Train}{$\x_{i-1}$, $\x_{i}$, $\err_i$}
+\State $\texttt{gradients} \leftarrow \sign(\err_i) \cdot \x_{i-1}$
+\State $\self$.counters $\leftarrow \self$.counters + $\texttt{gradients}$
+\State $\self$.deltas $\leftarrow \x_{i} - \x_{i-1}$
+\EndFunction
+
+% % \State{$\nbits$, $\payload$ $\leftarrow$ huffmanDecode(\bytes, $B$, $D$) }
+
+\end{algorithmic}
+\end{algorithm}
+% \end{struct}
+
+% \begin{algorithm}[h]
+% \caption{XFFpredict($\fore$, $\x_{i-1}$)}
+% \label{algo:overview}
+% \begin{algorithmic}[1]
+
+% \State{$\alpha \leftarrow \fore$.counter \texttt{>>} $\lg(\eta)$}
+% \State{$\vdelta_{i-1} \leftarrow \fore$.prev}
+% % , $\vdelta_{i-1}$
+
+
+% \State{Foo}
+% % \State{$\nbits$, $\payload$ $\leftarrow$ huffmanDecode(\bytes, $B$, $D$) }
+
+% \end{algorithmic}
+% \end{algorithm}
+
+% ------------------------------------------------
+\subsection{Bit Packing}
+% ------------------------------------------------
+
+% ------------------------------------------------
+\subsection{Entropy Coding}
+% ------------------------------------------------
+
+We entropy code the bit packed representation of each block using an off-the-shelf Huffman coder \cite{fse}. Note that this is faster than Huffman coding the original data or the errors since the bit packed block is (usually) shorter than the original data.
+

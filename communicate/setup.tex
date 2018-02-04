@@ -35,15 +35,22 @@
 
 %-------------------------------------------------------------- Algorithm setup
 
+% \usepackage{algorithm2e}
 \usepackage{algorithm}
 \usepackage[noend]{algpseudocode} % I think this removes trailing "end {if,for,while}"
+\usepackage{algorithmicx}
 
 % \algnewcommand{\LineComment}[1]{\State \(\triangleright\) #1} % left-aligned comments
 % \algnewcommand{\SideComment}[1]{\(//\) #1}
 \algnewcommand{\COMMENT}[2][.5\linewidth]{\leavevmode\hfill\makebox[#1][l]{//~#2}}
+\algnewcommand{\COMMENTT}[2][.5\linewidth]{\leavevmode\hfill\makebox[#1][l]{\hphantom{aa} // ~#2}}
 \algnewcommand{\LineComment}[1]{\State \(//\) #1}	% left-aligned comments
 \algnewcommand\RETURN{\State \textbf{return} }
 
+\newenvironment{struct}[1][htb]
+  {\renewcommand{\algorithmcfname}{Class}% Update algorithm name
+   \begin{algorithm}[#1]%
+  }{\end{algorithm}}
 
 %-------------------------------------------------------------- Figures setup
 
@@ -131,6 +138,11 @@
 \newcommand{\zhat}{\hat{\vec{z}}}
 
 \newcommand{\R}{\mathbb{R}}
+\newcommand{\vtheta}{\vec{\theta}}
+\newcommand{\vdelta}{\vec{\delta}}
+
+\newcommand{\rshift}{\texttt{>>}\text{ }}
+\newcommand{\lshift}{\texttt{<<}\text{ }}
 
 \newcommand{\onehalf}{\frac{1}{2}}
 
@@ -146,6 +158,8 @@
 \DeclareMathOperator{\Normal}{\mathcal{N}}
 \DeclareMathOperator{\erf}{erf}
 \DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator{\sign}{sign}
+% \DeclareMathOperator{\lg}{\text{log2}}
 
 % make *all* text 10pt
 % \renewcommand{\footnotesize}{\normalsize}

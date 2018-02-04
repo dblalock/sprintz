@@ -1,16 +1,16 @@
 
-To assess \mine's effectiveness, we implemented both it and comparison algorithms in C++ and Python. All of our code and raw results are publicly available on the \mine website.\footnote{https://github.com/dblalock/sprintz} This website also contains experiments on additional datasets, as well as thorough documentation of both our code and experimental setups. All experiments use a single thread on a 2013 Macbook Pro with a 2.6GHz Intel Core i7-4960HQ processor.
+To assess \mine's effectiveness, we implemented both it and comparison algorithms in C++. All of our code and raw results are publicly available on the \mine website.\footnote{https://github.com/dblalock/sprintz} This website also contains experiments on additional datasets, as well as thorough documentation of both our code and experimental setups. All experiments use a single thread on a 2013 Macbook Pro with a 2.6GHz Intel Core i7-4960HQ processor.
 
-All reported timings and throughputs are the best of 5 runs, averaged over 10 trials (i.e., the code is executed 50 times). We use the best in each trial, rather than average, since this is standard practice in performance benchmarking.
+All reported timings and throughputs are the best of 5 runs. We use the best, rather than average, since this is standard practice in performance benchmarking.
 
 % ------------------------------------------------
 \subsection{Datasets}
 % ------------------------------------------------
 
-For assessing accuracy, we use several datasets widely used to benchmark Multi-Codebook Quantization (MCQ) algorithms:
+For assessing accuracy, we use several publicly available datasets:
 \begin{itemize}[leftmargin=4mm]
-% \item \textbf{Batman} \cite{batman} --- Also known as the Caped Crusader. Don't ask what compression means here, because I couldn't tell you.
-\item \textbf{UCR} \cite{ucrTimeSeries} --- We concatenated the first 100 examples from each of the \%d time series datasets in the UCR Time Series Archive \cite{ucrTimeSeries} to form \%d longer datasets. Before concatenating, we subtracted off the mean from each example and interpolated one sample between its end and the start of the next example to avoid sudden jumps. This processing makes the datasets in some sense synthetic, but the result is an easy-to-reproduce benchmark incorporating time series from dozens of domains. We report aggregate statistics across these datasets.
+\item \textbf{UCR} \cite{ucrTimeSeries} --- The UCR Time Series Archive is a repository of 85 univariate time series datasets from various domains, commonly used for benchmarking time series algorithms. Because each dataset consists of many time series, we concat the first 100 time series from each dataset to from a single longer time series. This is to allow dictionary-based methods to share information across time series (instead of compressing each in isolation).
+% Because the file format is delimited text with labels interspersed with data, we extract ``raw'' data by reading the time series within each dataset into a contiguous array of the appropriate data type We concatenated the first 100 examples from each of the 85 time series datasets in the UCR Time Series Archive \cite{ucrTimeSeries} to form 85 longer time series. Before concatenating, we subtracted off the mean from each example and interpolated one sample between its end and the start of the next example to avoid sudden jumps. This processing makes the datasets in some sense synthetic, but the result is an easy-to-reproduce benchmark incorporating time series from dozens of domains. We report aggregate statistics across these datasets.
 \item \textbf{PAMAP} \cite{pamap} --- just PAMAP, not PAMAP2
 \item \textbf{MSRC-12} \cite{msrc} --- Some description of this; maybe use this
 \item \textbf{WARD} \cite{ward} --- Berkeley Ward Dataset; maybe use this
@@ -20,9 +20,11 @@ For assessing accuracy, we use several datasets widely used to benchmark Multi-C
 
 TODO maybe split ampds into 3 different datasets and report on each separately.
 
-For all datasets, we separate the first 5\% of the data to use as a training set. For datasets that were not stored as integers, we quantized them such the largest and smallest values observed corresponded to the largest and smallest values representable with the number of bits tested. Note that this is the worst case scenario for our method since it makes the deltas maximally likely to overflow.
+For datasets stored as delimited files, we first parsed the data into a contiguous, numeric array and then dumped the bytes as a binary file. For datasets that were not integer-valued, we quantized them such that the largest and smallest values observed corresponded to the largest and smallest values representable with the number of bits tested. Note that this is the worst case scenario for our method since it makes the maximizes the number of bits required to represent the data.
 
-For multivariate datasets, we concatenated the data from each variable to obtain a univariate time series. As discussed previously, one might be able to obtain better performance by jointly compressing the variables, but we defer this to future work since it both makes direct comparison to existing methods more difficult and complicates the algorithm.
+For multivariate datasets, we allowed all methods but our own to operate on the data one variable at a time; i.e., instead of interleaving values for every variable, we store all values for each variable contiguously. This corresponds to allowing them an unlimited buffer size in which to store incoming data before compressing it.
+
+% For multivariate datasets, we concatenated the data from each variable to obtain a univariate time series. As discussed previously, one might be able to obtain better performance by jointly compressing the variables, but we defer this to future work since it both makes direct comparison to existing methods more difficult and complicates the algorithm.
 
 
 % ------------------------------------------------
@@ -30,29 +32,54 @@ For multivariate datasets, we concatenated the data from each variable to obtain
 % ------------------------------------------------
 
 \begin{itemize}[leftmargin=4mm]
-% \item \textbf{Wishful Thinking} \cite{batman} --- We just really hope that the data gets compressed and assume that it will.
-% \item \textbf{Encouragement} \cite{barney} --- We foster a positive environment and allow the data to compress itself when it feels ready.
-\item \textbf{FLAC} \cite{flac} --- A modern lossless audio codec.
-\item \textbf{FastPFOR} \cite{fastpfor} --- The fastest known method of compressing 32b integers.
-\item \textbf{Zstd} \cite{zstd} --- A state-of-the-art general purpose compression algorithm featuring LZ77-like compression along with Huffman coding and a recent entropy coder \cite{fse} based on Abstract Numeral Systems \cite{ans}.
-\item \textbf{LZ4} \cite{lz4} --- A widely-used general-purpose compression algorithm optimized for speed and based on LZ77.
-\item \textbf{LZ4-HC} \cite{lz4} --- A variant of LZ4 optimized for compression ratio at the cost of compression speed.
-\item \textbf{GZIP} \cite{gzip} --- A widely used general-purpose compression algorithm.
-\item \textbf{BitShuf} \cite{bitshuf} --- LZ4 with the BitShuffle preprocessor, which groups runs of 0 bits when consecutive values are similar and small.
+\item \textbf{SIMD-BP128} \cite{fastpfor} --- The fastest known method of compressing integers.
+\item \textbf{FastPFOR} \cite{fastpfor} --- An algorithm similar to SIMD-BP128, but with better compression.
+\item \textbf{Simple8b} \cite{simple8b} --- An integer algorithm compression algorithm used by InfluxDB \cite{influxDB}.
+\item \textbf{LZO} \cite{simple8b} --- A stable and widely-used dictionary compressor employed by KairosDB \cite{kairosDB} and LittleTable \cite{littleTable}.
+\item \textbf{Snappy} \cite{snappy} --- A general-purpose compression algorithm developed by Google and used by InfluxDB, KairosDB, OpenTSDB \cite{openTSDB}, RocksDB \cite{rocksDB}, and numerous other projects.
+\item \textbf{Zstd} \cite{zstd} --- Facebook's state-of-the-art general purpose compression algorithm. It is based on LZ77 and entropy coding using a mix of Huffman coding and Finite State Entropy (FSE) \cite{fse}. It is available in RocksDB \cite{rocksDB}.
+\item \textbf{Brotli} \cite{brotli} --- A recent compression algorithm introduced by Google and now standardized as a web content-encoding type.
+\item \textbf{LZ4} \cite{lz4} --- A widely-used general-purpose compression algorithm optimized for speed and based on LZ77. Used by RocksDB and ChronicleDB \cite{chronicleDB}.
+% \item \textbf{LZ4-HC} \cite{lz4} --- A variant of LZ4 optimized for compression ratio at the cost of compression speed.
+\item \textbf{GZIP} \cite{gzip} --- A widely used general-purpose compression algorithm. Used by RespawnDB \cite{respawnDB}.
+% \item \textbf{BitShuf} \cite{bitshuf} --- LZ4 with the BitShuffle preprocessor, which groups runs of 0 bits when consecutive values are similar and small.
 % \item \textbf{Delta+BitShuf} \cite{gzip} --- Like BitShuf, but applied to the delta-encoded representation of the time series.
 % \item \textbf{Delta} --- Simple delta encoding followed by...erm...some kind of bit packing or something.
 % \item \textbf{DeltaDelta} --- Delta encoding the delta encoding, as done in some popular time series databases \cite{something, influxDB}.
 \end{itemize}
 
-We also assess the above methods when applied to the delta-encoded representation of the time series, as well as the double-delta-encoded representation. We do not do this for FLAC and FastPFOR since they have similar preprocessing steps built in.
+% We also assess the above methods when applied to the delta-encoded representation of the time series, as well as the double-delta-encoded representation. We do not do this for FLAC and FastPFOR since they have similar preprocessing steps built in.
 
-Note that all of the above except FastPFOR, and possibly FLAC with special configuration, require tens of KB, or even tens of MB, of memory, and therefore are unsuitable for many low-power devices.
+% Note that all of the above except FastPFOR, and possibly FLAC with special configuration, require tens of KB, or even tens of MB, of memory, and therefore are unsuitable for many low-power devices.
+
+% ------------------------------------------------
+\subsection{Compression Ratio}
+% ------------------------------------------------
+
+Using the 85 UCR datasets:
+\begin{enumerate}
+\item CD Diagram of \mine (all levels) vs other algorithms
+\item CD Diagram of \mine (all levels) vs delta coding + other algorithms
+\item If we don't win in at least the first one, CD Diagram of \mine (all levels) vs delta coding + other algorithms that use very little memory
+\end{enumerate}
+
+% % ------------------------------------------------
+% \subsection{Ratio-Speed Tradeoff}
+% % ------------------------------------------------
+
+% A natural question is whether the above compression ratios come at the price of reduced speed. To test this, we recorded the speeds and compression ratios of both our method and others on several multivariate datasets. We do not simply reuse the UCR datasets because they are all univariate, which is both not our algorithm's focus and its worst case.
+
+
+% ------------------------------------------------
+\subsection{Decompression Speed}
+% ------------------------------------------------
+
 
 % ------------------------------------------------
 \subsection{Compression Speed}
 % ------------------------------------------------
 
-Look, a bar graph. Probably 4 rows x 2 cols of subplots, with row corresponding to one dataset and cols corresponding to {8b, 16b}. Each algorithm gets one bar in each subplot. Ideally, run everything a few times and show standard deviations or error bars. Maybe actually have
+% Look, a bar graph. Probably 4 rows x 2 cols of subplots, with row corresponding to one dataset and cols corresponding to {8b, 16b}. Each algorithm gets one bar in each subplot. Ideally, run everything a few times and show standard deviations or error bars. Maybe actually have
 
 % \begin{figure}[h]
 % \begin{center}
@@ -66,21 +93,24 @@ Look, a bar graph. Probably 4 rows x 2 cols of subplots, with row corresponding 
 % \end{figure}
 
 % \vspace{-2mm}
-% ------------------------------------------------
-\subsection{Decompression Speed}
-% ------------------------------------------------
 
-Yep. Real fast.
-
-Same kind of layout as compression speed.
 
 % ------------------------------------------------
-\subsection{Compression Ratio}
+\subsection{Quantization Error}
 % ------------------------------------------------
 
-Such small. Very compress.
 
-Same kind of layout as speed plots. Probably have higher be better for consistency.
+% ------------------------------------------------
+\subsection{Query acceleration}
+% ------------------------------------------------
+
+\begin{enumerate}
+\item Sliding Mean on 8b data?
+\item Max on 16b data? (Self-driving car acceleration, averaged over two time steps?)
+\item Sliding linear classifier? Examples of action (e.g. "climbing stairs") using MSRC-12 or PAMAP? "Sliding on ice" or something in car data?
+\end{enumerate}
+
+We can also compare to Sprintz without pushing queries down into the decompress loop (ie, decompress everything first and then query) to show the benefit of our quasi-pushdown; I say ``quasi'' because, except when data gets run-length-encoded, we still do have to decompress it---just not store the decompressed output.
 
 % ------------------------------------------------
 \subsection{Other Findings}
