@@ -4,13 +4,17 @@
 \mine is a bit packing-based predictive coder. It consists of four components:
 \begin{enumerate}
 \itemsep0em
-\item Forecasting
-\item Bit packing
-\item Run-length encoding
-\item Entropy coding
+\item \b{Forecasting.} \minesp employs a forecaster to predict each sample based on previous samples. It encodes the difference between the next sample and the predicted sample, which typically has smaller entries than the next sample itself.
+\item \b{Bit packing.} \minesp then bit packs the errors as a ``payload'' and prepends a header with sufficient information to invert the bit packing.
+\item \b{Run-length encoding.} If a block of errors is all zeros, \minesp waits for a block in which some error is nonzero and then writes out the number of all-zero blocks instead of the (otherwise empty) payload.
+\item \b{Entropy coding.} \minesp Huffman codes the headers and payloads.
 \end{enumerate}
 
-At a high level, \mine can be described as follows:
+These components are run on blocks of eight samples (motivated in Section~\ref{sec:bitpacking}), and can be modified based on the target compression-speed tradeoff. Concretely, one can 1) elide entropy coding for greater speed and 2) choose between delta coding and our online learning method as forecasting algorithms.
+
+Before describing the four components in greater detail, we first provide an outline of the overall algorithms for compressing and compressing blocks.
+
+% We elaborate upon each of the four components in the following subsections, but first provide an outline of the overall compression and decompression functions.
 
 \newcommand{\err}{\texttt{err}}
 \newcommand{\nbits}{\texttt{nbits}}
@@ -23,31 +27,34 @@ At a high level, \mine can be described as follows:
 \newcommand{\fore}{\texttt{forecaster}}
 \newcommand{\self}{\texttt{self}}
 
-% ------------------------ compress pseudocode
+% ------------------------ compress overview
+
+An overview of how \minesp compresses one block of samples is shown in Algorithm~\ref{algo:compress}. In lines \ref{line:bodyStart}-\ref{line:encPredictEnd}, \minesp predicts each sample based on the previous sample and any state stored by the forecasting algorithm. In lines \ref{line:eachColStart}-\ref{line:bodyEnd}, \minesp \\ determines the number of bits required to store the largest error in each column and then bit packs the values in that column using this many bits. If all columns required 0 bits, \minesp continues reading in blocks until some error requires $>$0 bits (lines \ref{line:rleLoopStart}-\ref{line:rleLoopEnd}). At this point, it writes out a header of all 0s and then the number of all-zero blocks. Finally, it writes out the number of bits required by each column in the latest block as a header, and the bit packed data as a payload. Both header and payload are compressed with Huffman Coding.
+
 \begin{algorithm}[h]
 % \caption{encodeBlock($\{\x_1, \ldots, \x_B \}, \vtheta $)}
 \caption{encodeBlock($\{\x_1, \ldots, \x_B \}, \fore$)}
-\label{algo:overview}
+\label{algo:compress}
 \begin{algorithmic}[1]
 
-\State{Let \buff \text{ }be a temporary buffer}
+\State{Let \buff\sp be a temporary buffer}
 
 \For {$i \leftarrow 1,\ldots,B$} \COMMENTT {For each sample} \label{line:bodyStart}
     % \State{$ \tilde{\x}_i, \vtheta \leftarrow $predictAndTrain$(\x_{i-1}, \vtheta)  $}
     \State{$ \tilde{\x}_i \leftarrow $ $\fore$.predict$(\x_{i-1})$}
     \State{$ \err_i \leftarrow \x_i - \tilde{\x}_i  $}
-    \State{$\fore$.train($\x_{i-1}$, $\x_i$, $\err_i$)}
+    \State{$\fore$.train($\x_{i-1}$, $\x_i$, $\err_i$)} \label{line:encPredictEnd}
 \EndFor
-\For {$j \leftarrow 1,\ldots,D$} \COMMENTT {For each column}
+\For {$j \leftarrow 1,\ldots,D$} \COMMENTT {For each column} \label{line:eachColStart}
     \State{$ \nbits_j \leftarrow \max_i\{ $requiredNumBits$(\err_{ij}) \} $}
     \State{$ \packed_j \leftarrow $ bitPack$(\{x_{1j},\ldots,\x_{Bj} \}) $}  \label{line:bodyEnd}
 \EndFor
 
 \LineComment{Run length encode if all errors are zero}
 \If{$\nbits_j$ \texttt{==} $0$, $1 \le j \le D$}
-    \Repeat  \COMMENT{Scan until end of run}
+    \Repeat  \COMMENT{Scan until end of run} \label{line:rleLoopStart}
         \State{Read in another block and run lines \ref{line:bodyStart}-\ref{line:bodyEnd} }
-    \Until {$\exists_j [\nbits_j \neq 0 ]$}
+    \Until {$\exists_j [\nbits_j \neq 0 ]$} \label{line:rleLoopEnd}
     % \State{Read in another block and run lines \ref{line:bodyStart}-\ref{line:bodyEnd} until some nbits$_j$ != $0$}
     \State{Write $D$ $0$s as headers into \buff}
     \State{Write number of all-zero blocks as payload into \buff}
@@ -62,11 +69,14 @@ At a high level, \mine can be described as follows:
 \end{algorithmic}
 \end{algorithm}
 
-% ------------------------ decompress pseudocode
+% ------------------------ decompress
+
+\minesp begins decompression (Algorithm~\ref{algo:decomp}) by decoding the Huffman-coded bitstream into a header and a payload. Once decoded, these two components are easy to separate since the header is first and always of fixed size. If the header is all 0s, the payload indicates the length of a run of zero errors. In this case, \minesp runs the predictor until the corresponding number of samples have been predicted. Since the errors are zero, the forecaster's predictions are the true sample values. In the nonzero case, \minesp unpacks the payload using the number if bits specified for each column by the header.
+
 \begin{algorithm}[h]
 % \caption{decodeBlock(\bytes, $B$, $D$, $\vtheta$)}
 \caption{decodeBlock(\bytes, $B$, $D$, $\fore$)}
-\label{algo:overview}
+\label{algo:decomp}
 \begin{algorithmic}[1]
 
 \State{$\nbits$, $\payload$ $\leftarrow$ huffmanDecode(\bytes, $B$, $D$) }
@@ -103,50 +113,70 @@ At a high level, \mine can be described as follows:
 \begin{figure*}[t]
 \begin{center}
     \includegraphics[width=\textwidth]{paper/overview}
-    \caption{Overview of \mine\text{ }using a Delta coding predictor.\textit{ a)} Delta coding of each column, followed by zigzag encoding of resulting errors. The maximum number of significant (nonzero) bits is computed for each column. \textit{b)} These numbers of bits are stored in a header, and the original data is stored as a (byte-aligned) payload, with leading zeros removed. When there are few columns, each column's data is stored contiguously. When there are many columns, each row is stored contiguously, possibly with padding to ensure alignment on a byte boundary.}
+    \caption{Overview of \mine\text{ }using a delta coding predictor.\textit{ a)} Delta coding of each column, followed by zigzag encoding of resulting errors. The maximum number of significant (nonzero) bits is computed for each column. \textit{b)} These numbers of bits are stored in a header, and the original data is stored as a (byte-aligned) payload, with leading zeros removed. When there are few columns, each column's data is stored contiguously. When there are many columns, each row is stored contiguously, possibly with padding to ensure alignment on a byte boundary.}
     % With blocks of eight samples (only four shown for clarity), this ensures that each column's data begins on a byte boundary.
     \label{fig:overview}
 \end{center}
 \end{figure*}
 
+\minesp forecasting can use either delta coding or \fire (Fast Integer REgression), an online forecasting algorithm we introduce.
+
+Forecasting with delta coding consists of predicting each sample $\x_i$ to be equal to the previous sample $\x_{i-1}$. This method is stateless given $\x_{i-1}$ and extremely fast. It is particularly fast when run-length encoding, since it yields a run of zero errors if and only if the data is constant. This means that decompression requires only copying a fixed vector, with no additional forecasting or training. Moreover, when answering queries, one can often avoid decompression entirely []---e.g., one can compute the max of all samples in the run by computing the max of only the first value.
+
+Forecasting with \fire is slightly more expensive but often yields better compression. An overview of \fire prediction and training are given in Algorithm~\ref{algo:xff}. A \fire forecaster is parametrized by three values (line~\ref{line: xffCtor}): the number of columns $D$, the learning rate $\eta$, and the bitwidth of the integers stored in the columns $w$. Internally, the forecaster also maintains an accumulator for each column (line~\ref{line:counter}) and the difference (delta) between the two most recently seen samples (line~\ref{line:deltas}.
+
+To predict, the forecaster first derives a coefficient for each column based on the accumulator. By shifting the accumulator by log2($\eta$) bits, the forecaster obtains a learning rate of $2^{-\text{log2}(\eta)} = \eta$. It then estimates the next delta as the product of this coefficient and the previous delta. It predicts the next sample to be the previous sample plus this estimated delta.
+
+Because all values involved are integers, this multiplication is done using twice the bitwidth $w$ of the data type---e.g., using 16 bits for 8 bit data---and then shifted by an amount equal to the bit width. This has the effect of performing a fixed-point multiplication with step size equal to $2^{-w}$.
+
+To train, the forecaster performs a gradient update on the L1 loss between the true and predicted samples, summed over all columns independently. I.e., given loss:
+\begin{align}
+    \mathcal{L}(x_i, \tilde{x}_{i}) = \abs{x_{i} - \tilde{x}_{i}}
+    = \abs{x - (x_{i-1} + \frac{\alpha}{2^w} \cdot \delta_{i-1})} \\
+    = \abs{\delta_{i} - \frac{\alpha}{2^w} \cdot \delta_{i-1}}
+\end{align}
+for one column's value $x_i = \x_{ij}$ for some $j$ and coefficient $\alpha$, the gradient is:
+\begin{align}
+    % x = 5
+    % \frac{\partial x}{\partial \alpha} x = 5
+    % \mathcal{L}(\x_i, \tilde{\x}_i)
+        \frac{\partial }{\partial \alpha} \abs{\delta_{i} - \frac{\alpha}{2^w} \cdot \delta_{i-1}}
+% \begin{equation*}
+&= \begin{cases}
+        -{2^{-w}}\vdelta_{i-1} & \x_{i} > \tilde{\x}_{i} \\
+        {2^{-w}}\vdelta_{i-1} & \x_{i} \le \tilde{\x}_{i}
+\end{cases} \\
+&= \sign(\eps) \cdot {2^{-w}}\vdelta_{i-1} \\
+&\propto \sign(\eps) \cdot \vdelta_{i-1}
+% \end{equation*}
+\end{align}
+where we define $\eps \triangleq \x_{i} - \tilde{\x}_{i}$ and ignore the $2^{-w}$ as a constant that can be absorbed into the learning rate. In all experiments, we set the learning rate $\eta$ to $\frac{1}{2}$. This value is unlikely to be ideal for any particular dataset, but we found in preliminary experiments that it consistently worked reasonably well and was large enough to avoid zeroing out small gradients.
+
 % ------------------------ xff pseudocode
-
-\newenvironment{megaalgorithm}[1][htb]
-  {\renewcommand{\algorithmcfname}{MegaAlgorithm}% Update algorithm name
-   \begin{algorithm}[#1]%
-  }{\end{algorithm}}
-
-% \begin{megaalgorithm}
-%   % \DontPrintSemicolon
-%   \KwData{$G=(X,U)$ such that $G^{tc}$ is an order.}
-%   \KwResult{$G’=(X,V)$ with $V\subseteq U$ such that $G’^{tc}$ is an interval order.}
-%   \caption{\textsc{Fast}SLAM}
-% \end{megaalgorithm}
 
 \begin{algorithm}[h]
 % \begin{struct}[h]
 % \label{algo:xff}
 % \floatname{algorithm}{Algorithm}
-\caption{Class XFF\_Forecaster}
+\caption{Class FIRE\_Forecaster} \label{algo:xff}
 \begin{algorithmic}[1]
 
-
-\Function{Init}{$D$, $\eta$, $w$}
-\State $\self$.counters $\leftarrow $ zeros($D$)
+\Function{Init}{$D$, $\eta$, $w$} \label{line:xffCtor}
 \State $\self$.learnShift $\leftarrow \lg(\eta)$
-\State $\self$.deltas $\leftarrow $ zeros($D$)
 \State $\self$.bitWidth $\leftarrow w$ \COMMENT{8-bit or 16-bit}
+\State $\self$.accumulators $\leftarrow $ zeros($D$) \label{line:counter}
+\State $\self$.deltas $\leftarrow $ zeros($D$) \label{line:deltas}
 \EndFunction
 
 \Function{Predict}{$\x_{i-1}$}
-\State $\texttt{coeffs} \leftarrow \self$.counters \rshift $\self$.learnShift
+\State $\texttt{coeffs} \leftarrow \self$.accumulators \rshift $\self$.learnShift
 % \State $\texttt{coeffs} \leftarrow (\texttt{coeffs} \text{ }\rshift 4) \text{ }\lshift 4$
-\State $\tilde{\vdelta} \leftarrow$ (\texttt{coeffs} $\cdot$ $\self$.deltas) $\rshift \self$.bitWidth
+\State $\tilde{\vdelta} \leftarrow$ (\texttt{coeffs} $.*$ $\self$.deltas) $\rshift \self$.bitWidth
 \RETURN $\x_{i-1} + \tilde{\vdelta}$
 \EndFunction
 
 \Function{Train}{$\x_{i-1}$, $\x_{i}$, $\err_i$}
-\State $\texttt{gradients} \leftarrow \sign(\err_i) \cdot \x_{i-1}$
+\State $\texttt{gradients} \leftarrow \sign(\err_i) \sp .* self$.deltas
 \State $\self$.counters $\leftarrow \self$.counters + $\texttt{gradients}$
 \State $\self$.deltas $\leftarrow \x_{i} - \x_{i-1}$
 \EndFunction
@@ -174,12 +204,22 @@ At a high level, \mine can be described as follows:
 % \end{algorithm}
 
 % ------------------------------------------------
-\subsection{Bit Packing}
+\subsection{Bit Packing} \label{sec:bitpacking}
 % ------------------------------------------------
+
+An illustration of \mine's bitpacking is given in Figure~\ref{fig:overview}. The prediction errors from delta coding or \fire are zigzag encoded \cite{zigzag} and then the minimum number of bits required is computed for each column. Zigzag encoding is an invertible transform that interleaves positive and negative integers such that each integer is represented by twice its absolute value, or twice its absolute value minus one for negative integers. % We zigzag encode because it is extremely efficient and facilitates computing the number of bits necesasary.
+
+Given the zigzag encoded errors, the number of bits required in each column can be computed as the bitwidth minus the fewest leading zeros in any of that column's errors. E.g., in Figure~\ref{fig:overview}a, the first column's largest encoded value is 16, represented as \texttt{00010000}, which has three leading zeros. This means that we require five leading zeros to store the values in this column. For maximum performance, one can find this value by ORing all the values in a column together and then using a built-in function such as GCC's $\texttt{\_\_builtin\_clz}$ to compute the number of leading zeros in a single assembly instruction (c.f. \cite{fastpfor}). This optimization motivates our use of zigzag encoding to make all values nonnegative.
+
+Once the number of bits required for each column is known, the zigzag-encoded errors can be bitpacked. First, \minesp writes out a header consisting of $D$ unsigned integers, one for each column, storing the bitwidths. Each integer is stored in log2($w$) bits---three for 8-bit data and 4 for 16-bit data. Since there are $w+1$ possible bit widths (including 0), width $w-1$ is treated as a width of $w$ by both the encoder and decoder. E.g., 8-bit data that could be only compressed to 7 bits is both stored and decoded with a bitwidth of 8.
+
+After writing the headers, \minesp takes the appropriate number of low bits from each element and packs them into the payload. When there are few columns, all the bits for a given column are stored contiguously (i.e., column-major order). When there are many columns, the bits for each \textit{sample} are stored contiguously (i.e., row-major order). In the latter case, up to seven bits of padding are added at the end of each row so that all rows begin on a byte boundary. This means that the data for each column begins at a fixed bit offset within each row, facilitating vectorization of the decompressor.
+
+Because the block begins in row-major order and we seek to reconstruct it the same way, the row-major bit packing case is the more natural. For small numbers of columns, however, the row padding can significantly reduce the compression ratio. Indeed, for univariate 8-bit data, it makes compression impossible. This gives rise to the column-major case; using a block size of eight samples and column-major order, each column's data always falls on a byte boundary without any padding. The downside of this approach is that both encoder and decoder must transpose the block; for up to four 8-bit columns or two 16-bit columns, however, this can be done quickly using SIMD shuffling instructions.\footnote{For recent processors with AVX-512 instructions, one could double these column counts, but we refrain from assuming that these instructions will be available.}s
 
 % ------------------------------------------------
 \subsection{Entropy Coding}
 % ------------------------------------------------
 
-We entropy code the bit packed representation of each block using an off-the-shelf Huffman coder \cite{fse}. Note that this is faster than Huffman coding the original data or the errors since the bit packed block is (usually) shorter than the original data.
+We entropy code the bit packed representation of each block using Huff0, an off-the-shelf Huffman coder \cite{fse}. Note that this is faster than Huffman coding the original data or the errors since the bit packed block is (usually) shorter than the original data. We do not use Finite-State Entropy \cite{fse} since it is slower than Huffman coding and we never observed a meaningful increase in compression ratio.
 

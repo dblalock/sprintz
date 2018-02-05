@@ -6,10 +6,7 @@
 \usepackage{balance}  % vldb requirement; for  \balance command on last page
 \input{setup.tex}
 
-\newcommand{\mine}{\textsc{Sprintz}}
-\newcommand{\minesp}{\textsc{Sprintz}\text{ }}
-\newcommand{\fire}{\textsc{Fire}\text{ }}
-\newcommand{\justfire}{\textsc{Fire}}
+\newcommand{\mine}{\textsc{Sprintz} }
 
 \begin{document}
 
@@ -29,7 +26,7 @@
 \vldbDOI{https://doi.org/TBD}
 
 % ================================================================
-\title{Sprintz: Time Series Compression \\ for the Internet of Things}
+\title{Sprintz: Time Series Compression for the Internet of Things}
 % ================================================================
 
 % \author{Davis W. Blalock}
@@ -79,13 +76,9 @@
 
 % By 2020, mobile and connected devices will be produce over \%d\% of the world's data. Much of
 
-Thanks to the rapid proliferation of connected devices, sensor-generated time series constitute a large and growing portion of the world's data. In order to reduce storage, power, and transmission costs, it is desirable to compress this data to the greatest extent possible. % Many time series databases propose some method of doing this, but, to the best of our knowledge, there is neither a systematic assessment of what approaches are most effective nor a compression algorithm that clearly outperforms others on such data. % Unfortunately, existing compression algorithms either provide only limited compression when applied to time series, degrade data quality, or are not suitable for execution on low-power processors.
+Thanks to the rapid proliferation of connected devices, sensor-generated time series constitute a large and growing portion of the world's data. In order to reduce power, storage, and transmission costs, it is desirable to compress this data to the greatest extent possible. Unfortunately, existing compression algorithms either provide only limited compression when applied to time series, degrade data quality, or are not suitable for execution on low-power processors.
 
-We introduce a time series compression algorithm that achieves state-of-the-art compression ratios, high compression speed, and extreme decompression speed. As we show experimentally, storing data using our algorithm not only saves space, but also accelerates many queries of practical interest relative to existing compression schemes. Moreover, because our approach requires $<$1KB of memory, it can be run on low-power sensors at the network edge, offloading computation from the central database and reducing network load.
-
-% We also provide an open-source benchmark library that can be used to assess dozens of different queries and compressors on various datasets.
-
-Extensive experiments on datasets from many domains show that these results hold not only for sensor data, our primary application of interest, but also across a wide array of other time series. % Our approach also outperforms even domain-specific algorithms designed for more powerful hardware in some cases.
+We introduce a time series compression algorithm that offers state-of-the-art compression ratios and speed while requiring only limited hardware capabilities. Extensive experiments on datasets from many domains show that these results hold not only for sensor data, our primary application of interest, but also across a wide array of other time series. % Our approach also outperforms even domain-specific algorithms designed for more powerful hardware in some cases.
 
 \end{abstract}
 
@@ -151,19 +144,11 @@ Extensive experiments on datasets from many domains show that these results hold
 \input{results.tex}
 
 % ================================================================
-\section{Conclusion} \label{sec:conclusion}
+\section{Summary} \label{sec:conclusion}
 % ================================================================
 
 Sprintz (Sprintz PReserves INteger Time serieZ) is a compression algorithm. Behold its majesty.
 
-% ================================================================
-\begin{appendix}
-\section{Additional Experiments} \label{sec:moreResults}
-% ================================================================
-
-\input{appendix.tex}
-
-\end{appendix}
 % ================================================================
 \vspace{-1mm}
 % References

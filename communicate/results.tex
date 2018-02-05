@@ -35,13 +35,13 @@ For multivariate datasets, we allowed all methods but our own to operate on the 
 \item \textbf{SIMD-BP128} \cite{fastpfor} --- The fastest known method of compressing integers.
 \item \textbf{FastPFOR} \cite{fastpfor} --- An algorithm similar to SIMD-BP128, but with better compression.
 \item \textbf{Simple8b} \cite{simple8b} --- An integer algorithm compression algorithm used by InfluxDB \cite{influxDB}.
-\item \textbf{LZO} \cite{simple8b} --- A stable and widely-used dictionary compressor employed by KairosDB \cite{kairosDB} and LittleTable \cite{littleTable}.
-\item \textbf{Snappy} \cite{snappy} --- A general-purpose compression algorithm developed by Google and used by InfluxDB, KairosDB, OpenTSDB \cite{openTSDB}, RocksDB \cite{rocksDB}, and numerous other projects.
-\item \textbf{Zstd} \cite{zstd} --- Facebook's state-of-the-art general purpose compression algorithm. It is based on LZ77 and entropy coding using a mix of Huffman coding and Finite State Entropy (FSE) \cite{fse}. It is available in RocksDB \cite{rocksDB}.
+\item \textbf{LZO} \cite{lzo} --- A stable and widely-used dictionary compressor employed by KairosDB \cite{kairosDB} and LittleTable \cite{littleTable}.
+\item \textbf{Snappy} \cite{snappy} --- A general-purpose compression algorithm developed by Google and used by InfluxDB, KairosDB, OpenTSDB \cite{openTSDB}, RocksDB \cite{rocksDB}, the Hadoop Distributed File System \cite{hdfs} and numerous other projects.
+\item \textbf{Zstd} \cite{zstd} --- Facebook's state-of-the-art general purpose compression algorithm. It is based on LZ77 and entropy codes using a mix of Huffman coding and Finite State Entropy (FSE) \cite{fse}. It is available in RocksDB \cite{rocksDB}.
 \item \textbf{Brotli} \cite{brotli} --- A recent compression algorithm introduced by Google and now standardized as a web content-encoding type.
 \item \textbf{LZ4} \cite{lz4} --- A widely-used general-purpose compression algorithm optimized for speed and based on LZ77. Used by RocksDB and ChronicleDB \cite{chronicleDB}.
 % \item \textbf{LZ4-HC} \cite{lz4} --- A variant of LZ4 optimized for compression ratio at the cost of compression speed.
-\item \textbf{GZIP} \cite{gzip} --- A widely used general-purpose compression algorithm. Used by RespawnDB \cite{respawnDB}.
+\item \textbf{GZIP} \cite{gzip} --- A widely used general-purpose compressor. Used by RespawnDB \cite{respawnDB}, the Parquet columnar storage format \cite{parquet}, and HDFS \cite{hdfs}.
 % \item \textbf{BitShuf} \cite{bitshuf} --- LZ4 with the BitShuffle preprocessor, which groups runs of 0 bits when consecutive values are similar and small.
 % \item \textbf{Delta+BitShuf} \cite{gzip} --- Like BitShuf, but applied to the delta-encoded representation of the time series.
 % \item \textbf{Delta} --- Simple delta encoding followed by...erm...some kind of bit packing or something.

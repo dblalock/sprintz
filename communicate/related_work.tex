@@ -15,6 +15,10 @@ For lossless compression of integer time series (including timestamps), existing
 A final noteworthy method is Blosc \cite{blosc}. While not intended solely for time series (or integers), Blosc's grouping of correlated bytes and/or bits \cite{bitshuf} makes it well-suited for multivariate time series.
 
 
+% ------------------------ parquet
+%   -currently supports snappy, GZIP, lzo
+%   -hdfs also supports these; prolly others also
+%   -https://www.cloudera.com/documentation/enterprise/5-6-x/topics/impala_parquet.html#parquet_compression
 % ------------------------ Akumuli
 %   -DFCM predictor (for both floats and ints?); XOR with prediction, then do something to pack it
 %   -"The timestamp can be a simple integer or datetime in ISO 8601 format"
