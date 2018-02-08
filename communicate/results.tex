@@ -41,7 +41,7 @@ For multivariate datasets, we allowed all methods but our own to operate on the 
 \item \textbf{Brotli} \cite{brotli} --- A recent compression algorithm introduced by Google and now standardized as a web content-encoding type.
 \item \textbf{LZ4} \cite{lz4} --- A widely-used general-purpose compression algorithm optimized for speed and based on LZ77. Used by RocksDB and ChronicleDB \cite{chronicleDB}.
 % \item \textbf{LZ4-HC} \cite{lz4} --- A variant of LZ4 optimized for compression ratio at the cost of compression speed.
-\item \textbf{GZIP} \cite{gzip} --- A widely used general-purpose compressor. Used by RespawnDB \cite{respawnDB}, the Parquet columnar storage format \cite{parquet}, and HDFS \cite{hdfs}.
+\item \textbf{DEFLATE} [] --- The compression algorithm underlying zlib \cite{zlib} and gzip \cite{gzip}. Used by RespawnDB \cite{respawnDB}, the Parquet columnar storage format \cite{parquet}, and HDFS \cite{hdfs}. We use the zlib implementation.
 % \item \textbf{BitShuf} \cite{bitshuf} --- LZ4 with the BitShuffle preprocessor, which groups runs of 0 bits when consecutive values are similar and small.
 % \item \textbf{Delta+BitShuf} \cite{gzip} --- Like BitShuf, but applied to the delta-encoded representation of the time series.
 % \item \textbf{Delta} --- Simple delta encoding followed by...erm...some kind of bit packing or something.
@@ -56,12 +56,43 @@ For multivariate datasets, we allowed all methods but our own to operate on the 
 \subsection{Compression Ratio}
 % ------------------------------------------------
 
-Using the 85 UCR datasets:
-\begin{enumerate}
-\item CD Diagram of \mine (all levels) vs other algorithms
-\item CD Diagram of \mine (all levels) vs delta coding + other algorithms
-\item If we don't win in at least the first one, CD Diagram of \mine (all levels) vs delta coding + other algorithms that use very little memory
-\end{enumerate}
+In order to rigorously assess the compression performance of both \minesp and existing algorithms, it is desirable to evaluate on a large corpus of time series from heterogeneous domains. The clear choice for such a corpus is the UCR Time Series Archive \cite{ucrTimeSeries}, which is almost universally used in the data mining community for evaluating time series classification and clustering algorithms.
+
+Moreover, in order to avoid biasing the results, it is important to choose an appropriate overall metric. One obvious choice would be to simply measure the total size of all compressed datasets compared to the original size. Unfortunately, this would cause a small number of large datasets to dominate. Even if we took a fixed number of time series per dataset, datasets with longer time series would still contribute most of the data.
+
+Another option would be to compute the compression ratio for each dataset and average these numbers. This is also undesirable for similar reasons. Specifically, it allows performance on a small number of highly compressible datasets to dominate the overall metric.
+
+Because these considerations exactly parallel those associated with comparing classifiers across multiple datasets, we use the methodology outlined in \cite{cdDiagrams}. This means computing the rank of each algorithm for each dataset and comparing the mean ranks using a Nemenyi test. A rank of 1 indicates the best ratio, while 2 indicates the second-best ratio, and so on.
+
+Results using this methodology are shown in Figure~\ref{fig:ratioCD}. Sprintz on high compression settings is significantly better than any existing algorithm. On slightly lower settings, it is still as effective as the best current methods (Zlib and Zstd).
+
+\begin{figure}[h]
+\begin{center}
+    \includegraphics[width=\linewidth]{paper/cd_diagram_8b_deltas=0}
+    \includegraphics[width=\linewidth]{paper/cd_diagram_16b_deltas=0}
+    \caption{Compression performance of different algorithms on the UCR Time Series Archive, as measured by mean rank. Lower ranks are better. Methods joined with a horizontal black line are not statistically significantly different.}
+    \label{fig:ratioCD}
+\end{center}
+\end{figure}
+
+As a more intuitive illustration, we also include the distributions of raw compression ratios (Figure~\ref{fig:ratioBox}). \minesp exhibits consistently strong performance across almost all datasets. High-speed codecs such as Snappy, LZ4, and the integer codecs (FastPFOR, SIMDBP128, Simple8B) hardely compress most datasets at all.
+
+Perhaps counter-intuitively, 8-bit data tends to yield higher compression ratios than 16-bit data. This is a product of the fact that the number of bits that are ``predictable'' is roughly constant. I.e., suppose that an algorithm can correctly predict the four most significant bits of a given value; this enables a 2:1 compression ratio in the 8-bit case, but only a 16:12 = 4:3 ratio in the 16-bit case. A more concise explanation is that all but the top few bits are difficult to distinguish from noise, so the larger the fraction of the value these bits constitute, the greater the compressibility.
+
+\begin{figure}[h]
+\begin{center}
+    \includegraphics[width=\linewidth]{paper/boxplot_ucr_deltas=0}
+    \caption{Boxplots of compression performance of different algorithms on the UCR Time Series Archive. Each boxplot captures the distribution of one algorithm across all 85 datasets.}
+    \label{fig:ratioBox}
+\end{center}
+\end{figure}
+
+% Using the 85 UCR datasets:
+% \begin{enumerate}
+% \item CD Diagram of \mine (all levels) vs other algorithms
+% \item CD Diagram of \mine (all levels) vs delta coding + other algorithms
+% \item If we don't win in at least the first one, CD Diagram of \mine (all levels) vs delta coding + other algorithms that use very little memory
+% \end{enumerate}
 
 % % ------------------------------------------------
 % \subsection{Ratio-Speed Tradeoff}
@@ -73,6 +104,20 @@ Using the 85 UCR datasets:
 % ------------------------------------------------
 \subsection{Decompression Speed}
 % ------------------------------------------------
+
+To systematically assess the speed of \minesp, we ran it on datasets with varying numbers of columns and varying levels of compressibility. Specifically, we generated two synthetic datasets: 1) 100 million random values uniformly distributed across the full range of those possible for the given bitwidth; and 2) 100 million random values using only the lower fourth of the bits. The former is uncompressible, while the latter allows compression by a factor of two or more. It doesn't allow compression by a factor of four for \minesp since the independent elements make delta coding and \fire counterproductive.
+
+We compressed each of these datasets with \minesp set to treat it as if it had 1 through 80 columns. Numbers that do not evenly divide 100 million result in \minesp memcpy-ing the trailing bytes.
+
+As shown in Figure~\ref{fig:ndims_vs_speed}, \minesp becomes faster as the number of columns increases and as the number of columns approaches multiples of 32 for 8-bit data or 16 for 16-bit data. These values correspond to the 32B width of a SIMD register on the tested machine. These results demonstrate that there is small but consistent overheaded associated with using \fire over delta coding, but that both approaches are extremely fast. Without Huffman coding, \mine decompresses at multiple GB/s except for very few ($<$5) columns.
+
+\begin{figure}[h]
+\begin{center}
+    \includegraphics[width=\linewidth]{paper/ndims_vs_speed}
+    \caption{\minesp becomes faster as the number of columns increases and as the width of each sample approaches multiples of 32B (on a machine with 32B vector registers). Its speed is insensitive to the compression ratio, as illustrated by the speeds in the top row (low compression) roughly equaling those in the bottom row (high compression).}
+    \label{fig:ndims_vs_speed}
+\end{center}
+\end{figure}
 
 
 % ------------------------------------------------
@@ -99,6 +144,11 @@ Using the 85 UCR datasets:
 \subsection{Quantization Error}
 % ------------------------------------------------
 
+% Given that many time series as stored as floating point values, it is natural to wonder what
+
+While floating point values are not the focus of our paper, a straightforward means of generalizing \minesp to floats is to first quantize the floating point data. The downside of doing this is that, because floating point numbers are not uniformly distributed along the real line, such quantization can be lossy. We therefore carried out an experiment to determine how lossy such quantization tends to be on real data.
+
+% TODO pick up here
 
 % ------------------------------------------------
 \subsection{Query acceleration}
