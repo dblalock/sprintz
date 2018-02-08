@@ -105,7 +105,7 @@ Perhaps counter-intuitively, 8-bit data tends to yield higher compression ratios
 \subsection{Decompression Speed}
 % ------------------------------------------------
 
-To systematically assess the speed of \minesp, we ran it on datasets with varying numbers of columns and varying levels of compressibility. Specifically, we generated two synthetic datasets: 1) 100 million random values uniformly distributed across the full range of those possible for the given bitwidth; and 2) 100 million random values using only the lower fourth of the bits. The former is uncompressible, while the latter allows compression by a factor of two or more. It doesn't allow compression by a factor of four for \minesp since the independent elements make delta coding and \fire counterproductive.
+To systematically assess the speed of \minesp, we ran it on datasets with varying numbers of columns and varying levels of compressibility. Specifically, we generated two synthetic datasets: 1) 100 million random values uniformly distributed across the full range of those possible for the given bitwidth; and 2) 100 million random values using only the lower fourth of the bits. The former is incompressible, while the latter allows compression by a factor of two or more. It doesn't allow compression by a factor of four for \minesp since the independent elements make delta coding and \fire counterproductive.
 
 We compressed each of these datasets with \minesp set to treat it as if it had 1 through 80 columns. Numbers that do not evenly divide 100 million result in \minesp memcpy-ing the trailing bytes.
 
@@ -148,7 +148,19 @@ As shown in Figure~\ref{fig:ndims_vs_speed}, \minesp becomes faster as the numbe
 
 While floating point values are not the focus of our paper, a straightforward means of generalizing \minesp to floats is to first quantize the floating point data. The downside of doing this is that, because floating point numbers are not uniformly distributed along the real line, such quantization can be lossy. We therefore carried out an experiment to determine how lossy such quantization tends to be on real data.
 
-% TODO pick up here
+We did this by quantizing the UCR time series datasets and measuring the noise that this introduces relative to the variance of the data. Specifically, we linearly offset and rescaled the time series in each dataset such that the minimum and maximum values in any time series correspond to $(0, 255)$ for 8-bit quantization or $(0, 65,535)$ for 16-bit quantization. We then obtained the quantized data by applying the floor function to this linearly transformed data.
+
+To measure the error this introduces, we then inverted the linear transformation and computed the mean squared error between the original and this ``reconstructed'' data. The resulting error values for each dataset, normalized by the dataset's variance, are shown in Figure~\ref{fig:quantize_errs}. These normalized values can be understood as signal-to-noise ratio measurements, where the noise is the quantization error. As the figure illustrates, the quantization error is orders of magnitude smaller than the variance for nearly all datasets, and never worse than one order of magnitude even for 8-bit quantization.
+
+\begin{figure}[h]
+\begin{center}
+    \includegraphics[width=\linewidth]{paper/quantize_errs}
+    \caption{Quantizing floating-point time series introduces error that is orders of magnitude smaller than the variance of the data. For every 10 Decibels of signal-to-noise ratio, the variance is 10 times larger than the quantization error. Even with 8 bits, quantization introduces less than 1\% error on nearly all datasets.}
+    \label{fig:quantize_errs}
+\end{center}
+\end{figure}
+
+This of course does not indicate that all time series can be safely quantized. Two counterexamples of which we are aware are timestamps where microsecond or nanosecond resolution matters, and GPS coordinates, where small decimal places may correspond to many meters. However, the above results suggest that quantization is a suitable means of applying \minesp to floating-point data in many applications. This is bolstered by previous work showing that quantization even to a mere six bits [] rarely harms classification accuracy, and quantizing to two or less sometimes improves it [].
 
 % ------------------------------------------------
 \subsection{Query acceleration}
