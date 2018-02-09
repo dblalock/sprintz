@@ -52,6 +52,34 @@ We also contribute the following:
 \item An adaptive predictive coding algorithm with a throughput of up to 6GB/s that can be used indepent of the rest of our method. To the best of our knowledge, this is the fastest single-threaded online learning algorithm ever published (excepting branch predictors and other methods with hardware acceleration).
 \end{itemize}
 
+% ------------------------------------------------
+% \subsection{Formal Problem}
+\subsection{Definitions}
+% ------------------------------------------------
+
+To both establish notation and clarify the sorts of data for which \minesp is applicable, we introduce the following definitions.
+
+\begin{Definition} \b{Sample.} A sample is a vector $\x \in \R^D$. $D$ is termed the sample's \b{dimensionality}. Each element of the sample is a scalar represented using a number of bits $W$, termed the \b{bitwidth}. The bitwidth $W$ is shared by all elements.
+\end{Definition}
+
+\begin{Definition} \b{Time Series.} A time series $\X$ of length $T$ is a sequence of $T$ samples, $\x_1,\ldots,\x_T$. All samples $\x_t$ share the same bitwidth $W$ and dimensionality $D$, and the meaning of each dimension is consistent from sample to sample. In the case that $D = 1$, $\X$ is called \b{univariate}; otherwise it is \b{multivariate}.
+\end{Definition}
+
+\begin{Definition} \b{Rows, Columns.} In a database context, we assume that each sample of a time series is one row and each dimension is one column.
+\end{Definition}
+
+% The goal of \minesp is to construct two functions $c(X)$ (compression) and $d(X)$ (decompression) such that:
+% \begin{enumerate}
+% \item $\forall \X, d(c(\X)) = \X$,
+% \item $c(\X)$ can be represented in as few bytes as possible,
+% \item computing $c(\X)$ requires few bytes of space beyond those used to store its input and output, and
+% \item $c(\X)$ and $d(\X)$ run as quickly as possible on a CPU.
+% \end{enumerate}
+% We assume that all scalars are integers of bitwidth 16 or less, and that adjacent samples have positively correlated elements.
+
+
+% ================================================================
+
 % However, less attention has been paid to the lower-level problem of how to represent the raw values being stored. %, with billions of sensors now streaming data about quantities ranging from acceleration to temperature to heart rate.
 
 % In order to reduce storage costs, this representation should entail some form of compression. However, in order to support the scan-based queries common for time series [], this format must be amenable to extremely fast decompression.

@@ -154,7 +154,10 @@ Extensive experiments on datasets from many domains show that these results hold
 \section{Conclusion} \label{sec:conclusion}
 % ================================================================
 
-Sprintz (Sprintz PReserves INteger Time serieZ) is a compression algorithm. Behold its majesty.
+We introduce \minesp, a compression algorithm for multivariate integer time series that achieves state-of-the-art compression ratios and speeds of up to 3GB/s in a single thread. Data stored in \minesp format can be queried at nearly the speed of uncompressed data for even lightweight queries. Moreover, \minesp compression imposes extremely small memory requirements, making it suitable for both compression at the network edge and server-side compression in the presence of massive numbers of streams.
+
+As a core component of \minesp, we also introduce the \fire forecaster. \fire achieves throughput of up to 5GB/s while also adapting online to the distribution of the data. \fire can be used as a preprocessor before any compression algorithm and often improves compression ratio dramatically.
+
 
 % ================================================================
 \begin{appendix}
