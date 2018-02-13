@@ -12,6 +12,7 @@
 #include <stdint.h>
 
 #include "macros.h"
+#include "query.hpp"
 
 #define USE_X86_INTRINSICS
 #define USE_AVX2
@@ -91,8 +92,10 @@ int64_t decompress_rowmajor_delta_rle_lowdim_16b(
 // ------------------------------------------------ querying
 
 // operates directly on compressed data
-int64_t query_rowmajor_delta_rle_8b(const int8_t* src, uint8_t* dest);
-int64_t query_rowmajor_delta_rle_16b(const int16_t* src, uint16_t* dest);
+int64_t query_rowmajor_delta_rle_8b(const int8_t* src, uint8_t* dest,
+    const QueryParams& qparams);
+int64_t query_rowmajor_delta_rle_16b(const int16_t* src, uint16_t* dest,
+    const QueryParams& qparams);
 
 
 #endif
