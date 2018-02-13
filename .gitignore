@@ -117,3 +117,7 @@ figs/
 _results/
 
 *.todo
+
+# ------------------------ project-specific
+*.parquet
+*.bz2
