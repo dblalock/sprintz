@@ -82,10 +82,10 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim_16b(
 int64_t decompress_rowmajor_xff_rle_lowdim_16b(const int16_t* src, uint16_t* dest);
 
 
+// ------------------------------------------------ querying
 
-// SELF: pick up by writing the wrapper decomp funcs, then writing overall
-// wrapper func in sprintz_8b.cpp
-
-
+// run queries directly on compressed data
+int64_t query_rowmajor_xff_rle_8b(const int8_t* src, uint8_t* dest);
+int64_t query_rowmajor_xff_rle_16b(const int16_t* src, uint16_t* dest);
 
 #endif

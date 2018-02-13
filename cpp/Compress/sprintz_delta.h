@@ -6,8 +6,8 @@
 //  Copyright © 2017 D Blalock. All rights reserved.
 //
 
-#ifndef sprintz2_h
-#define sprintz2_h
+#ifndef sprintz_delta_h
+#define sprintz_delta_h
 
 #include <stdint.h>
 
@@ -87,6 +87,12 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim_16b(
 
 int64_t decompress_rowmajor_delta_rle_lowdim_16b(
     const int16_t* src, uint16_t* dest);
+
+// ------------------------------------------------ querying
+
+// operates directly on compressed data
+int64_t query_rowmajor_delta_rle_8b(const int8_t* src, uint8_t* dest);
+int64_t query_rowmajor_delta_rle_16b(const int16_t* src, uint16_t* dest);
 
 
 #endif
