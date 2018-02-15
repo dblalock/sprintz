@@ -74,8 +74,9 @@
 		727742D32032947D00715175 /* test_query.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = test_query.cpp; path = test/test_query.cpp; sourceTree = "<group>"; };
 		727742D52032949100715175 /* sprintz_delta_rle_query.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz_delta_rle_query.cpp; sourceTree = "<group>"; };
 		727742D72032956600715175 /* sprintz_xff_rle_query.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz_xff_rle_query.cpp; sourceTree = "<group>"; };
-		727742D920337C7D00715175 /* query.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = query.hpp; path = Compress/query.hpp; sourceTree = "<group>"; };
+		727742D920337C7D00715175 /* query.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = query.hpp; sourceTree = "<group>"; };
 		727742DA2033874A00715175 /* sprintz_delta_rle_query.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = sprintz_delta_rle_query.hpp; sourceTree = "<group>"; };
+		727742DB20339ED400715175 /* traits.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = traits.hpp; sourceTree = "<group>"; };
 		727B032D1FCC9265004F07D4 /* sprintz_xff.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sprintz_xff.h; sourceTree = "<group>"; };
 		727B032F1FCC9265004F07D4 /* sprintz_xff.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz_xff.cpp; sourceTree = "<group>"; };
 		729526CF2005753F00BFB134 /* search.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = search.hpp; sourceTree = "<group>"; };
@@ -111,7 +112,6 @@
 		72E01C5C1EB554200038A2B9 = {
 			isa = PBXGroup;
 			children = (
-				727742D920337C7D00715175 /* query.hpp */,
 				72E01C671EB554200038A2B9 /* Compress */,
 				72E01C661EB554200038A2B9 /* Products */,
 			);
@@ -128,6 +128,8 @@
 		72E01C671EB554200038A2B9 /* Compress */ = {
 			isa = PBXGroup;
 			children = (
+				727742D920337C7D00715175 /* query.hpp */,
+				727742DB20339ED400715175 /* traits.hpp */,
 				725E20801FAAC0E8007B2797 /* delta.h */,
 				725E207B1FAAADD2007B2797 /* delta.cpp */,
 				721AECE01FAEB82E0005B793 /* predict.h */,

@@ -46,7 +46,6 @@ template<> struct ElemSzTraits<2> {
     typedef int32_t counter_t;
 };
 
-
 template<typename T, typename T2>
 static CONSTEXPR inline T round_up_to_multiple(T x, T2 multipleof) {
     T remainder = x % multipleof;

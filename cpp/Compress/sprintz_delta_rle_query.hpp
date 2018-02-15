@@ -30,7 +30,7 @@ static const int kDefaultGroupSzBlocks = 2;
 
 // ========================================================== rowmajor delta rle
 
-template<typename int_t, typename uint_t, typename Func>
+template<bool DoWrite=false, class int_t, class uint_t, class Func>
 SPRINTZ_FORCE_INLINE int64_t query_rowmajor_delta_rle(const int_t* src,
     uint_t* dest, uint16_t ndims, uint32_t ngroups, uint16_t remaining_len,
     Func& func)
@@ -344,9 +344,11 @@ SPRINTZ_FORCE_INLINE int64_t query_rowmajor_delta_rle(const int_t* src,
                         vals = _mm256_add_epi16(prev_vals, vdeltas);
                     }
 
-                    func(prev_vals, vals);
+                    func(v, prev_vals, vals);
 
-                    _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
+                    if (DoWrite) {
+                        _mm256_storeu_si256((__m256i*)(dest + out_offset), vals);
+                    }
                     // if (debug) {
                     //     printf("---- row %d\n", i);
                     //     printf("deltas: "); dump_m256i<int16_t>(vdeltas);
@@ -362,7 +364,6 @@ SPRINTZ_FORCE_INLINE int64_t query_rowmajor_delta_rle(const int_t* src,
             dest += block_sz * ndims;
             masks += nstripes;
             bitwidths += nstripes;
-
         } // for each block
     } // for each group
 
@@ -385,7 +386,9 @@ SPRINTZ_FORCE_INLINE int64_t query_rowmajor_delta_rle(const int_t* src,
     // printf("read bytes: %lu\n", remaining_len);
     // printf("remaining data: "); ar::print(src, remaining_len);
     if (debug) { printf("remaining len: %d\n", remaining_len); }
-    memcpy(dest, src, remaining_len * elem_sz);
+    if (DoWrite) {
+        memcpy(dest, src, remaining_len * elem_sz);
+    }
 
     if (debug > 2) {
         // printf("decompressed data:\n"); dump_bytes(orig_dest, orig_len * elem_sz, ndims * 4);
