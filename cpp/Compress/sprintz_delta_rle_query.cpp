@@ -13,8 +13,6 @@
 #include "query.hpp"
 #include "util.h"  // for DIV_ROUND_UP
 
-#include <random>
-
 
 template<bool Materialize, class IntT, class UintT>
 int64_t call_appropriate_query_func(const IntT* src, UintT* dest,
@@ -66,7 +64,6 @@ int64_t query_rowmajor_delta_rle_8b(const int8_t* src, uint8_t* dest,
     uint32_t ngroups;
     uint16_t remaining_len;
     src += read_metadata_rle(src, &ndims, &ngroups, &remaining_len);
-    NoopQuery<uint8_t> q(ndims);
     if (qp.materialize) {
         return call_appropriate_query_func<true>(src, dest, ndims, ngroups,
             remaining_len, qp);

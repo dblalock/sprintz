@@ -77,6 +77,7 @@
 		727742D920337C7D00715175 /* query.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = query.hpp; sourceTree = "<group>"; };
 		727742DA2033874A00715175 /* sprintz_delta_rle_query.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = sprintz_delta_rle_query.hpp; sourceTree = "<group>"; };
 		727742DB20339ED400715175 /* traits.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = traits.hpp; sourceTree = "<group>"; };
+		727742DC203536D400715175 /* sprintz_xff_rle_query.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = sprintz_xff_rle_query.hpp; sourceTree = "<group>"; };
 		727B032D1FCC9265004F07D4 /* sprintz_xff.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sprintz_xff.h; sourceTree = "<group>"; };
 		727B032F1FCC9265004F07D4 /* sprintz_xff.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz_xff.cpp; sourceTree = "<group>"; };
 		729526CF2005753F00BFB134 /* search.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = search.hpp; sourceTree = "<group>"; };
@@ -152,6 +153,7 @@
 				727B032F1FCC9265004F07D4 /* sprintz_xff.cpp */,
 				72C2D0AA1FD6013000D6740B /* sprintz_xff_lowdim.cpp */,
 				727742CB203260E500715175 /* sprintz_xff_rle.cpp */,
+				727742DC203536D400715175 /* sprintz_xff_rle_query.hpp */,
 				727742D72032956600715175 /* sprintz_xff_rle_query.cpp */,
 				72E9805A1F0AB147006E1F9B /* debug_utils.hpp */,
 				72C2D0B91FD7279C00D6740B /* format.cpp */,
