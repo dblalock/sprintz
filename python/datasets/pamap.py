@@ -5,7 +5,6 @@ from joblib import Memory
 
 import paths
 from ..utils.files import listFilesInDir, ensure_dir_exists
-from . import viz
 from pamap_common import *  # noqa
 
 memory = Memory('./')

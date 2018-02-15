@@ -532,11 +532,14 @@ def convert_to_blocks(diffs):
     return blocks.reshape((-1, 8))
 
 
-def quantize(X, numbits, keep_nrows=-1, stitch_ends=True):
+def quantize(X, numbits, keep_nrows=-1, mean_norm=False, stitch_ends=False):
     if keep_nrows > 0 and keep_nrows < len(X):
         np.random.seed(123)
         which_idxs = np.random.choice(len(X), keep_nrows, replace=False)
         X = X[which_idxs]
+
+    if mean_norm:
+        X -= np.mean(X, axis=1, keepdims=True)
 
     if stitch_ends:
         for i in range(1, len(X)):
@@ -950,7 +953,7 @@ def apply_transforms(X, blocks, transform_names, k=-1, side=None,
             offsetBlocks = learning2.sub_online_regress(
                 offsetBlocks, group_sz_blocks=-1, numbits=numbits, **kwargs)
 
-        if name == 'online_gd':
+        if name == 'OnlineGradDescent':
             offsetBlocks = learning2.sub_online_regress(
                 offsetBlocks, method='gradient', numbits=numbits, **kwargs)
 
@@ -986,7 +989,7 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
 
     plot_sort = False  # plot distros of idxs into vals sorted by rel freq
     plot_mixfix = False  # plot distros of codes after mixfix encoding
-    plot_sub_minbits = True  # plot distros of vals above min nbits value
+    plot_sub_minbits = False  # plot distros of vals above min nbits value
 
     # force transforms to be collections
     if right_transforms is None or isinstance(right_transforms, str):
@@ -1053,18 +1056,18 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     left_names = name_transforms(left_transforms)
     right_names = name_transforms(right_transforms)
 
-    axes[1].set_title("{} deltas ({:.2f}% overflow)\n{}".format(
+    axes[1].set_title("{} errors ({:.2f}% overflow)\nAlgorithm = '{}'".format(
         d.name, 100 * overflow_frac_left, left_names))
-    axes[-3].set_title("{} deltas ({:.2f}% overflow)\n{}".format(
+    axes[-3].set_title("{} errors ({:.2f}% overflow)\nAlgorithm = '{}'".format(
         d.name, 100 * overflow_frac_right, right_names))
 
-    axes[2].set_title("Deltas ({:.2f}% {}bit overflow)".format(
+    axes[2].set_title("Errors ({:.2f}% need >{}bits)".format(
         100 * overflow_frac4_left, numbits - 4))
-    axes[-2].set_title("Deltas ({:.2f}% {}bit overflow)".format(
+    axes[-2].set_title("Errors ({:.2f}% need >{} bits)".format(
         100 * overflow_frac4_right, numbits - 4))
 
-    axes[3].set_title("PDF of delta bits, max block bits")
-    axes[-1].set_title("PDF of deltas, max block delta after offseting")
+    axes[3].set_title("PDF of inidividual #bits (blue),\nmax #bits in block (red)")
+    axes[-1].set_title("PDF of individual #bits (blue),\nmax #bits in block (red)")
 
     maxval = (1 << numbits) - 1
     axes[0].set_ylim((0, maxval))
@@ -1328,9 +1331,9 @@ def main():
     # left_transforms = None
     # left_transforms = 'sub_mean'
     # left_transforms = 'dyn_filt'
-    # left_transforms = 'delta'
+    left_transforms = 'delta'
     # left_transforms = ['smooth', 'delta']
-    left_transforms = ['smooth', 'smooth', 'delta']
+    # left_transforms = ['smooth', 'smooth', 'delta']
     # left_transforms = 'double_delta'
     # left_transforms = 'online_regress'
     # left_transforms = 'global_regress'
@@ -1353,10 +1356,10 @@ def main():
     # right_transforms = 'dyn_filt'
     # right_transforms = 'online_regress'
     # right_transforms = 'global_regress'
-    # right_transforms = 'online_gd'
-    # right_transforms = ['smooth', 'online_gd']
-    right_transforms = ['smooth', 'smooth', 'online_gd']
-    # right_transforms = ['downsample2', 'blocklen=8', 'online_gd']
+    right_transforms = 'OnlineGradDescent'
+    # right_transforms = ['smooth', 'OnlineGradDescent']
+    # right_transforms = ['smooth', 'smooth', 'OnlineGradDescent']
+    # right_transforms = ['downsample2', 'blocklen=8', 'OnlineGradDescent']
     # right_transforms = 'online_linreg'
     # right_transforms = 'VAR'
     # right_transforms = 'hash'
@@ -1460,9 +1463,9 @@ def main():
     # k_right = 32
 
     # n = 8
-    # n = 32
+    n = 32
     # n = 100
-    n = 200
+    # n = 200
     # n = 500
 
     chunk_sz = -1
@@ -1476,6 +1479,8 @@ def main():
     small = False
     # small = True
 
+    dsets = []
+
     # TODO add in a "transform" that encodes blocks using codes we would use
     #   -actually, prolly bake this into nbits_cost cuz otherwise leading 0s
     #   and more than one leading 1 will make it underestimate costs
@@ -1488,10 +1493,10 @@ def main():
     # dsets = pamap.all_recordings()
     # base_save_dir = 'pamap'
 
-    from python.datasets import msrc
-    # dsets = msrc.all_recordings(idxs=np.arange(30))
-    dsets = msrc.all_recordings(idxs=np.arange(10, 30))
-    base_save_dir = 'msrc'
+    # from python.datasets import msrc
+    # # dsets = msrc.all_recordings(idxs=np.arange(30))
+    # dsets = msrc.all_recordings(idxs=np.arange(10, 30))
+    # base_save_dir = 'msrc'
 
     # from python.datasets import ampds
     # base_save_dir = 'ampds'
@@ -1501,7 +1506,9 @@ def main():
     # # dsets = ampds.all_weather_recordings()
     # dsets = ampds.all_timestamp_recordings(); numbits = 24  # noqa
 
-    # have to uncomment this for multivariate datasets
+    #
+    # NOTE: have to uncomment this for multivariate datasets
+    #
     for ds in dsets:
         subseq_len = 500
         flat_data = ds.data.T.ravel()
@@ -1513,8 +1520,8 @@ def main():
         print "{} raveled data shape: {}".format(ds.name, ds.X.shape)
         print np.max(ds.X)
 
-    # dsets = ucr.smallUCRDatasets() if small else ucr.origUCRDatasets()
-    # base_save_dir = 'ucr'
+    dsets = ucr.smallUCRDatasets() if small else ucr.origUCRDatasets()
+    base_save_dir = 'ucr'
 
     # ds = dsets[0]
     # print "first ds: ", ds.name
@@ -1652,6 +1659,7 @@ def main():
     # for d in dslist[27:28]:  # Olive Oil
     # for d in dslist[30:31]:  # starlight curves
     # for d in dslist[1:2]:  # adiac
+    # for d in dslist[2:3]:  # beef
     # for d in dslist[4:6]:
     # for d in dslist[3:4]: # CBF
     # for d in dslist:

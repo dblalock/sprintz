@@ -132,10 +132,12 @@ def _readtxt(path, sep=None):
     return np.genfromtxt(path, delimiter=sep)
 
 
-def readDataFile(path, sep=None):
+def readDataFile(path, sep=None, mean_norm=True):
     D = _readtxt(path, sep=sep)
     labels = D[:, 0].astype(np.int)
     X = D[:, 1:]
+    if mean_norm:
+        X -= np.mean(X, axis=1, keepdims=True)
     return (X, labels)
 
 
