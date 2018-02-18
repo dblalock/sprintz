@@ -22,17 +22,6 @@ typedef struct QueryParams {
     bool materialize; /// whether to materialize the decompressed data
 } QueryParams;
 
-
-template<typename DataT>
-class NoopQuery {
-public:
-    using vec_t = typename scalar_traits<DataT>::vector_type;
-    explicit NoopQuery(int64_t ndims) {}
-    void operator()(
-        uint32_t vstripe, const vec_t& prev_vals, const vec_t& vals) { }
-    int result() { return 0; }
-};
-
 // template<class vec_t> struct VecBox {};
 // template<> struct VecBox<__m256i> {
 //     using data_type = __m256i;
@@ -80,7 +69,8 @@ static inline auto add(Packet<32, int32_t, CpuCtx> x,
 static inline void accumulate(
     Packet<32, int8_t, CpuCtx> x,
     Packet<32, int32_t, CpuCtx>& accum0, Packet<32, int32_t, CpuCtx>& accum1,
-    Packet<32, int32_t, CpuCtx>& accum2, Packet<32, int32_t, CpuCtx>& accum3)
+    Packet<32, int32_t, CpuCtx>& accum2, Packet<32, int32_t, CpuCtx>& accum3,
+    int32_t nrepeats=1)
 {
     auto x_low = _mm256_extracti128_si256(x.vec, 0);
     auto x_high = _mm256_extracti128_si256(x.vec, 1);
@@ -93,6 +83,13 @@ static inline void accumulate(
 //    accum1 += x1;
 //    accum2 += x2;
 //    accum3 += x3;
+    if (nrepeats > 1) {
+        auto vnrepeats = _mm256_set1_epi32(nrepeats);
+        x0 = _mm256_mullo_epi32(x0, vnrepeats);
+        x1 = _mm256_mullo_epi32(x1, vnrepeats);
+        x2 = _mm256_mullo_epi32(x2, vnrepeats);
+        x3 = _mm256_mullo_epi32(x3, vnrepeats);
+    }
     accum0.vec = _mm256_add_epi32(accum0.vec, x0);
     accum1.vec = _mm256_add_epi32(accum1.vec, x1);
     accum2.vec = _mm256_add_epi32(accum2.vec, x2);
@@ -102,7 +99,8 @@ static inline void accumulate(
 static inline void accumulate(
     Packet<32, uint8_t, CpuCtx> x,
     Packet<32, uint32_t, CpuCtx>& accum0, Packet<32, uint32_t, CpuCtx>& accum1,
-    Packet<32, uint32_t, CpuCtx>& accum2, Packet<32, uint32_t, CpuCtx>& accum3)
+    Packet<32, uint32_t, CpuCtx>& accum2, Packet<32, uint32_t, CpuCtx>& accum3,
+    uint32_t nrepeats=1)
 {
     auto x_low = _mm256_extracti128_si256(x.vec, 0);
     auto x_high = _mm256_extracti128_si256(x.vec, 1);
@@ -110,6 +108,13 @@ static inline void accumulate(
     auto x1 = _mm256_cvtepu8_epi32(_mm_slli_si128(x_low, 8));
     auto x2 = _mm256_cvtepu8_epi32(x_high);
     auto x3 = _mm256_cvtepu8_epi32(_mm_slli_si128(x_high, 8));
+    if (nrepeats > 1) {
+        auto vnrepeats = _mm256_set1_epi32(nrepeats);
+        x0 = _mm256_mullo_epi32(x0, vnrepeats);
+        x1 = _mm256_mullo_epi32(x1, vnrepeats);
+        x2 = _mm256_mullo_epi32(x2, vnrepeats);
+        x3 = _mm256_mullo_epi32(x3, vnrepeats);
+    }
     accum0.vec = _mm256_add_epi32(accum0.vec, x0);
     accum1.vec = _mm256_add_epi32(accum1.vec, x1);
     accum2.vec = _mm256_add_epi32(accum2.vec, x2);
@@ -119,12 +124,18 @@ static inline void accumulate(
 static inline void accumulate(
     Packet<32, uint16_t, CpuCtx> x,
     Packet<32, uint32_t, CpuCtx>& accum0, Packet<32, uint32_t, CpuCtx>& accum1,
-    Packet<32, uint32_t, CpuCtx>& accum2, Packet<32, uint32_t, CpuCtx>& accum3)
+    Packet<32, uint32_t, CpuCtx>& accum2, Packet<32, uint32_t, CpuCtx>& accum3,
+    uint32_t nrepeats=1)
 {
     auto x_low = _mm256_extracti128_si256(x.vec, 0);
     auto x_high = _mm256_extracti128_si256(x.vec, 1);
     auto x0 = _mm256_cvtepi16_epi32(x_low);
     auto x1 = _mm256_cvtepi16_epi32(x_high);
+    if (nrepeats > 1) {
+        auto vnrepeats = _mm256_set1_epi32(nrepeats);
+        x0 = _mm256_mullo_epi32(x0, vnrepeats);
+        x1 = _mm256_mullo_epi32(x1, vnrepeats);
+    }
     // auto x2 = _mm256_cvtepu8_epi32(x_high);
     // auto x3 = _mm256_cvtepu8_epi32(_mm_slli_si128(x_high, 8));
     accum0.vec = _mm256_add_epi32(accum0.vec, x0);
@@ -150,7 +161,17 @@ static inline void accumulate(
 //     static const int scalar_sz = scalar_traits<DataT>::size;                  \
 //     static const int vec_sz = vector_traits<vec_t>::size;                     \
 //     static const int elems_per_vec = vec_sz / scalar_sz;                      \
-//     static_assert(vec_sz % scalar_sz == 0, "Invalid scalar-vector pairing!"); \
+//     static_assert(vec_sz % scalar_sz == 0, "Invalid scalar-vector pairing!");
+
+template<typename DataT>
+class NoopQuery {
+public:
+    using vec_t = typename scalar_traits<DataT>::vector_type;
+    explicit NoopQuery(int64_t ndims) {}
+    void operator()(uint32_t vstripe, const vec_t& prev_vals,
+        const vec_t& vals, uint32_t nrepeats=1) { }
+    int result() { return 0; }
+};
 
 // class MaxQuery: public VectorizedQuery<DataT> {
 template<typename DataT>
@@ -169,7 +190,8 @@ public:
     explicit MaxQuery(int64_t ndims):
         state(DIV_ROUND_UP(ndims, elems_per_vec)) {}
 
-    void operator()(uint32_t vstripe, const vec_t& prev_vals, const vec_t& vals)
+    void operator()(uint32_t vstripe, const vec_t& prev_vals,
+        const vec_t& vals, uint32_t nrepeats=1)
     {
         state[vstripe] = max(state[vstripe], vals);
     }
@@ -191,14 +213,19 @@ public:
     static const int vec_sz = vector_traits<vec_t>::size;
     static const int elems_per_vec = vec_sz / accum_sz;
 
+    // Add up to 3 extra vecs so accumulate() can read past the end of
+    // the actual state in 16b case
     explicit SumQuery(int64_t ndims):
-        state(round_up_to_multiple(div_round_up(ndims, elems_per_vec), 4)) {}
+        state(div_round_up(ndims, elems_per_vec) + 3) {}
+        // This segfaults:
+        // state(round_up_to_multiple(div_round_up(ndims, elems_per_vec), 4)) {}
 
-    void operator()(uint32_t vstripe, const vec_t& prev_vals, const vec_t& vals)
+    void operator()(uint32_t vstripe, const vec_t& prev_vals,
+        const vec_t& vals, uint32_t nrepeats=1)
     {
         uint32_t start_idx = vstripe * 4 / sizeof(DataT);  // XXX 64bit DataT
         accumulate(vals, state[start_idx], state[start_idx + 1],
-            state[start_idx + 2], state[start_idx + 3]);
+            state[start_idx + 2], state[start_idx + 3], nrepeats);
     }
     state_t result() { return state; }
 

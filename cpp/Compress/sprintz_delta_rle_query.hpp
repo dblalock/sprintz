@@ -266,13 +266,25 @@ SPRINTZ_FORCE_INLINE int64_t query_rowmajor_delta_rle(const int_t* src,
                 uint16_t length = (low_byte & 0x7f) | (((uint16_t)high_byte) << 7);
 
                 // write out the run
+                uint32_t ncopies = length * block_sz;
                 if (g > 0 || b > 0) { // if not at very beginning of data
                     const uint_t* inptr = dest - ndims;
-                    uint32_t ncopies = length * block_sz;
-                    memrep(dest, inptr, ndims * elem_sz, ncopies);
+                    for (int32_t v = nvectors - 1; v >= 0; v--) {
+                        uint32_t vstripe_start = v * vector_sz;
+                        __m256i prev_vals = _mm256_loadu_si256((const __m256i*)
+                            (prev_vals_ar + vstripe_start));
+                        func(v, prev_vals, prev_vals, ncopies);
+                    }
+                    if (DoWrite) {
+                        memrep(dest, inptr, ndims * elem_sz, ncopies);
+                    }
                     dest += ndims * ncopies;
                 } else { // deltas of 0 at very start -> all zeros
-                    uint32_t num_zeros = length * block_sz * ndims;
+                    uint32_t num_zeros = ncopies * ndims;
+                    __m256i prev_vals = _mm256_setzero_si256();
+                    for (int32_t v = nvectors - 1; v >= 0; v--) {
+                        func(v, prev_vals, prev_vals, ncopies);
+                    }
                     memset(dest, 0, num_zeros * elem_sz); // TODO mul by elem_sz is right ?
                     dest += num_zeros;
                 }

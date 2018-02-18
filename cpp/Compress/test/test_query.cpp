@@ -45,6 +45,7 @@ void test_query(QueryParams qp, CompF&& f_comp, DecompF&& f_decomp)
         raw.setRandom();
         for (auto ndims : ndims_list) {
             CAPTURE(ndims);
+//            printf("---- ndims = %d\n", ndims);
             f_comp(raw.data(), sz, compressed.data(), ndims);
 //            f_comp2(raw.data(), sz, compressed.data(), ndims);
             // compress_rowmajor_delta_rle_8b(raw.data(), sz, compressed.data(), ndims);
@@ -264,12 +265,13 @@ TEST_CASE("query xff reduce max 16b", "[xff][8b][query]") {
 
 // TODO this one segfaults for unclear reasons
 //
-// TEST_CASE("query xff reduce sum 16b", "[xff][8b][query]") {
-//     printf("executing xff reduce sum query 16b test\n");
-//     QueryParams qp;
-//     qp.op = REDUCE_SUM;
-//     auto f_comp = [](const uint16_t* src, uint32_t len, int16_t* dest, uint16_t ndims) {
-//         return compress_rowmajor_xff_rle_16b(src, len, dest, ndims);
-//     };
-//     test_query<2>(qp, f_comp, query_rowmajor_xff_rle_16b);
-// }
+ TEST_CASE("query xff reduce sum 16b", "[xff][16b][query][sum][dbg]") {
+     printf("executing xff reduce sum query 16b test\n");
+     QueryParams qp;
+     qp.op = REDUCE_SUM;
+     auto f_comp = [](const uint16_t* src, uint32_t len, int16_t* dest, uint16_t ndims) {
+         return compress_rowmajor_xff_rle_16b(src, len, dest, ndims);
+     };
+     test_query<2>(qp, f_comp, query_rowmajor_xff_rle_16b);
+ }
+

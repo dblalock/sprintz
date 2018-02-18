@@ -408,8 +408,15 @@ SPRINTZ_FORCE_INLINE int64_t query_rowmajor_xff_rle(const int_t* src,
 
                     } // for each block in run
                 } else { // deltas of 0 at very start -> all zeros
-                    size_t num_zeros = length * block_sz * ndims;
-                    memset(dest, 0, num_zeros * elem_sz);
+                    uint32_t ncopies = length * block_sz;
+                    size_t num_zeros = ncopies * ndims;
+                    __m256i prev_vals = _mm256_setzero_si256();
+                    for (int32_t v = nvectors - 1; v >= 0; v--) {
+                        func(v, prev_vals, prev_vals, ncopies);
+                    }
+                    if (DoWrite) {
+                        memset(dest, 0, num_zeros * elem_sz);
+                    }
                     dest += num_zeros;
                 }
 
