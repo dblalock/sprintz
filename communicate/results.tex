@@ -1,7 +1,7 @@
 
-To assess \mine's effectiveness, we implemented both it and comparison algorithms in C++. All of our code and raw results are publicly available on the \mine website.\footnote{https://github.com/dblalock/sprintz} This website also contains experiments on additional datasets, as well as thorough documentation of both our code and experimental setups. All experiments use a single thread on a 2013 Macbook Pro with a 2.6GHz Intel Core i7-4960HQ processor.
+To assess \mine's effectiveness, we implemented both it and comparison algorithms in C++. All of our code and raw results are publicly available on the \minesp website.\footnote{https://github.com/dblalock/sprintz} This website also contains experiments on additional datasets, as well as thorough documentation of both our code and experimental setups. All experiments use a single thread on a 2013 Macbook Pro with a 2.6GHz Intel Core i7-4960HQ processor.
 
-All reported timings and throughputs are the best of 5 runs. We use the best, rather than average, since this is standard practice in performance benchmarking.
+All reported timings and throughputs are the best of 5 runs. We use the best, rather than average, since this is common practice in performance benchmarking.
 
 % ------------------------------------------------
 \subsection{Datasets}
@@ -62,15 +62,15 @@ Moreover, in order to avoid biasing the results, it is important to choose an ap
 
 Another option would be to compute the compression ratio for each dataset and average these numbers. This is also undesirable for similar reasons. Specifically, it allows performance on a small number of highly compressible datasets to dominate the overall metric.
 
-Because these considerations exactly parallel those associated with comparing classifiers across multiple datasets, we use the methodology outlined in \cite{cdDiagrams}. This means computing the rank of each algorithm for each dataset and comparing the mean ranks using a Nemenyi test. A rank of 1 indicates the best ratio, while 2 indicates the second-best ratio, and so on.
+Because these considerations closely parallel those associated with comparing classifiers across multiple datasets, we use the methodology outlined in \cite{cdDiagrams}. This means computing the rank of each algorithm for each dataset and comparing the mean ranks using a Nemenyi test. A rank of 1 indicates the best ratio, while 2 indicates the second-best ratio, and so on.
 
-Results using this methodology are shown in Figure~\ref{fig:ratioCD}. Sprintz on high compression settings is significantly better than any existing algorithm. On slightly lower settings, it is still as effective as the best current methods (Zlib and Zstd).
+Results using this methodology are shown as a Critical Difference Diagram \cite{cdDiagrams} in Figure~\ref{fig:ratioCD}. Sprintz on high compression settings is significantly better than any existing algorithm. On slightly lower settings, it is still as effective as the best current methods (Zlib and Zstd).
 
 \begin{figure}[h]
 \begin{center}
     \includegraphics[width=\linewidth]{paper/cd_diagram_8b_deltas=0}
     \includegraphics[width=\linewidth]{paper/cd_diagram_16b_deltas=0}
-    \caption{Compression performance of different algorithms on the UCR Time Series Archive, as measured by mean rank. Lower ranks are better. Methods joined with a horizontal black line are not statistically significantly different.}
+    \caption{Compression performance of different algorithms on the UCR Time Series Archive, as measured by mean rank across datasets. Lower ranks are better. Methods joined with a horizontal black line are not statistically significantly different.}
     \label{fig:ratioCD}
 \end{center}
 \end{figure}
@@ -155,12 +155,12 @@ To measure the error this introduces, we then inverted the linear transformation
 \begin{figure}[h]
 \begin{center}
     \includegraphics[width=\linewidth]{paper/quantize_errs}
-    \caption{Quantizing floating-point time series introduces error that is orders of magnitude smaller than the variance of the data. For every 10 Decibels of signal-to-noise ratio, the variance is 10 times larger than the quantization error. Even with 8 bits, quantization introduces less than 1\% error on all datasets.}
+    \caption{Quantizing floating-point time series introduces error that is orders of magnitude smaller than the variance of the data. For every 10 Decibels of signal-to-noise ratio, the variance is 10 times larger than the quantization error. Even with 8 bits, quantization introduces less than 1\% error on 84 of 85 datasets.}
     \label{fig:quantize_errs}
 \end{center}
 \end{figure}
 
-This of course does not indicate that all time series can be safely quantized. Two counterexamples of which we are aware are timestamps where microsecond or nanosecond resolution matters, and GPS coordinates, where small decimal places may correspond to many meters. However, the above results suggest that quantization is a suitable means of applying \minesp to floating-point data in many applications. This is bolstered by previous work showing that quantization even to a mere six bits [] rarely harms classification accuracy, and quantizing to two or less sometimes improves it [].
+This of course does not indicate that all time series can be safely quantized. Two counterexamples of which we are aware are 1) timestamps where microsecond or nanosecond resolution matters, and 2) GPS coordinates, where small decimal places may correspond to many meters. However, the above results suggest that quantization is a suitable means of applying \minesp to floating-point data in many applications. This is bolstered by previous work showing that quantization even to a mere six bits [] rarely harms classification accuracy, and quantizing to two sometimes improves it [].
 
 % ------------------------------------------------
 \subsection{Query acceleration}

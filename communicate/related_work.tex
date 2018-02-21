@@ -1,18 +1,42 @@
 
+% ------------------------------------------------
+\subsection{Predictive Filtering}
+% ------------------------------------------------
+
+% TODO move delta, double, LPC descriptions to here. Also talk about \fire.
+
+A common element of many compression algorithms is some form of predictive coding. This consists of having some forecaster predict the values of the next byte(s) to be compressed and only storing the prediction error, rather than the original value. When the forecaster is better than chance, the errors will be drawn from a lower-entropy distribution than that of the raw data. In particular, they will often be tightly concentrated around zero \cite{shorten}.
+
+For numeric data such as time series, there are four types of predictive coding commonly in use: predictive filtering \cite{png}, delta coding \cite{fastpfor, bbp}, double-delta coding \cite{influxDB, gorilla}, and XOR-based encoding \cite{gorilla}. In predictive filtering, each prediction is a linear combination of a fixed number of recent samples. This can be understood as an Autoregressive model or the application of a Finite Impulse Response (FIR) filter. When the filter is learned online, this is termed ``adaptive filtering.''
+
+Delta coding is a special case of predictive filtering where the prediction is always the previous value. Double-delta coding, also called delta-delta coding or delta-of-deltas coding, consists of applying delta coding twice in succession. XOR-based encoding is similar to delta coding, but replaces subtraction of the previous value with the XOR operation. This modification is often desirable for floating-point data \cite{gorilla}.
+
+\fire can be understood as a special case of adaptive filtering. While adaptive filtering is a well-studied mathematical problem in the signal processing literature, we are unaware of a practical algorithm that attains speed within an order of magnitude of that of \fire%. or that accounts for the subtleties of low-precision integers.
+
+% Indeed, the only methods
+
+% most similar method is likely that of \cite{neuralBranchPredictor}, in which a
+
+% Moreover, existing databases almost universally use delta, double-delta, or XOR encoding, suggesting that simple  % suggesting that these approaches are the relevant benchmarks.
+
+% Before applying any of these coding schemes, it is common to apply some transform to the raw data to make the values closer to 0. Such transforms include delta encoding, \cite{fastpfor, bbp}, delta-delta encoding \cite{influxDB}, and linear predictive coding (LPC) \cite{flac}. LPC deterministically generates a prediction for each sample based on the previous samples, and stores the error in the prediction instead of the raw value; when the errors are small, the integers stored are closer to 0. Delta coding and delta-delta coding are special cases wherein each sample is predicted to be the previous sample, or a linear extrapolation from the previous two samples, respectively.
+
+% ------------------------------------------------
 \subsection{Compression of time series}
+% ------------------------------------------------
 
 Most work on compressing time series has focused on lossy techniques. In the data mining literature, Symbolic Aggregate Approximation (SAX) \cite{SAX} and its variations \cite{isax, isax2} dominate. These approaches preserve enough information about time series to support specific data mining algorithms (e.g. \cite{fastShapelet, hotSax}), but are extremely lossy; a hundred-sample time series might be compressed into one or two bytes, depending on the exact SAX parameters.
 
 Other lossy approaches include Adaptive Piecewise Constant Approximation \cite{apca}, Piecewise Aggregate Approximation \cite{paa}, and numerous other methods \cite{swab, lemireSegmentation, tsCompressSmartGrid} that approximate time series as sequences of low-order polynomials.
 
-For audio time series specifically, there are a large number of codecs, both lossless \cite{flac, alac} and lossy \cite{vorbis, shorten, aac, opus}. In principle, some of these could be applied to non-audio time series. We found, however, that modern codecs make such strong assumptions about the possible numbers of channels, sampling rates, bit depths, or other characteristics that it is infeasible to run them on non-audio time series.
+For audio time series specifically, there are a large number of lossy codecs \cite{vorbis, shorten, aac, opus}, as well as a small number of lossless \cite{flac, alac} codecs. In principle, some of these could be applied to non-audio time series. However, modern codecs make such strong assumptions about the possible numbers of channels, sampling rates, bit depths, or other characteristics that it is infeasible to use them on non-audio time series.
 
 Many fewer algorithms exist for lossless time series compression. For floating-point time series, the only algorithm of which we are aware is that of the Gorilla database \cite{gorilla}. This method XORs each value with the previous value to obtain a diff, and then bitpacks the diffs. In contrast to our approach, it assumes that time series are univariate and have 64-bit floating-point elements. % The same work also describes a method of compressing integer timestamps. This consists of first delta-delta coding and then applying a similar bitpacking compression approach.
 % Like other databases \cite{influxDB, berkeleyTreeDB}, they delta-delta code before applying compression %Most time series databases use some form of integer compression (c.f. next section) [], generic predictive coding \cite{akumuli}, or floating-point compression methods.
 
-For lossless compression of integer time series (including timestamps), existing approaches include directly applying general-purpose compressors \cite{respawnDB, openTSDB, chronicleDB, kairosDB, druid}, [delta-]delta encoding and then applying an integer compressor \cite{influxDB, gorilla}, or predictive coding and then byte-packing \cite{akumuli}. These approaches can work well, but tend to offer both less compression and less speed than \mine.
+For lossless compression of integer time series (including timestamps), existing approaches include directly applying general-purpose compressors \cite{respawnDB, openTSDB, chronicleDB, kairosDB, druid}, (double) delta encoding and then applying an integer compressor \cite{influxDB, gorilla}, or predictive coding and byte-packing \cite{akumuli}. These approaches can work well, but tend to offer both less compression and less speed than \mine.
 
-A final noteworthy method is Blosc \cite{blosc}. While not intended solely for time series (or integers), Blosc's grouping of correlated bytes and/or bits \cite{bitshuf} makes it well-suited for multivariate time series.
+A final noteworthy method is Blosc \cite{blosc}. While not intended solely for time series (or integers), Blosc's assumption that every $k$ bytes (or bits \cite{bitshuf}) will be correlated for some $k$ is a natural fit for multivariate time series. %grouping of correlated bytes and/or bits makes it well-suited for multivariate time series.
 
 
 % ------------------------ parquet
@@ -39,7 +63,7 @@ A final noteworthy method is Blosc \cite{blosc}. While not intended solely for t
 % ------------------------ BerkeleyTreeDB
 %   -custom delta-delta
 % ------------------------ KairosDB
-%     -off-the-shelf compressors
+%     -off-the-shelf compressors: lzo, snappy, probably others
 %     -https://github.com/kairosdb/kairosdb/search?utf8=✓&q=compression&type=
 % ------------------------ Druid
 %   -"The timestamp and metric columns are simple: behind the scenes each of these is an array of integer or floating point values compressed with LZ4."
@@ -65,15 +89,15 @@ A final noteworthy method is Blosc \cite{blosc}. While not intended solely for t
 
 The fastest methods of compressing integers are generally based on bit-packing---i.e., using at most $b$ bits to represent values in $\{0, 2^b-1\}$, and storing these bits contiguously \cite{bbp, pfor, fastpfor}. Since $b$ is determined by the largest value that must be encoded, naively applying this method yields limited compression. To improve it, one can encode fixed-size blocks of data at a time, so that $b$ can be set based on the largest values in a block instead of the whole dataset \cite{kGamma, pfor, fastpfor}. A further improvement is to ignore the largest few values when setting $b$ and store their omitted bits separately \cite{pfor, fastpfor}.
 
-Another common \cite{flac, shorten} alternative to bit-packing is Golomb coding \cite{golomb}, or its special case Rice coding \cite{rice}. The idea is to assume that the values follow a geometric distribution, often with a rate constant fit to the data. %, and therefore make the encoding cost linear in the magnitude of the encoded value.
+A common \cite{flac, shorten} alternative to bit-packing is Golomb coding \cite{golomb}, or its special case Rice coding \cite{rice}. The idea is to assume that the values follow a geometric distribution, often with a rate constant fit to the data. %, and therefore make the encoding cost linear in the magnitude of the encoded value.
 
 Both bit packing and Golomb coding are bit-based methods in that they do not guarantee that encoded values will be aligned on byte boundaries. When this is undesirable, one can employ byte-based methods such as 4-Wise Null Suppression \cite{kGamma}, LEB128 \cite{dwarf}, or Varint-G8IU \cite{varintG8IU}. These methods reduce the number of bytes used to store each sample by encoding in a few bits how many bytes are necessary to represent its value, and then encoding only that many bytes. Some, such as Simple8B \cite{simple8b} and SIMD-GroupSimple \cite{groupSimd}, allow fractional bytes to be stored while preserving byte alignment for groups of samples. % These methods allow for efficient universal codes---that is, codes that can represent any possible integer. Universal
 
-Before applying any of these coding schemes, it is common to apply some transform to the raw data to make the values closer to 0. Such transforms include delta encoding, \cite{fastpfor, bbp}, delta-delta encoding \cite{influxDB}, and linear predictive coding (LPC) \cite{flac}. LPC deterministically generates a prediction for each sample based on the previous samples, and stores the error in the prediction instead of the raw value; when the errors are small, the integers stored are closer to 0. Delta coding and delta-delta coding are special cases wherein each sample is predicted to be the previous sample, or a linear extrapolation from the previous two samples, respectively.
+% Before applying any of these coding schemes, it is common to apply some transform to the raw data to make the values closer to 0. Such transforms include delta encoding, \cite{fastpfor, bbp}, delta-delta encoding \cite{influxDB}, and linear predictive coding (LPC) \cite{flac}. LPC deterministically generates a prediction for each sample based on the previous samples, and stores the error in the prediction instead of the raw value; when the errors are small, the integers stored are closer to 0. Delta coding and delta-delta coding are special cases wherein each sample is predicted to be the previous sample, or a linear extrapolation from the previous two samples, respectively.
 
 
 \subsection{General-purpose compression}
-While \mine is not intended to be a general-purpose compression algorithm, a reasonable alternative to using a specialized method would be to apply a general-purpose compression algorithm, possibly after delta coding or other preprocessing. Thanks largely to the development of Asymmetric Numeral Systems (ANS) \cite{ans} for entropy coding, general purpose compressors have advanced greatly in recent years. In particular, Zstd \cite{zstd}, Brotli \cite{brotli}, LZ4 \cite{lz4} and others have attained speed-compression tradeoffs significantly better than traditional methods such as GZIP \cite{gzip}, BZIP \cite{lzo}, etc.
+While \minesp is not intended to be a general-purpose compression algorithm, a reasonable alternative to using a specialized method would be to apply a general-purpose compression algorithm, possibly after delta coding or other preprocessing. Thanks largely to the development of Asymmetric Numeral Systems (ANS) \cite{ans} for entropy coding, general purpose compressors have advanced greatly in recent years. In particular, Zstd \cite{zstd}, Brotli \cite{brotli}, LZ4 \cite{lz4} and others have attained speed-compression tradeoffs significantly better than traditional methods such as GZIP \cite{gzip}, BZIP \cite{lzo}, etc.
 % Also of note is Blosc \cite{blosc}, which is especially applicable to multivariate time series as a result of its grouping correlated bits and/or bytes together during preprocessing.
 
 \subsection{High-speed online learning}

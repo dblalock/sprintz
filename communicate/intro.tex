@@ -7,11 +7,26 @@
 
 % In order to store the data efficiently, all of these systems require some form of compression algorithm.
 
-Time series are ubiquitous and growing in importance thanks to the proliferation of sensor data from autonomous vehicles, smart phones, wearables, and other connected devices. Although a huge volume of this data is currently stored in databases---many of them designed specifically for time series []---there has been relatively little work on how best to compress this data.
+Time series are ubiquitous and only growing in importance thanks to the proliferation of sensor data from autonomous vehicles, smart phones, wearables, and other connected devices. Much of this data is currently stored in databases---many of them designed specifically for time series \cite{respawnDB, openTSDB, chronicleDB, kairosDB, druid, influxDB, gorilla}. Consequently, an improved means of compressing time series could greatly enhance the storage, network, and computation efficiency of countless database systems.
 
-At present, systems typically use general-purpose compression algorithms such as LZ4 [], generic floating point compression algorithms [], or generic integer compression algorithms [], possibly with some form of invertible preprocessing [].
+% Moreover, a compression algorithm optimized for time series could support many
 
-These methods are effective to some extent, but as we show experimentally, there is considerable room for improvement. Moreover, because of the nature of time series data and workloads, there are a number of desirable attributes for a time series compression algorithm that these approaches often lack. In particular:
+% there has been relatively little work on how best to compress such data. An improved method of doing so could increase storage, network, and computation efficiency for nearly all databases storing time series.
+
+% Although a huge volume of this data is currently stored in databases---many of them designed specifically for time series \cite{respawnDB, openTSDB, chronicleDB, kairosDB, druid, influxDB, gorilla}---there has been relatively little work on how best to compress such data. An improved method of doing so could increase storage, network, and computation efficiency for nearly all databases storing time series.
+
+ % As a result, existing systems are not only using more storage space than is necessary, but are also % to represent time series at rest.
+
+% Most modern databases store data in a compressed form
+
+% Lack of a  only means increased storage requirements, but also reduced performance.
+
+At present, databases typically use general-purpose compression algorithms such as LZ4 \cite{lz4} or Snappy \cite{snappy}, floating point compression algorithms \cite{gorilla}, or generic integer compression algorithms \cite{influxDB, simple8b}, possibly with some form of invertible preprocessing \cite{influxDB, gorilla, berkeleyTreeDB}.
+
+These methods can be effective, but as we show experimentally, there is considerable room for improvement. Moreover, because of the nature of time series data and workloads, there are a number of desirable attributes for a time series compression algorithm that these approaches often lack. In particular:
+% These methods are effective to some extent, but there is considerable room for improvement. As Buevich et al. report, ``Enabling compression adds a factor of six slowdown.''
+
+% as we show experimentally, there is considerable room for improvement. Moreover, because of the nature of time series data and workloads, there are a number of desirable attributes for a time series compression algorithm that these approaches often lack. In particular:
 
 % Because of the nature of time series data and workloads, an ideal compression algorithm would have the following characteristics, in addition to high compression ratio:
 
@@ -21,36 +36,43 @@ These methods are effective to some extent, but as we show experimentally, there
 
 \begin{enumerate}
 \itemsep0mm
-\item \b{Support for fast scans}. Time series workloads are not only read-heavy [], but often necessitate scans through the data []. This means not only that high decompression speed is essential, but that it is desirable to push down queries directly to the compressed representation.
-\item \b{Small block size}. To accelerate queries over arbitrary time intervals, many databases use indexing structures that partition time series into many small sections []. A compression algorithm must therefore be effective even on small numbers ($<$100) of samples.
-\item \b{Low memory}. To reduce network usage and offload computation to clients, it is desirable for the compressor to run on clients []. Unfortunately, clients producing time series data are often low-power sensors with only a few KB of RAM [].
+% \item \b{Support for fast scans}. Time series workloads are not only read-heavy \cite{respawnDB, berkeleyTreeDB, influxDB}, but often necessitate scans through the data []. This means not only that high decompression speed is essential, but that it is desirable to push down queries directly to the compressed representation.
+\item \b{Small block size}. To accelerate queries over arbitrary time intervals, many databases use indexing structures that partition time series into many small segments []. A compression algorithm must therefore be effective even on small numbers ($<$100) of samples. This also enables offloading compression to clients, which may be low-power sensors with only a few KB of RAM \cite{respawnDB}.
+\item \b{High decompression speed}. Time series workloads are not only read-heavy \cite{respawnDB, berkeleyTreeDB, influxDB}, but often necessitate materializing data (or downsampled versions thereof) for visualization, clustering, computing correlations, or other operations \cite{respawnDB}. At the same time, writing is often append-only \cite{gorilla, respawnDB}, so compression need only be run once for a given observation.
+% \item \b{Low memory}. To reduce network usage and offload computation to clients, it is desirable for the compressor to run on clients []. Unfortunately, clients producing time series data are often low-power sensors with only a few KB of RAM [].
 % \item \b{High decompression speed}. While compression speed is also desirable, time series workloads are often read-heavy [] or even append-only [], meaning that decompression will run many more times than compression. Moreover, as mentioned above, compression can often be carried out at the client.
-\item \b{Exploit related columns}. Time series often consist of several signals that will almost always be accessed together. For example, one would rarely access only X-axis acceleration without Y-axis and Z-axis, or longitude without latitude. It is desirable to make accessing related columns together inexpensive.
-\item \b{Amenable to low-bitwidth integer data}. Almost any time series reflecting a real-world signal will be digitized using an Analog-to-Digital Converter (ADC). This means that the data can be represented as integers of at most 32 bits \cite{digikeyADCs}, and typically 16 or fewer. For example, even lossless audio codecs store only 16 bits \cite{flac, shorten}. % Furthermore, there is empirical evidence that most time series can be quantized to 6 or fewer bits with little or no loss of information []. % (as measured by misclassification rate) []. % Consequently, we focus on compressing 8b and 16b integer time series. % Data coming from sensors will almost always be digitized by an Analog-to-Digital Converter (ADC)
-\item \b{Lossless}. Given that time series are almost always noisy and often oversampled, it might not seem necessary to compress them losslessly. However, noise and oversampling tend to 1) vary across applications, and 2) be possible to address in an application-specific way as a preprocessing step. Consequently, instead of assuming that some level of downsampling or some particular smoothing will be appropriate for all data, it is better for the compression algorithm to preserve what it is given and leave preprocessing up to the developer.
+% \item \b{Exploit related columns}. Time series often consist of several signals that will almost always be accessed together. For example, one would rarely access only X-axis acceleration without Y-axis and Z-axis, or longitude without latitude. It is desirable to make accessing related columns together inexpensive.
+\item \b{Amenable to low-bitwidth integer data}. Most real-world signals are digitized using an Analog-to-Digital Converter (ADC). This means that the data can be represented as integers of at most 32 bits \cite{digikeyADCs}, and typically 16 or fewer. For example, even lossless audio codecs store only 16 bits \cite{flac, shorten}. % Furthermore, there is empirical evidence that most time series can be quantized to 6 or fewer bits with little or no loss of information []. % (as measured by misclassification rate) []. % Consequently, we focus on compressing 8b and 16b integer time series. % Data coming from sensors will almost always be digitized by an Analog-to-Digital Converter (ADC)
+\item \b{Lossless}. Given that time series are almost always noisy and often oversampled, it might not seem necessary to compress them losslessly. However, noise and oversampling tend to 1) vary across applications, and 2) be possible to address in an application-specific way as a preprocessing step. Consequently, instead of assuming that some level of downsampling or some particular smoothing will be appropriate for all data, it is better for the compression algorithm to preserve what it is given and leave preprocessing up to the application developer.
 \end{enumerate}
 
-The primary contribution of this work is \mine (Sprintz PReserves Integer Time Series), a time series compression algorithm that achieves each of these goals. Specifically, it attains state-of-the-art compression ratios and speed, uses $<$1KB of memory, and can use blocks of data as small as eight samples.
+% The primary contribution of this work is \minesp (Sprintz PReserves Integer Time Series),
+The primary contribution of this work is \mine,
+a time series compression algorithm that achieves each of these goals. Specifically, it attains state-of-the-art compression ratios and speed, uses $<$1KB of memory, and can use blocks of data as small as eight samples.
 
-Furthermore, thanks to decompression throughput close to memory bandwidth and run-length encoding, \mine can greatly accelerate many queries as compared to other compressors. For a database of autonomous vehicle data, examples of accelerated queries include:
+As part of \mine, we also introduce \fire,
+% As part of \mine, we also introduce \fire (Fast Integer REgression),
+an online forecasting algorithm for predictive coding. \fire can simultaneously train on and generate predictions for over 5GB of data per second per thread, a rate currently surpassed only by branch predictors and other algorithms with direct hardware support. \fire can be used as a preprocessor for any compression algorithm, and doing so can greatly improve compression ratios.
+
+% Furthermore, thanks to decompression throughput close to memory bandwidth and run-length encoding, \mine can greatly accelerate many queries as compared to other compressors. For a database of autonomous vehicle data, examples of accelerated queries include:
 
 % We introduce a time series compression algorithm that significantly outperforms existing approaches in terms of compression ratio and speed. Because our method can compress blocks as small as eight samples, it is compatible both with data structures that partition time series into small buckets (e.g., []) and low-power devices compressing data at the network edge []. Furthermore, thanks to decompression throughput close to memory bandwidth, our algorithm can greatly accelerate many queries as compared to other compressors. For a database of autonomous vehicle data, examples of accelerated queries include:
 
-\begin{enumerate}[leftmargin=9mm]
-\itemsep0mm
-\item[\b{Q1}] Compute the maximum speed during each trip
-\item[\b{Q2}] Find the top five times that look like the car slipping on ice according to a linear classifier
-\item[\b{Q3}] Find all five second intervals containing extreme breaking for a given user
-% \item[\b{Q4}] Compute how many hours per week a user spends at work
-\end{enumerate}
+% \begin{enumerate}[leftmargin=9mm]
+% \itemsep0mm
+% \item[\b{Q1}] Compute the maximum speed during each trip
+% \item[\b{Q2}] Find the top five times that look like the car slipping on ice according to a linear classifier
+% \item[\b{Q3}] Find all five second intervals containing extreme breaking for a given user
+% % \item[\b{Q4}] Compute how many hours per week a user spends at work
+% \end{enumerate}
 
-We also contribute the following:
+% We also contribute the following:
 
-\begin{itemize}
-\itemsep0mm
-\item An open-source benchmark suite that allows easy comparison of time series compressors using various combinations of preprocessing, query, and bitwidth.
-\item An adaptive predictive coding algorithm with a throughput of up to 6GB/s that can be used indepent of the rest of our method. To the best of our knowledge, this is the fastest single-threaded online learning algorithm ever published (excepting branch predictors and other methods with hardware acceleration).
-\end{itemize}
+% \begin{itemize}
+% \itemsep0mm
+% \item An open-source benchmark suite that allows easy comparison of time series compressors using various combinations of preprocessing, query, and bitwidth.
+% \item An adaptive predictive coding algorithm with a throughput of up to 6GB/s that can be used indepent of the rest of our method. To the best of our knowledge, this is the fastest single-threaded online learning algorithm ever published (excepting branch predictors and other methods with hardware acceleration).
+% \end{itemize}
 
 % ------------------------------------------------
 % \subsection{Formal Problem}
@@ -59,10 +81,10 @@ We also contribute the following:
 
 To both establish notation and clarify the sorts of data for which \minesp is applicable, we introduce the following definitions.
 
-\begin{Definition} \b{Sample.} A sample is a vector $\x \in \R^D$. $D$ is termed the sample's \b{dimensionality}. Each element of the sample is a scalar represented using a number of bits $W$, termed the \b{bitwidth}. The bitwidth $W$ is shared by all elements.
+\begin{Definition} \b{Sample.} A sample is a vector $\x \in \R^D$. $D$ is termed the sample's \b{dimensionality}. Each element of the sample is a scalar represented using a number of bits $W$, termed the \b{bitwidth}. The bitwidth $w$ is shared by all elements.
 \end{Definition}
 
-\begin{Definition} \b{Time Series.} A time series $\X$ of length $T$ is a sequence of $T$ samples, $\x_1,\ldots,\x_T$. All samples $\x_t$ share the same bitwidth $W$ and dimensionality $D$, and the meaning of each dimension is consistent from sample to sample. In the case that $D = 1$, $\X$ is called \b{univariate}; otherwise it is \b{multivariate}.
+\begin{Definition} \b{Time Series.} A time series $\X$ of length $T$ is a sequence of $T$ samples, $\x_1,\ldots,\x_T$. All samples $\x_t$ share the same bitwidth $w$ and dimensionality $D$, and the meaning of each dimension is consistent from sample to sample. If $D = 1$, $\X$ is called \b{univariate}; otherwise it is \b{multivariate}.
 \end{Definition}
 
 \begin{Definition} \b{Rows, Columns.} In a database context, we assume that each sample of a time series is one row and each dimension is one column.
