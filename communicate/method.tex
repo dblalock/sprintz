@@ -225,3 +225,8 @@ Because the block begins in row-major order and we seek to reconstruct it the sa
 
 We entropy code the bit packed representation of each block using Huff0, an off-the-shelf Huffman coder \cite{fse}. Note that this is faster than Huffman coding the original data or the errors since the bit packed block is (usually) shorter than the original data. We do not use Finite-State Entropy \cite{fse} since it is slower than Huffman coding and we never observed a meaningful increase in compression ratio.
 
+% ------------------------------------------------
+\subsection{Vectorization}
+% ------------------------------------------------
+
+Much of \mine's speed comes from vectorization. For headers, the fixed bitwidths for each field and fixed number of fields allows for packing and unpacking with a mix of vectorized byte shuffles, shifts, and masks. For payloads, delta (de)coding, zigzag (de)coding, and \fire all operate on each column independently, and so naturally vectorize. Because the packed data for all rows is the same length and aligned to a byte boundary (in the high-dimensional case), the decoder can compute the bit offset of each column's data one time and then use this information repeatedly to unpack each row. In the low-dimensional case, all packed data fits in a single vector register which can be shuffled/masked appropriately for each possible number of columns. This is possible since there are at most four columns in this case. On an \texttt{x86} machine, bitpacking and unpacking can be accelerated with the \texttt{pext} and \texttt{pdep} instructions, respectively.

@@ -5,7 +5,7 @@
 
 % TODO move delta, double, LPC descriptions to here. Also talk about \fire.
 
-A common element of many compression algorithms is some form of predictive coding. This consists of having some forecaster predict the values of the next byte(s) to be compressed and only storing the prediction error, rather than the original value. When the forecaster is better than chance, the errors will be drawn from a lower-entropy distribution than that of the raw data. In particular, they will often be tightly concentrated around zero \cite{shorten}.
+A common element of many compression algorithms is some form of predictive coding. This consists of having some forecaster predict the values of the next byte(s) to be compressed and only storing the prediction error, rather than the original value. When the forecaster is better than chance, the errors will be drawn from a lower-entropy distribution than that of the raw data. In particular, they will often be tightly concentrated around zero \cite{shorten}. The original data can be reconstructed from the errors by having the decoder run the same forecaster and add the encoded errors to its predictions.
 
 For numeric data such as time series, there are four types of predictive coding commonly in use: predictive filtering \cite{png}, delta coding \cite{fastpfor, bbp}, double-delta coding \cite{influxDB, gorilla}, and XOR-based encoding \cite{gorilla}. In predictive filtering, each prediction is a linear combination of a fixed number of recent samples. This can be understood as an Autoregressive model or the application of a Finite Impulse Response (FIR) filter. When the filter is learned online, this is termed ``adaptive filtering.''
 
@@ -72,7 +72,7 @@ A final noteworthy method is Blosc \cite{blosc}. While not intended solely for t
 %   -http://druid.io/docs/latest/design/segments.html
 % ------------------------ InfluxDB
 %   -"Timestamp encoding is adaptive and based on the structure of the timestamps that are encoded. It uses a combination of delta encoding, scaling, and compression using simple8b run-length encoding"
-%   -"Floats are encoded using an implementation of the Facebook Gorilla paper. "
+%   -"Floats are encoded using an implementation of the Facebook Gorilla paper."
 %   -For integers: "If all ZigZag encoded values are less than (1 << 60) - 1, they are compressed using simple8b encoding. If any values are larger than the maximum then all values are stored uncompressed in the block. If all values are identical, run-length encoding is used."
 %   -"Strings are encoding using Snappy compression"
 %   -and before compaction (where all the above methods get used): "When a write comes in the new points are serialized, compressed using Snappy, and written to a WAL file"

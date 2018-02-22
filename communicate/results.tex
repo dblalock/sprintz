@@ -109,13 +109,13 @@ To systematically assess the speed of \minesp, we ran it on datasets with varyin
 
 We compressed each of these datasets with \minesp set to treat it as if it had 1 through 80 columns. Numbers that do not evenly divide 100 million result in \minesp memcpy-ing the trailing bytes.
 
-As shown in Figure~\ref{fig:ndims_vs_speed}, \minesp becomes faster as the number of columns increases and as the number of columns approaches multiples of 32 for 8-bit data or 16 for 16-bit data. These values correspond to the 32B width of a SIMD register on the tested machine. These results demonstrate that there is small but consistent overheaded associated with using \fire over delta coding, but that both approaches are extremely fast. Without Huffman coding, \mine decompresses at multiple GB/s except for very few ($<$5) columns.
+As shown in Figure~\ref{fig:ndims_vs_decomp_speed}, \minesp becomes faster as the number of columns increases and as the number of columns approaches multiples of 32 for 8-bit data or 16 for 16-bit data. These values correspond to the 32B width of a SIMD register on the tested machine. These results demonstrate that there is small but consistent overheaded associated with using \fire over delta coding, but that both approaches are extremely fast. Without Huffman coding, \mine decompresses at multiple GB/s except for very few ($<$5) columns.
 
 \begin{figure}[h]
 \begin{center}
-    \includegraphics[width=\linewidth]{paper/ndims_vs_speed}
+    \includegraphics[width=\linewidth]{paper/ndims_vs_decomp_speed}
     \caption{\minesp becomes faster as the number of columns increases and as the width of each sample approaches multiples of 32B (on a machine with 32B vector registers). Its speed is insensitive to the compression ratio, as illustrated by the speeds in the top row (low compression) roughly equaling those in the bottom row (high compression).}
-    \label{fig:ndims_vs_speed}
+    \label{fig:ndims_vs_decomp_speed}
 \end{center}
 \end{figure}
 
@@ -123,6 +123,18 @@ As shown in Figure~\ref{fig:ndims_vs_speed}, \minesp becomes faster as the numbe
 % ------------------------------------------------
 \subsection{Compression Speed}
 % ------------------------------------------------
+
+Same thing for compression speed (Figure~\ref{fig:ndims_vs_decomp_speed}). Except we didn't vectorize the compressor so it's pretty insensitive to dimensionality. We refrained from doing so since 1) the resulting implementation would exactly mirror the decompressor, and have similar performance characteristics, so maybe we can justify not spending the effort; and 2) because this is more analogous to what one would expect if the compressor were run on a low-power device, which would almost certainly lack vector instructions. We want to argue that it only needs to be fast enough to keep up with data rate.
+
+The dip after 4 columns in 8-bit data and 2 columns in 16-bit data corresponds to the switch from column-major bitpacking to rowmajor bitpacking.
+
+\begin{figure}[h]
+\begin{center}
+    \includegraphics[width=\linewidth]{paper/ndims_vs_comp_speed}
+    \caption{Because \minesp compression is implemented without vectorization, its throughput is largely insenstive to the number of columns. I have no idea why it's oscillating in the lower plots.}
+    \label{fig:ndims_vs_comp_speed}
+\end{center}
+\end{figure}
 
 % Look, a bar graph. Probably 4 rows x 2 cols of subplots, with row corresponding to one dataset and cols corresponding to {8b, 16b}. Each algorithm gets one bar in each subplot. Ideally, run everything a few times and show standard deviations or error bars. Maybe actually have
 
@@ -139,6 +151,20 @@ As shown in Figure~\ref{fig:ndims_vs_speed}, \minesp becomes faster as the numbe
 
 % \vspace{-2mm}
 
+
+% ------------------------------------------------
+\subsection{\mine vs Other Transforms}
+% ------------------------------------------------
+
+We repeated the above experiments with various preprocessors (Figure~\ref{fig:ndims_vs_preproc_speed}.
+
+\begin{figure}[h]
+\begin{center}
+    \includegraphics[width=\linewidth]{paper/ndims_vs_comp_speed}
+    \caption{\fire is just as fast as double delta coding and only slightly slower than delta coding.}
+    \label{fig:ndims_vs_preproc_speed}
+\end{center}
+\end{figure}
 
 % ------------------------------------------------
 \subsection{Quantization Error}
@@ -186,3 +212,17 @@ We encountered a number of counter-intuitive findings regarding what does and do
 
 3) Nearest-neighbor search. Helped but not worth the bit cost to provide the neighbor index; true for blocks of size 8, 16, 32. (delta then nn) is much bettern than (nn then delta). This is especially interesting given how many motif discovery papers use compression as a heuristic for finding repeating patterns; the disconnect is that they don't include the cost of specifying that a discovered pattern is present.
 
+
+% ------------------------------------------------
+\subsection{Discussion}
+% ------------------------------------------------
+
+Here's a plot of our expected read throughput as a function of number of cores, assuming a 20GB/s memory bandwidth. Is this informative? It's trying to connect it to databases and show that the combination of our high speed and high compression ratio is advantageous. I think it just invites questions regarding why we didn't collect real data for this.
+
+\begin{figure}[h]
+\begin{center}
+    \includegraphics[width=\linewidth]{paper/expected_thruput}
+    \caption{Expected read throughput on the UCI Gas dataset for various algorithms. Presumably \minesp will do better here since it has the best speed/ratio tradeoff, but who knows since this is currently fake data.}
+    \label{fig:expected_thruput}
+\end{center}
+\end{figure}
