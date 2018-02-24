@@ -223,11 +223,17 @@ int64_t compress_rowmajor_xff_rle(const uint_t* src, uint32_t len,
                     uint_t val = src[offset];
                     int_t delta = (int_t)(val - prev_val);
                     int_t prediction = (((counter_t)prev_delta) * coef) >> elem_sz_nbits;
-                    if (elem_sz == 2) {
-                        // can't just rshift by one less since that wouldn't
-                        // zero the LSB
-                        prediction = prediction << 2;
-                    }
+
+                    // TODO I think we actually want this, but for now rm
+                    // it since it complicates the paper and we don't have
+                    // it implemented in the lowdim version of xff
+                    //
+                    // if (elem_sz == 2) {
+                    //     // can't just rshift by one less since that wouldn't
+                    //     // zero the LSB
+                    //     prediction = prediction << 2;
+                    // }
+
                     int_t err = delta - prediction;
                     uint_t bits = ZIGZAG_ENCODE_SCALAR(err);
 
@@ -899,7 +905,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle(const int_t* src,
 
                                     __m256i vpredictions = _mm256_mulhi_epi16(
                                         prev_deltas, filter_coeffs);
-                                    vpredictions = _mm256_slli_epi16(vpredictions, 2);
+                                    // vpredictions = _mm256_slli_epi16(vpredictions, 2);
 
                                     __m256i vdeltas = vpredictions; // since err of 0
                                     __m256i vals = _mm256_add_epi16(vdeltas, prev_vals);
@@ -1083,7 +1089,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle(const int_t* src,
 
                         __m256i vpredictions = _mm256_mulhi_epi16(
                             prev_deltas, filter_coeffs);
-                        vpredictions = _mm256_slli_epi16(vpredictions, 2);
+                        // vpredictions = _mm256_slli_epi16(vpredictions, 2);
 
                         // zigzag decode
                         __m256i verrs = mm256_zigzag_decode_epi16(raw_verrs);

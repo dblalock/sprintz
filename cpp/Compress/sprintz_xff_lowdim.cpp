@@ -51,6 +51,7 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
     static const int group_sz_blocks = kDefaultGroupSzBlocks;
     // xff constants
     static const uint8_t log2_learning_downsample = 1;
+    // static const uint8_t learning_shift = elem_sz == 1 ? 1 : 3;
     static const uint8_t learning_shift = 1;
     static const uint8_t learning_downsample = 1 << log2_learning_downsample;
     // rle constants
@@ -176,8 +177,9 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
                     int_t delta = (int_t)(val - prev_val);
                     int_t prediction = (((counter_t)prev_delta) * coef) >> elem_sz_nbits;
 
-                    // int_t prediction = (((int32_t)prev_delta) * coef) >> 8; // TODO rm
+                    // if (elem_sz == 2) { prediction = prediction << 2; }
 
+                    // int_t prediction = (((int32_t)prev_delta) * coef) >> 8; // TODO rm
 
                     int_t err = delta - prediction;
                     uint_t bits = ZIGZAG_ENCODE_SCALAR(err);
@@ -416,6 +418,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
     typedef typename ElemSzTraits<elem_sz>::counter_t counter_t;
     // xff constants
     static const uint8_t log2_learning_downsample = 1;
+    // static const uint8_t learning_shift = elem_sz == 1 ? 1 : 3;
     static const uint8_t learning_shift = 1;
     static const uint8_t learning_downsample = 1 << log2_learning_downsample;
     // other constants that could actually be changed in this impl
@@ -625,6 +628,8 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                         for (uint32_t i = 0; i < length * block_sz; i++) {
                             int_t prediction = (((int32_t)prev_delta) * coef) >> elem_sz_nbits;
 
+                            // prediction = prediction << 2;
+
                             // int_t prediction = (((int32_t)prev_delta) * coef) >> 8; // TODO rm
 
                             uint_t val = prev_val + prediction;
@@ -647,6 +652,10 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                         for (uint32_t i = 0; i < length * block_sz; i++) {
                             int_t prediction0 = (((int32_t)prev_delta0) * coef0) >> elem_sz_nbits;
                             int_t prediction1 = (((int32_t)prev_delta1) * coef1) >> elem_sz_nbits;
+
+                            // prediction0 = prediction0 << 2;
+                            // prediction1 = prediction1 << 2;
+
                             uint_t val0 = prev_val0 + prediction0;
                             uint_t val1 = prev_val1 + prediction1;
                             *dest = val0;

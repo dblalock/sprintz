@@ -73,7 +73,7 @@ uint32_t encode_xff_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
 
     uint32_t block_sz_elems = block_sz * ndims;
     uint32_t nrows = len / ndims;
-    uint32_t nblocks = nrows / block_sz;
+    int32_t nblocks = nrows / block_sz;
     uint32_t padded_ndims = round_up_to_multiple(ndims, vector_sz);
     uint16_t nvectors = padded_ndims / vector_sz + ((padded_ndims % vector_sz) > 0);
 
@@ -100,7 +100,11 @@ uint32_t encode_xff_rowmajor(const uint_t* src, uint32_t len, int_t* dest,
     // ensure we don't write past the end of the output
     uint16_t overrun_ndims = vector_sz - (ndims % vector_sz);
     uint32_t trailing_nelements = len % block_sz_elems;
-    if (nblocks > 1 && overrun_ndims > trailing_nelements) { nblocks -= 1; }
+    // if (nblocks > 1 && overrun_ndims > trailing_nelements) { nblocks -= 1; }
+    if (overrun_ndims > trailing_nelements) {
+        nblocks -= div_round_up(overrun_ndims, block_sz_elems);
+        nblocks = MAX(0, nblocks);
+    }
 
     // const __m256i high_bits_one = _mm256_set1_epi8(-128);
     // const __m256i zeros = _mm256_setzero_si256();
@@ -316,7 +320,7 @@ uint32_t decode_xff_rowmajor(const int_t* src, uint32_t len, uint_t* dest,
 
     uint32_t block_sz_elems = block_sz * ndims;
     uint32_t nrows = len / ndims;
-    uint32_t nblocks = nrows / block_sz;
+    int32_t nblocks = nrows / block_sz;
     uint32_t padded_ndims = round_up_to_multiple(ndims, vector_sz);
     uint16_t nvectors = padded_ndims / vector_sz + ((padded_ndims % vector_sz) > 0);
 
@@ -347,7 +351,11 @@ uint32_t decode_xff_rowmajor(const int_t* src, uint32_t len, uint_t* dest,
     // ensure we don't write past the end of the output
     uint16_t overrun_ndims = vector_sz - (ndims % vector_sz);
     uint32_t trailing_nelements = len % block_sz_elems;
-    if (nblocks > 1 && overrun_ndims > trailing_nelements) { nblocks -= 1; }
+    // if (nblocks > 1 && overrun_ndims > trailing_nelements) { nblocks -= 1; }
+    if (overrun_ndims > trailing_nelements) {
+        nblocks -= div_round_up(overrun_ndims, block_sz_elems);
+        nblocks = MAX(0, nblocks);
+    }
 
     // const __m256i high_bits_one = _mm256_set1_epi8(-128);
     // const __m256i zeros = _mm256_setzero_si256();
@@ -525,7 +533,9 @@ uint32_t decode_xff_rowmajor_inplace(uint_t* buff, uint32_t len,
                                      uint16_t ndims)
 {
     static const uint8_t elem_sz = sizeof(int_t);
-    uint_t* tmp = (uint_t*)malloc(len * elem_sz);
+    // XXX padding is necessary for for 8bit with ndims=1, but shouldn't be
+    // EDIT: maybe fixed by better handling of reducing nblocks in low-dim case
+    uint_t* tmp = (uint_t*)malloc(len * elem_sz + 1024);
     uint32_t sz = decode_xff_rowmajor((int_t*)buff, len, tmp, ndims);
     memcpy(buff, tmp, sz * elem_sz);
     free(tmp);
