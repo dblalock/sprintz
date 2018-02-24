@@ -365,7 +365,7 @@ uint32_t decode_delta_rowmajor_inplace(uint_t* buff, uint32_t len,
     // uint8_t* tmp = (uint8_t*)malloc(batch_size_elems + vector_sz);
     // decode_delta_rowmajor((int8_t*)buff, len, tmp, ndims);
 
-    uint_t* tmp = (uint_t*)malloc(len * sizeof(uint_t));
+    uint_t* tmp = (uint_t*)malloc(len * sizeof(int_t));
     uint32_t sz = decode_delta_rowmajor((int_t*)buff, len, tmp, ndims);
     memcpy(buff, tmp, sz * sizeof(int_t));
     free(tmp);
@@ -707,9 +707,11 @@ template<typename int_t, typename uint_t>
 uint32_t decode_doubledelta_rowmajor_inplace(uint_t* buff, uint32_t len,
                                        uint16_t ndims)
 {
-    uint_t* tmp = (uint_t*)malloc(len * sizeof(*buff));
+    // return decode_delta_rowmajor_inplace<int_t>(buff, len, ndims);
+    uint_t* tmp = (uint_t*)malloc(len * sizeof(int_t) + 1024);
     uint32_t sz = decode_doubledelta_rowmajor((int_t*)buff, len, tmp, ndims);
-    memcpy(buff, tmp, sz * sizeof(buff));
+    // uint32_t sz = decode_delta_rowmajor((int_t*)buff, len, tmp, ndims); // XXX rm after debug
+    memcpy(buff, tmp, sz * sizeof(int_t));
     free(tmp);
     return sz;
 }
@@ -717,6 +719,7 @@ uint32_t decode_doubledelta_rowmajor_inplace_8b(uint8_t* buff, uint32_t len,
                                              uint16_t ndims)
 {
     return decode_doubledelta_rowmajor_inplace<int8_t>(buff, len, ndims);
+    // return decode_delta_rowmajor_inplace<int8_t>(buff, len, ndims); // XXX rm
 }
 uint32_t decode_doubledelta_rowmajor_inplace_16b(uint16_t* buff, uint32_t len,
                                              uint16_t ndims)
