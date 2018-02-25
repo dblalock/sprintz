@@ -131,8 +131,8 @@ Because all values involved are integers, this multiplication is done using twic
 
 The forecaster trains by performing a gradient update on the L1 loss between the true and predicted samples. I.e., given loss:
 \begin{align}
-    \mathcal{L}(x_i, \tilde{x}_{i}) = \abs{x_{i} - \tilde{x}_{i}}
-    = \abs{x - (x_{i-1} + \frac{\alpha}{2^w} \cdot \delta_{i-1})} \\
+    \mathcal{L}(x_i, \tilde{x}_{i}) = \abs{x_i - \tilde{x}_i}
+    = \abs{x_i - (x_{i-1} + \frac{\alpha}{2^w} \cdot \delta_{i-1})} \\
     = \abs{\delta_{i} - \frac{\alpha}{2^w} \cdot \delta_{i-1}}
 \end{align}
 for one column's value $x_i = \x_{ij}$ for some $j$ and coefficient $\alpha$, the gradient is:
@@ -146,8 +146,8 @@ for one column's value $x_i = \x_{ij}$ for some $j$ and coefficient $\alpha$, th
         -{2^{-w}}\vdelta_{i-1} & \x_{i} > \tilde{\x}_{i} \\
         {2^{-w}}\vdelta_{i-1} & \x_{i} \le \tilde{\x}_{i}
 \end{cases} \\
-&= \sign(\eps) \cdot {2^{-w}}\vdelta_{i-1} \\
-&\propto \sign(\eps) \cdot \vdelta_{i-1}
+&= -\sign(\eps) \cdot {2^{-w}}\vdelta_{i-1} \\
+&\propto -\sign(\eps) \cdot \vdelta_{i-1}
 % \end{equation*}
 \end{align}
 where we define $\eps \triangleq \x_{i} - \tilde{\x}_{i}$ and ignore the $2^{-w}$ as a constant that can be absorbed into the learning rate. In all experiments, we set the learning rate $\eta$ to $\frac{1}{2}$. This value is unlikely to be ideal for any particular dataset, but we found in preliminary experiments that it consistently worked reasonably well on all of the datasets we tried. % and was large enough to avoid zeroing out small gradients.

@@ -189,6 +189,30 @@ To measure the error this introduces, we then inverted the linear transformation
 This of course does not indicate that all time series can be safely quantized. Two counterexamples of which we are aware are 1) timestamps where microsecond or nanosecond resolution matters, and 2) GPS coordinates, where small decimal places may correspond to many meters. However, the above results suggest that quantization is a suitable means of applying \minesp to floating-point data in many applications. This is bolstered by previous work showing that quantization even to a mere six bits [] rarely harms classification accuracy, and quantizing to two sometimes improves it [].
 
 % ------------------------------------------------
+\subsection{When to use \mine}
+% ------------------------------------------------
+
+Here are some example multivariate time series where \minesp does well. Note that this also serves to confirm our speed results.
+
+\begin{figure}[h]
+\begin{center}
+    \includegraphics[width=\linewidth]{paper/tradeoff_success}
+    \caption{\minesp totally crushes it on relative smooth data with many variables. Marker sizes are proportional to log compression speed (is this even useful?).}
+    \label{fig:tradeoff_success}
+\end{center}
+\end{figure}
+
+Here are some example multivariate time series where \minesp does poorly relative to others. In absolute terms it's actually still quite good, but the other methods crush it here because dictionary coding is a great fit for this data, whereas delta coding is terrible.
+
+\begin{figure}[h]
+\begin{center}
+    \includegraphics[width=\linewidth]{paper/tradeoff_fail}
+    \caption{\minesp is mediocre (relative to other methods) on non-smooth data that switches between discrete states.}
+    \label{fig:tradeoff_failure}
+\end{center}
+\end{figure}
+
+% ------------------------------------------------
 \subsection{Query acceleration}
 % ------------------------------------------------
 
