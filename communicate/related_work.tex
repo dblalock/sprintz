@@ -1,27 +1,5 @@
 
 % ------------------------------------------------
-\subsection{Predictive Filtering}
-% ------------------------------------------------
-
-% TODO move delta, double, LPC descriptions to here. Also talk about \fire.
-
-A common element of many compression algorithms is some form of predictive coding. This consists of having some forecaster predict the values of the next byte(s) to be compressed and only storing the prediction error, rather than the original value. When the forecaster is better than chance, the errors will be drawn from a lower-entropy distribution than that of the raw data. In particular, they will often be tightly concentrated around zero \cite{shorten}. The original data can be reconstructed from the errors by having the decoder run the same forecaster and add the encoded errors to its predictions.
-
-For numeric data such as time series, there are four types of predictive coding commonly in use: predictive filtering \cite{png}, delta coding \cite{fastpfor, bbp}, double-delta coding \cite{influxDB, gorilla}, and XOR-based encoding \cite{gorilla}. In predictive filtering, each prediction is a linear combination of a fixed number of recent samples. This can be understood as an Autoregressive model or the application of a Finite Impulse Response (FIR) filter. When the filter is learned online, this is termed ``adaptive filtering.''
-
-Delta coding is a special case of predictive filtering where the prediction is always the previous value. Double-delta coding, also called delta-delta coding or delta-of-deltas coding, consists of applying delta coding twice in succession. XOR-based encoding is similar to delta coding, but replaces subtraction of the previous value with the XOR operation. This modification is often desirable for floating-point data \cite{gorilla}.
-
-\fire can be understood as a special case of adaptive filtering. While adaptive filtering is a well-studied mathematical problem in the signal processing literature, we are unaware of a practical algorithm that attains speed within an order of magnitude of that of \fire%. or that accounts for the subtleties of low-precision integers.
-
-% Indeed, the only methods
-
-% most similar method is likely that of \cite{neuralBranchPredictor}, in which a
-
-% Moreover, existing databases almost universally use delta, double-delta, or XOR encoding, suggesting that simple  % suggesting that these approaches are the relevant benchmarks.
-
-% Before applying any of these coding schemes, it is common to apply some transform to the raw data to make the values closer to 0. Such transforms include delta encoding, \cite{fastpfor, bbp}, delta-delta encoding \cite{influxDB}, and linear predictive coding (LPC) \cite{flac}. LPC deterministically generates a prediction for each sample based on the previous samples, and stores the error in the prediction instead of the raw value; when the errors are small, the integers stored are closer to 0. Delta coding and delta-delta coding are special cases wherein each sample is predicted to be the previous sample, or a linear extrapolation from the previous two samples, respectively.
-
-% ------------------------------------------------
 \subsection{Compression of time series}
 % ------------------------------------------------
 
@@ -87,7 +65,9 @@ A final noteworthy method is Blosc \cite{blosc}. While not intended solely for t
 
 % Integer compression is not as well-studied as general-purpose compression, but has seen great progress in recent years.
 
-The fastest methods of compressing integers are generally based on bit-packing---i.e., using at most $b$ bits to represent values in $\{0, 2^b-1\}$, and storing these bits contiguously \cite{bbp, pfor, fastpfor}. Since $b$ is determined by the largest value that must be encoded, naively applying this method yields limited compression. To improve it, one can encode fixed-size blocks of data at a time, so that $b$ can be set based on the largest values in a block instead of the whole dataset \cite{kGamma, pfor, fastpfor}. A further improvement is to ignore the largest few values when setting $b$ and store their omitted bits separately \cite{pfor, fastpfor}.
+The fastest methods of compressing integers are generally based on bit packing---i.e., using at most $b$ bits to represent values in $\{0, 2^b-1\}$, and storing these bits contiguously \cite{bbp, pfor, fastpfor}. Since $b$ is determined by the largest value that must be encoded, naively applying this method yields limited compression. To improve it, one can encode fixed-size blocks of data at a time, so that $b$ can be set based on the largest values in a block instead of the whole dataset \cite{kGamma, pfor, fastpfor}. A further improvement is to ignore the largest few values when setting $b$ and store their omitted bits separately \cite{pfor, fastpfor}.
+
+\minesp bit packing differs significantly from existing methods in that it compresses much smaller blocks of samples. This reduces its throughput as compared to, e.g., \cite{fastpfor}, but significantly improves compression ratios, since large values only increase $b$ locally. It also allows significantly lowers the memory requirements.
 
 A common \cite{flac, shorten} alternative to bit-packing is Golomb coding \cite{golomb}, or its special case Rice coding \cite{rice}. The idea is to assume that the values follow a geometric distribution, often with a rate constant fit to the data. %, and therefore make the encoding cost linear in the magnitude of the encoded value.
 
@@ -97,11 +77,28 @@ Both bit packing and Golomb coding are bit-based methods in that they do not gua
 
 
 \subsection{General-purpose compression}
-While \minesp is not intended to be a general-purpose compression algorithm, a reasonable alternative to using a specialized method would be to apply a general-purpose compression algorithm, possibly after delta coding or other preprocessing. Thanks largely to the development of Asymmetric Numeral Systems (ANS) \cite{ans} for entropy coding, general purpose compressors have advanced greatly in recent years. In particular, Zstd \cite{zstd}, Brotli \cite{brotli}, LZ4 \cite{lz4} and others have attained speed-compression tradeoffs significantly better than traditional methods such as GZIP \cite{gzip}, BZIP \cite{lzo}, etc.
+While \minesp is not intended to be a general-purpose compression algorithm, a reasonable alternative to using a specialized method would be to apply a general-purpose compression algorithm, possibly after delta coding or other preprocessing. Thanks largely to the development of Asymmetric Numeral Systems (ANS) \cite{ans} for entropy coding, general purpose compressors have advanced greatly in recent years. In particular, Zstd \cite{zstd}, Brotli \cite{brotli}, LZ4 \cite{lz4} and others have attained speed-compression tradeoffs significantly better than traditional methods such as GZIP \cite{gzip}, BZIP \cite{lzo}, etc. As described in Section~\ref{sec:intro}, however, these methods have much higher memory requirements that \mine.
+
 % Also of note is Blosc \cite{blosc}, which is especially applicable to multivariate time series as a result of its grouping correlated bits and/or bytes together during preprocessing.
 
-\subsection{High-speed online learning}
+% ------------------------------------------------
+\subsection{Predictive Filtering}
+% ------------------------------------------------
 
-TODO
+% TODO move delta, double, LPC descriptions to here. Also talk about \fire.
 
-branch predictors
+% Predictive coding in some form is a common element of many compression algorithms. This consists of having some forecaster predict the values of the next byte(s) to be compressed and only storing the prediction error, rather than the original value. When the forecaster is better than chance, the errors will be drawn from a lower-entropy distribution than that of the raw data. In particular, they will often be tightly concentrated around zero \cite{shorten}. The original data can be reconstructed from the errors by having the decoder run the same forecaster and add the encoded errors to its predictions.
+
+For numeric data such as time series, there are four types of predictive coding commonly in use: predictive filtering \cite{png}, delta coding \cite{fastpfor, bbp}, double-delta coding \cite{influxDB, gorilla}, and XOR-based encoding \cite{gorilla}. In predictive filtering, each prediction is a linear combination of a fixed number of recent samples. This can be understood as an Autoregressive model or the application of a Finite Impulse Response (FIR) filter. When the filter is learned online, this is termed ``adaptive filtering.''
+
+Delta coding is a special case of predictive filtering where the prediction is always the previous value. Double-delta coding, also called delta-delta coding or delta-of-deltas coding, consists of applying delta coding twice in succession. XOR-based encoding is similar to delta coding, but replaces subtraction of the previous value with the XOR operation. This modification is often desirable for floating-point data \cite{gorilla}.
+
+\fire can be understood as a special case of adaptive filtering. While adaptive filtering is a well-studied mathematical problem in the signal processing literature, we are unaware of a practical algorithm that attains speed within an order of magnitude of that of \fire. %. or that accounts for the subtleties of low-precision integers.
+
+% Indeed, the only methods
+
+% most similar method is likely that of \cite{neuralBranchPredictor}, in which a
+
+% Moreover, existing databases almost universally use delta, double-delta, or XOR encoding, suggesting that simple  % suggesting that these approaches are the relevant benchmarks.
+
+% Before applying any of these coding schemes, it is common to apply some transform to the raw data to make the values closer to 0. Such transforms include delta encoding, \cite{fastpfor, bbp}, delta-delta encoding \cite{influxDB}, and linear predictive coding (LPC) \cite{flac}. LPC deterministically generates a prediction for each sample based on the previous samples, and stores the error in the prediction instead of the raw value; when the errors are small, the integers stored are closer to 0. Delta coding and delta-delta coding are special cases wherein each sample is predicted to be the previous sample, or a linear extrapolation from the previous two samples, respectively.

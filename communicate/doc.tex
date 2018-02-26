@@ -81,7 +81,7 @@
 
 Thanks to the rapid proliferation of connected devices, sensor-generated time series constitute a large and growing portion of the world's data. In order to reduce storage, power, and transmission costs, it is desirable to compress this data. % to the greatest extent possible. % Many time series databases propose some method of doing this, but, to the best of our knowledge, there is neither a systematic assessment of what approaches are most effective nor a compression algorithm that clearly outperforms others on such data. % Unfortunately, existing compression algorithms either provide only limited compression when applied to time series, degrade data quality, or are not suitable for execution on low-power processors.
 
-We introduce a time series compression algorithm that achieves state-of-the-art compression ratios, compression speeds up to 1GB/s, and decompression speeds up to 4GB/s in a single thread. Moreover, because our approach requires $<$1KB of memory, it can be run on low-power sensors at the network edge, offloading computation from the central database and reducing network load. A key component of our method is a low-precision forecasting algorithm that can be trained online and used with any existing compression algorithm.% in addition to our own.
+We introduce a time series compression algorithm that achieves state-of-the-art compression ratios and up to twice the speed of its closest rivals. Moreover, because our approach requires $<$1KB of memory, it can be run on low-power sensors at the network edge, offloading computation from the central database and reducing network load. A key component of our method is a high-speed forecasting algorithm that can be trained online and significantly outperforms alternatives such as delta coding.% in addition to our own.
 
 % but also accelerates many queries of practical interest relative to existing compression schemes.
 
@@ -134,11 +134,11 @@ Extensive experiments on datasets from many domains show that these results hold
 
 % \input{problem.tex}
 
-% ================================================================
-\section{Related Work} \label{sec:relatedWork}
-% ================================================================
+% % ================================================================
+% \section{Related Work} \label{sec:relatedWork}
+% % ================================================================
 
-\input{related_work.tex}
+% \input{related_work.tex}
 
 % ================================================================
 \section{Method} \label{sec:method}
@@ -151,6 +151,12 @@ Extensive experiments on datasets from many domains show that these results hold
 % ================================================================
 
 \input{results.tex}
+
+% ================================================================
+\section{Related Work} \label{sec:relatedWork}
+% ================================================================
+
+\input{related_work.tex}
 
 % ================================================================
 \section{Conclusion} \label{sec:conclusion}
