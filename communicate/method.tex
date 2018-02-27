@@ -9,13 +9,13 @@
 % To both establish notation and clarify the sorts of data for which \minesp is applicable, we introduce the following definitions.
 To facilitate a precise explanation of \minesp, we introduce the following definitions.
 
-\begin{Definition} \b{Sample.} A sample is a vector $\x \in \R^D$. $D$ is termed the sample's \b{dimensionality}. Each element of the sample is a scalar represented using a number of bits $W$, termed the \b{bitwidth}. The bitwidth $w$ is shared by all elements.
+\begin{Definition} \b{Sample.} A sample is a vector $\x \in \R^D$. $D$ is termed the sample's \b{dimensionality}. Each element of the sample is a scalar represented using a number of bits $w$, termed the \b{bitwidth}. The bitwidth $w$ is shared by all elements.
 \end{Definition}
 
 \begin{Definition} \b{Time Series.} A time series $\X$ of length $T$ is a sequence of $T$ samples, $\x_1,\ldots,\x_T$. All samples $\x_t$ share the same bitwidth $w$ and dimensionality $D$, and the meaning of each dimension is consistent from sample to sample. If $D = 1$, $\X$ is called \b{univariate}; otherwise it is \b{multivariate}.
 \end{Definition}
 
-\begin{Definition} \b{Rows, Columns.} In a database context, we assume that each sample of a time series is one row and each dimension is one column. Because data arrives as samples and memory constraints may limit how many samples can be buffered, we assume that the data is stored in row-major order.
+\begin{Definition} \b{Rows, Columns.} In a database context, we assume that each sample of a time series is one row and each dimension is one column. Because data arrives as samples and memory constraints may limit how many samples can be buffered, we assume that the data is stored in row-major order---i.e., such that each sample is stored contiguously.
 \end{Definition}
 
 % ------------------------------------------------
@@ -33,9 +33,9 @@ To facilitate a precise explanation of \minesp, we introduce the following defin
 
 These components are run on blocks of eight samples (motivated in Section~\ref{sec:bitpacking}), and can be modified to yield different compression-speed tradeoffs. Concretely, one can 1) skip entropy coding for greater speed and 2) choose between delta coding and our online learning method as forecasting algorithms. Our method is slightly slower but often improves compression.
 
-We chose these basic steps since they allow high speed while also exploiting the characteristics of time series. Forecasting leverages the high correlation of success samples to reduce the entropy of the data. Run-length encoding allows for extreme compression in the (common) scenario that there is no change in the data---e.g., a user's smartphone may be stationary for many hours while the user is asleep. Bit packing is not desirable \textit{per se}, but provides a vectorizable and low-memory means of reducing the encoding size. Similarly, Huffman coding is not specific to time series but has low memory requirements and improves compression ratios.
+We chose these steps since they allow high speed while also exploiting the characteristics of time series. Forecasting leverages the high correlation of successive samples to reduce the entropy of the data. Run-length encoding allows for extreme compression in the (common) scenario that there is no change in the data---e.g., a user's smartphone may be stationary for many hours while the user is asleep. Bit packing is not desirable \textit{per se}, but provides a vectorizable and low-memory means of reducing the encoding size. Similarly, Huffman coding is not specific to time series but has low memory requirements and improves compression ratios.
 
-Before describing the four components in greater detail, we first provide an outline of the overall algorithms for compressing and decompressing blocks.
+Before describing the four components in greater detail, we first provide an outline of the overall algorithms for compressing and decompressing blocks of data.
 
 % We elaborate upon each of the four components in the following subsections, but first provide an outline of the overall compression and decompression functions.
 
@@ -136,7 +136,7 @@ An overview of how \minesp compresses one block of samples is shown in Algorithm
 \begin{figure*}[t]
 \begin{center}
     \includegraphics[width=\textwidth]{paper/overview}
-    \caption{Overview of \mine\text{ }using a delta coding predictor.\textit{ a)} Delta coding of each column, followed by zigzag encoding of resulting errors. The maximum number of significant (nonzero) bits is computed for each column. \textit{b)} These numbers of bits are stored in a header, and the original data is stored as a (byte-aligned) payload, with leading zeros removed. When there are few columns, each column's data is stored contiguously. When there are many columns, each row is stored contiguously, possibly with padding to ensure alignment on a byte boundary.}
+    \caption{Overview of \minesp using a delta coding predictor.\textit{ a)} Delta coding of each column, followed by zigzag encoding of resulting errors. The maximum number of significant (nonzero) bits is computed for each column. \textit{b)} These numbers of bits are stored in a header, and the original data is stored as a (byte-aligned) payload, with leading zeros removed. When there are few columns, each column's data is stored contiguously. When there are many columns, each row is stored contiguously, possibly with padding to ensure alignment on a byte boundary.}
     % With blocks of eight samples (only four shown for clarity), this ensures that each column's data begins on a byte boundary.
     \label{fig:overview}
 \end{center}
@@ -144,7 +144,7 @@ An overview of how \minesp compresses one block of samples is shown in Algorithm
 
 \minesp forecasting can use either delta coding or \fire (Fast Integer REgression), a novel online forecasting algorithm we introduce.
 
-Forecasting with delta coding consists of predicting each sample $\x_i$ to be equal to the previous sample $\x_{i-1}$. This method is stateless given $\x_{i-1}$ and is extremely fast. It is particularly fast when combined with run-length encoding, since it yields a run of zero errors if and only if the data is constant. This means that decompression requires only copying a fixed vector, with no additional forecasting or training. Moreover, when answering queries, one can sometimes avoid decompression entirely---e.g., one can compute the max of all samples in the run by computing the max of only the first value.
+Forecasting with delta coding consists of predicting each sample $\x_i$ to be equal to the previous sample $\x_{i-1}$. This method is stateless given $\x_{i-1}$ and is extremely fast. It is particularly fast when combined with run-length encoding, since it yields a run of zero errors if and only if the data is constant. This means that decompression of runs requires only copying a fixed vector, with no additional forecasting or training. Moreover, when answering queries, one can sometimes avoid decompression entirely---e.g., one can compute the max of all samples in the run by computing the max of only the first value.
 
 Forecasting with \fire is slightly more expensive but often yields better compression. Before discussing the details of \fire, we first offer intuition regarding why it works.
 
@@ -153,14 +153,20 @@ Forecasting with \fire is slightly more expensive but often yields better compre
 % ------------------------------------------------
 \subsubsection{Intuition}
 % ------------------------------------------------
-The basic idea of \fire is to model each value as a linear combination of a fixed number of previous values and learn the coefficients of this combination. Specifically, we adopt an ``autoregressive'' model of the form:
+The basic idea of \fire is to model each value as a linear combination of a fixed number of previous values and learn the coefficients of this combination. Specifically, we learn an ``autoregressive'' model of the form:
 % Consider a linear model for predicting a given value $x_i$ of some variable at time step $i$.
 \begin{align}
     x_i = a x_{i-1} + b x_{i-2} + \eps_i
 \end{align}
-where $x_i$ denotes the value of some variable at time step $i$ and $\eps_i$ is a noise term. Different values of $a$ and $b$ are suitable for different data characterisics. If $a = 2$, $b = -1$, we obtain double-delta coding, which extrapolates linearly from the previous two points and works well when the time series is smooth. If $a = 1$, $b = 0$, we recover delta coding, which models the data as a random walk. If $a = \frac{1}{2}$, $b = \frac{1}{2}$, we predict each value to be the average of the previous two values, which is optimal if the $x_i$ are i.i.d. Gaussians.
+where $x_i$ denotes the value of some variable at time step $i$ and $\eps_i$ is a noise term.
 
-In other words, these cases are appropriate for successively noisier data. The idea of \fire is to learn online what the best coefficients are. To make this as efficient as possible, we exploit the observation that all of the above cases can be written as:
+Different values of $a$ and $b$ are suitable for different data characterisics. If $a = 2$, $b = -1$, we obtain double-delta coding, which extrapolates linearly from the previous two points and works well when the time series is smooth. If $a = 1$, $b = 0$, we recover delta coding, which models the data as a random walk. If $a = \frac{1}{2}$, $b = \frac{1}{2}$, we predict each value to be the average of the previous two values, which is optimal if the $x_i$ are i.i.d. Gaussians. In other words, these cases are appropriate for successively noisier data.
+
+% The idea of \fire is to learn online what the best coefficients are.
+
+The reason \fire is effective is that it learns online what the best coefficients are for each variable.
+% \Fire learns appropriate coefficients online using gradient descent with L1 loss.
+To make prediction and learning as efficient as possible, however, \fire restricts the coefficients to lie within a useful subspace. Specifically, we exploit the observation that all of the above cases can be written as:
 \begin{align}
     x_i = x_{i-1} + \alpha x_{i-1} - \alpha x_{i-2} + \eps_i
 \end{align}
@@ -170,7 +176,7 @@ for $\alpha \in [-\frac{1}{2}, 1]$. Letting $\delta_i \triangleq x_i - x_{i-1}$ 
 % \end{align}
 % . Subtracting $x_{i-1}$ from both sides, we obtain
 \begin{align}
-    \delta_i &= \alpha \delta_{i-1} + \eps_i \\
+    \delta_i &= \alpha \delta_{i-1} + \eps_i
 \end{align}
 % \begin{align}
 %     \delta_i &= \delta_{i-1} + \alpha  + \eps_i \\
@@ -179,13 +185,13 @@ for $\alpha \in [-\frac{1}{2}, 1]$. Letting $\delta_i \triangleq x_i - x_{i-1}$ 
 % \begin{align}
 %     \delta_i &= \alpha \delta_{i-1} \eps_i \\
 % \end{align}
-In short, we can capture all of the above cases by predicting the next delta as a rescaled version of the previous delta. This requires only a single addition and multiplication, and reduces the learning problem to that of finding a suitable value for a single parameter.
+This means that we can capture all of the above cases by predicting the next delta as a rescaled version of the previous delta. This requires only a single addition and multiplication, and reduces the learning problem to that of finding a suitable value for a single parameter.
 
 % ------------------------------------------------
 \subsubsection{Details}
 % ------------------------------------------------
-
-An outline of \fire prediction and training are given in Algorithm~\ref{algo:xff}. A \fire forecaster is parametrized by three values (line~\ref{line:xffCtor}): the number of columns $D$, the learning rate $\eta$, and the bitwidth of the integers stored in the columns $w$. Internally, the forecaster also maintains an accumulator for each column (line~\ref{line:counter}) and the difference (delta) between the two most recently seen samples (line~\ref{line:deltas}).
+% Pseudocode for \fire prediction and training is given in Algorithm~\ref{algo:xff}.
+As shown in Algorithm~\ref{algo:xff}, a \fire forecaster is parametrized by three values (line~\ref{line:xffCtor}): the number of columns $D$, the learning rate $\eta$, and the bitwidth of the integers stored in the columns $w$. Internally, the forecaster also maintains an accumulator for each column (line~\ref{line:counter}) and the difference (delta) between the two most recently seen samples (line~\ref{line:deltas}).
 
 To predict, the forecaster first derives a coefficient for each column based on the accumulator. By shifting the accumulator by $\log2(\eta)$ bits, the forecaster obtains a learning rate of $2^{-\log2(\eta)} = \eta$. It then estimates the next delta as the product of this coefficient and the previous delta. It predicts the next sample to be the previous sample plus this estimated delta.
 
@@ -271,7 +277,8 @@ In practice, \fire differs slightly from the above pseudocode in three ways. Fir
 \subsection{Bit Packing} \label{sec:bitpacking}
 % ------------------------------------------------
 
-An illustration of \mine's bitpacking is given in Figure~\ref{fig:overview}. The prediction errors from delta coding or \fire are zigzag encoded \cite{zigzag} and then the minimum number of bits required is computed for each column. Zigzag encoding is an invertible transform that interleaves positive and negative integers such that each integer is represented by twice its absolute value, or twice its absolute value minus one for negative integers (hence all values are nonnegative). % We zigzag encode because it is extremely efficient and facilitates computing the number of bits necesasary.
+An illustration of \mine's bitpacking is given in Figure~\ref{fig:overview}. The prediction errors from delta coding or \fire are zigzag encoded \cite{zigzag} and then the minimum number of bits required is computed for each column. Zigzag encoding is an invertible transform that interleaves positive and negative integers such that each integer is represented by twice its absolute value, or twice its absolute value minus one for negative integers. This makes all values nonnegative and maps numbers closer to zero to smaller values.
+% ). % We zigzag encode because it is extremely efficient and facilitates computing the number of bits necesasary.
 
 Given the zigzag encoded errors, the number of bits $w^\prime$ required in each column can be computed as the bitwidth minus the fewest leading zeros in any of that column's errors. E.g., in Figure~\ref{fig:overview}a, the first column's largest encoded value is 16, represented as \texttt{00010000}, which has three leading zeros. This means that we require $w^\prime = 8 - 3 = 5$ bits to store the values in this column. One can find this value by ORing all the values in a column together and then using a built-in function such as GCC's $\texttt{\_\_builtin\_clz}$ to compute the number of leading zeros in a single assembly instruction (c.f. \cite{fastpfor}). This optimization motivates our use of zigzag encoding to make all values nonnegative.
 

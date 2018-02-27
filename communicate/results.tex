@@ -1,5 +1,7 @@
 
-To assess \mine's effectiveness, we implemented both it and comparison algorithms in C++. All of our code and raw results are publicly available on the \minesp website.\footnote{https://github.com/dblalock/sprintz} This website also contains experiments on additional datasets, as well as thorough documentation of both our code and experimental setups. All experiments use a single thread on a 2013 Macbook Pro with a 2.6GHz Intel Core i7-4960HQ processor.
+% To assess \mine's effectiveness, we implemented both it and comparison algorithms in C++.
+
+To asses \mine's effectiveness, we compared it to a number of state-of-the art compression algorithms on a large set of publicly available datasets. All of our code and raw results are publicly available on the \minesp website.\footnote{https://github.com/dblalock/sprintz} This website also contains additional experiments, as well as thorough documentation of both our code and experimental setups. All experiments use a single thread on a 2013 Macbook Pro with a 2.6GHz Intel Core i7-4960HQ processor.
 
 All reported timings and throughputs are the best of ten runs. We use the best, rather than average, since this is common practice in performance benchmarking.
 
@@ -7,7 +9,7 @@ All reported timings and throughputs are the best of ten runs. We use the best, 
 \subsection{Datasets}
 % ------------------------------------------------
 
-For assessing accuracy, we use several publicly available datasets:
+% For assessing accuracy, we use several publicly available datasets:
 \begin{itemize}[leftmargin=4mm]
 \item \textbf{UCR} \cite{ucrTimeSeries} --- The UCR Time Series Archive is a repository of 85 univariate time series datasets from various domains, commonly used for benchmarking time series algorithms. Because each dataset consists of many time series, we concatenate all the time series from each dataset to from a single longer time series. This is to allow dictionary-based methods to share information across time series (instead of compressing each in isolation). To mitigate artificial jumps in value from the end of one time series to the start of another, we linearly interpolate five samples between each pair.
 % Because the file format is delimited text with labels interspersed with data, we extract ``raw'' data by reading the time series within each dataset into a contiguous array of the appropriate data type We concatenated the first 100 examples from each of the 85 time series datasets in the UCR Time Series Archive \cite{ucrTimeSeries} to form 85 longer time series. Before concatenating, we subtracted off the mean from each example and interpolated one sample between its end and the start of the next example to avoid sudden jumps. This processing makes the datasets in some sense synthetic, but the result is an easy-to-reproduce benchmark incorporating time series from dozens of domains. We report aggregate statistics across these datasets.
@@ -21,7 +23,9 @@ For assessing accuracy, we use several publicly available datasets:
 
 % TODO maybe split ampds into 3 different datasets and report on each separately.
 
-For datasets stored as delimited files, we first parsed the data into a contiguous, numeric array and then dumped the bytes as a binary file. For datasets that were not integer-valued, we quantized them such that the largest and smallest values observed corresponded to the largest and smallest values representable with the number of bits tested. Note that this is the worst case scenario for our method since it maximizes the number of bits required to represent the data.
+For datasets stored as delimited files, we first parsed the data into a contiguous, numeric array and then dumped the bytes as a binary file. Before obtaining any timing results, we first load each dataset into main memory.
+% All datasets are represented as contiguous numeric arrays of the appropriate integral datatype for the bitwidth and loaded in main memory.
+For datasets that were not integer-valued, we quantized them such that the largest and smallest values observed corresponded to the largest and smallest values representable with the number of bits tested. Note that this is the worst case scenario for our method since it maximizes the number of bits required to represent the data.
 
 For multivariate datasets, we allowed all methods but our own to operate on the data one variable at a time; i.e., instead of interleaving values for every variable, we store all values for each variable contiguously. This corresponds to allowing them an unlimited buffer size in which to store incoming data before compressing it.
 
@@ -38,10 +42,10 @@ For multivariate datasets, we allowed all methods but our own to operate on the 
 \item \textbf{LZO} \cite{lzo} --- A stable and widely-used dictionary compressor employed by KairosDB \cite{kairosDB} and LittleTable \cite{littleTable}.
 \item \textbf{Snappy} \cite{snappy} --- A general-purpose compression algorithm developed by Google and used by InfluxDB, KairosDB, OpenTSDB \cite{openTSDB}, RocksDB \cite{rocksDB}, the Hadoop Distributed File System \cite{hdfs} and numerous other projects.
 \item \textbf{Zstd} \cite{zstd} --- Facebook's state-of-the-art general purpose compression algorithm. It is based on LZ77 and entropy codes using a mix of Huffman coding and Finite State Entropy (FSE) \cite{fse}. It is available in RocksDB \cite{rocksDB}.
-\item \textbf{Brotli} \cite{brotli} --- A recent compression algorithm introduced by Google and now standardized as a web content-encoding type.
+% \item \textbf{Brotli} \cite{brotli} --- A recent compression algorithm introduced by Google and now standardized as a web content-encoding type.
 \item \textbf{LZ4} \cite{lz4} --- A widely-used general-purpose compression algorithm optimized for speed and based on LZ77. Used by RocksDB and ChronicleDB \cite{chronicleDB}.
 % \item \textbf{LZ4-HC} \cite{lz4} --- A variant of LZ4 optimized for compression ratio at the cost of compression speed.
-\item \textbf{Zlib} [] --- A popular implementation of the DEFLATE \cite{deflate} dictionary coder, which also underlies GZIP \cite{gzip}.
+\item \textbf{Zlib} \cite{zlib} --- A popular implementation of the DEFLATE \cite{deflate} dictionary coder, which also underlies GZIP \cite{gzip}.
 
 % The compression algorithm underlying zlib \cite{zlib} and gzip \cite{gzip}. Used by RespawnDB \cite{respawnDB}, the Parquet columnar storage format \cite{parquet}, and HDFS \cite{hdfs}. We use the zlib implementation.
 % \item \textbf{BitShuf} \cite{bitshuf} --- LZ4 with the BitShuffle preprocessor, which groups runs of 0 bits when consecutive values are similar and small.
@@ -49,6 +53,14 @@ For multivariate datasets, we allowed all methods but our own to operate on the 
 % \item \textbf{Delta} --- Simple delta encoding followed by...erm...some kind of bit packing or something.
 % \item \textbf{DeltaDelta} --- Delta encoding the delta encoding, as done in some popular time series databases \cite{something, influxDB}.
 \end{itemize}
+
+We also assess three variations of \mine, corresponding to different speed/ratio tradeoffs. Following the convention used by existing compressors, we identify these variations as compression ``levels'' 1 to 3:
+\begin{enumerate}
+\itemsep-1mm
+    \item \textbf{\texttt{Sprintz -3}}. The full algorithm described in Section~\ref{sec:method}.
+    \item \textbf{\texttt{Sprintz -2}}. Like \texttt{Sprintz -3}, but without Huffman coding.
+    \item \textbf{\texttt{Sprintz -1}}. Like \texttt{Sprintz -2}, but with delta coding instead of \fire as the forecaster.
+\end{enumerate}
 
 % We also assess the above methods when applied to the delta-encoded representation of the time series, as well as the double-delta-encoded representation. We do not do this for FLAC and FastPFOR since they have similar preprocessing steps built in.
 
@@ -60,21 +72,21 @@ For multivariate datasets, we allowed all methods but our own to operate on the 
 
 In order to rigorously assess the compression performance of both \minesp and existing algorithms, it is desirable to evaluate on a large corpus of time series from heterogeneous domains. The clear choice for such a corpus is the UCR Time Series Archive \cite{ucrTimeSeries}, which is almost universally used in the data mining community for evaluating time series classification and clustering algorithms.
 
-The distributions of compression ratios on these datasets for the above algorithms are showin in Figure~\ref{fig:ratioBox}. \minesp exhibits consistently strong performance across almost all datasets. High-speed codecs such as Snappy, LZ4, and the integer codecs (FastPFOR, SIMDBP128, Simple8B) hardely compress most datasets at all.
+The distributions of compression ratios on these datasets for the above algorithms are shown in in Figure~\ref{fig:ratioBox}. \minesp exhibits consistently strong performance across almost all datasets. High-speed codecs such as Snappy, LZ4, and the integer codecs (FastPFOR, SIMDBP128, Simple8B) hardly compress most datasets at all.
 
 \begin{figure}[h]
 \begin{center}
-    \includegraphics[width=\linewidth]{paper/boxplot_ucr_deltas=0}
+    \includegraphics[width=\linewidth]{paper/boxplot_ucr}
     \caption{Boxplots of compression performance of different algorithms on the UCR Time Series Archive. Each boxplot captures the distribution of one algorithm across all 85 datasets.}
     \label{fig:ratioBox}
 \end{center}
 \end{figure}
 
-Perhaps counter-intuitively, 8-bit data tends to yield higher compression ratios than 16-bit data. This is a product of the fact that the number of bits that are ``predictable'' is roughly constant. I.e., suppose that an algorithm can correctly predict the four most significant bits of a given value; this enables a 2:1 compression ratio in the 8-bit case, but only a 16:12 = 4:3 ratio in the 16-bit case. A more concise explanation is that all but the top few bits are difficult to distinguish from noise, so the larger the fraction of the value these bits constitute, the greater the compressibility.
+Perhaps counter-intuitively, 8-bit data tends to yield higher compression ratios than 16-bit data. This is a product of the fact that the number of bits that are ``predictable'' is roughly constant. I.e., suppose that an algorithm can correctly predict the four most significant bits of a given value; this enables a 2:1 compression ratio in the 8-bit case, but only a 16:12 = 4:3 ratio in the 16-bit case. Interestingly, the fact that trailing bits tend to be too noisy to compress also suggests that one could use a lower bitwidth with little loss of information. % A more concise explanation is that all but the top few bits are difficult to distinguish from noise, so the larger the fraction of the value these bits constitute, the greater the compressibility.
 
-To assess \mine's performance statistically, we use a Nemenyi test \cite{nemenyiTest} as strongly recommended in \cite{cdDiagrams}. This test compares the mean rank of each algorithm across all datasets, where the highest-ratio algorithm is given rank 1, the second-highest rank 2, and so on. This test is desirable since it accounts for ratios varying as a function of dataset. Moreover, it prevents a small number of datasets from dominating the results. E.g., if we were to compress the entire archive as one blob, the largest several datasets would dominate the metric. Similarly, if we averaged the ratios, the datasets admiting the largest ratios would dominate.
+To assess \mine's performance statistically, we use a Nemenyi test \cite{nemenyiTest} as strongly recommended in \cite{cdDiagrams}. This test compares the mean rank of each algorithm across all datasets, where the highest-ratio algorithm is given rank 1, the second-highest rank 2, and so on. This test is desirable since it accounts for ratios varying as a function of dataset. Moreover, it prevents a small number of datasets from dominating the results. E.g., if we were to compress the entire archive as one blob, the largest several datasets would dominate the metric. Similarly, if we averaged the ratios, the datasets with highest variance would dominate. % admiting the largest and/or higest-variance ratios would dominate. % admiting the largest ratios would dominate.
 
-The results of the Nemenyi test are visualized in the Critical Difference Diagrams of Figure~\ref{fig:ratioCD}. These diagrams show the mean rank of each algorithm on the X axis and join methods that are not statistically significantly different with a line. Sprintz on high compression settings is significantly better than any existing algorithm. On slightly lower settings, it is still as effective as the best current methods (Zlib and Zstd).
+The results of the Nemenyi test are visualized in the Critical Difference Diagrams \cite{cdDiagrams} of Figure~\ref{fig:ratioCD}. These diagrams show the mean rank of each algorithm on the x-axis and join methods that are not statistically significantly different with a line. \minesp on high compression settings is significantly better than any existing algorithm. On slightly lower settings, it is still as effective as the best current methods (Zlib and Zstd).
 
 %  it is important to choose an appropriate overall metric. One obvious choice would be to simply measure the total size of all compressed datasets compared to the original size. Unfortunately, this would cause a small number of large datasets to dominate. Even if we took a fixed number of time series per dataset, datasets with longer time series would still contribute most of the data.
 
@@ -88,7 +100,7 @@ The results of the Nemenyi test are visualized in the Critical Difference Diagra
 \begin{center}
     \includegraphics[width=\linewidth]{paper/cd_diagram_8b_deltas=0}
     \includegraphics[width=\linewidth]{paper/cd_diagram_16b_deltas=0}
-    \caption{Compression performance of different algorithms on the UCR Time Series Archive. The x axis represents the mean rank of each method, where rank 1 on a given dataset had the highest ratio.  Methods joined with a horizontal black line are not statistically significantly different.}
+    \caption{Compression performance of different algorithms on the UCR Time Series Archive. The x-axis is the mean rank of each method, where rank 1 on a given dataset had the highest ratio. Methods joined with a horizontal black line are not statistically significantly different.}
     \label{fig:ratioCD}
 \end{center}
 \end{figure}
@@ -111,16 +123,14 @@ The results of the Nemenyi test are visualized in the Critical Difference Diagra
 
 
 % ------------------------------------------------
-\subsection{Decompression Speed}
+\subsection{Decompression Speed} \label{sec:decomp_speed}
 % ------------------------------------------------
 
 To systematically assess the speed of \minesp, we ran it on datasets with varying numbers of columns and varying levels of compressibility. Because real datasets have a fixed and limited number of columns, we run this experiment on synthetic data. Specifically, we generated two synthetic datasets: 1) 100 million random values uniformly distributed across the full range of those possible for the given bitwidth; and 2) 100 million random values using only the lower fourth of the bits. The former is incompressible, while the latter allows compression by a factor of two or more. It doesn't allow compression by a factor of four for \minesp since the independent elements make delta coding and \fire counterproductive.
 
 We compressed each of these datasets with \minesp set to treat it as if it had 1 through 80 columns. Numbers that do not evenly divide 100 million result in \minesp memcpy-ing the trailing bytes.
 
-While using synthetic data cannot tell us anything about \mine's compression ratio, it is suitable for throughput measurement thanks to the distribution-independence of \mine's execution time. I.e., \minesp has no conditional branches in its core loop and always reads and writes sequentially. Moreover, it exhibits throughputs on real data closely matching the figures below for the corresponding number of columns (c.f. Figure [TODO]).
-
-As shown in Figure~\ref{fig:ndims_vs_decomp_speed}, \minesp becomes faster as the number of columns increases and as the number of columns approaches multiples of 32 for 8-bit data or 16 for 16-bit data. These values correspond to the 32B width of a SIMD register on the tested machine. These results demonstrate that there is small but consistent overheaded associated with using \fire over delta coding, but that both approaches are extremely fast. Without Huffman coding, \mine decompresses at multiple GB/s except for very few ($<$5) columns.
+While using synthetic data cannot tell us anything about \mine's compression ratio, it is suitable for throughput measurement. This is because both \mine's instructions executed and memory access patterns are effectively independent of the data distribution---\mine's core loop has no conditional branches and \minesp's memory accesses are always sequential. Moreover, it exhibits throughputs on real data closely matching the numbers below for the corresponding number of columns (c.f. Figure~\ref{fig:tradeoff_success}). % thanks to the distribution-independence of \mine's execution time. I.e., \minesp has no conditional branches in its core loop and always reads and writes sequentially. Moreover, it exhibits throughputs on real data closely matching the numbers below for the corresponding number of columns (c.f. Figure~\ref{fig:tradeoff_success}).
 
 \begin{figure}[h]
 \begin{center}
@@ -130,78 +140,80 @@ As shown in Figure~\ref{fig:ndims_vs_decomp_speed}, \minesp becomes faster as th
 \end{center}
 \end{figure}
 
+As shown in Figure~\ref{fig:ndims_vs_decomp_speed}, \minesp becomes faster as the number of columns increases and as the number of columns approaches multiples of 32 for 8-bit data or 16 for 16-bit data. These values correspond to the 32B width of a SIMD register on the tested machine. These results demonstrate that there is small but consistent overheaded associated with using \fire over delta coding, but that both approaches are extremely fast. Without Huffman coding, \minesp decompresses at multiple GB/s except with very few ($<$5) columns.
 
 % ------------------------------------------------
-\subsection{Compression Speed}
+\subsection{Compression Speed} \label{sec:comp_speed}
 % ------------------------------------------------
 
-Same thing for compression speed (Figure~\ref{fig:ndims_vs_decomp_speed}). Except we didn't vectorize the compressor so it's pretty insensitive to dimensionality. We refrained from doing so since 1) the resulting implementation would exactly mirror the decompressor, and have similar performance characteristics, so maybe we can justify not spending the effort; and 2) because this is more analogous to what one would expect if the compressor were run on a low-power device, which would almost certainly lack vector instructions. We want to argue that it only needs to be fast enough to keep up with data rate.
-
-The dip after 4 columns in 8-bit data and 2 columns in 16-bit data corresponds to the switch from column-major bitpacking to rowmajor bitpacking.
+Though less important than decompression speed, it is also important that \mine's compression speed be fast enough to keep up with the rate of data ingestion. We measured \mine's compression speed using the same methodology as decompression speed. As shown in Figure~\ref{fig:ndims_vs_comp_speed}, \minesp \\ compresses 8-bit data at over 200GB/s on the highest-ratio setting and 600GB/s on the fastest setting. These numbers are over 50\% larger on 16-bit data. Moreover, this implementation is not vectorized, and would be even faster if it were. We refrained from vectorizing in our prototype implementation since 1) 200MB/s is already fast enough to run in real time even if every thread were fed data from its own gigabit ethernet connection, and 2) edge devices often lack vector instructions, so the below speeds are more indicative of the rate at which these devices could compress (if scaled to the appropriate clock frequency).
 
 \begin{figure}[h]
 \begin{center}
     \includegraphics[width=\linewidth]{paper/ndims_vs_comp_speed}
-    \caption{Because \minesp compression is implemented without vectorization, its throughput is largely insenstive to the number of columns. I have no idea why it's oscillating in the lower plots.}
+    \caption{\minesp compresses at hundred of MB/s even in the slowest case: the highest-ratio setting with incompressible 8-bit data (left). On lower settings with 16-bit data, it can exceed 1GB/s.}
     \label{fig:ndims_vs_comp_speed}
 \end{center}
 \end{figure}
 
-% Look, a bar graph. Probably 4 rows x 2 cols of subplots, with row corresponding to one dataset and cols corresponding to {8b, 16b}. Each algorithm gets one bar in each subplot. Ideally, run everything a few times and show standard deviations or error bars. Maybe actually have
+% Same thing for compression speed (Figure~\ref{fig:ndims_vs_comp_speed}). Except we didn't vectorize the compressor so it's pretty insensitive to dimensionality. We refrained from doing so since 1) the resulting implementation would exactly mirror the decompressor, and have similar performance characteristics, so maybe we can justify not spending the effort; and 2) because this is more analogous to what one would expect if the compressor were run on a low-power device, which would almost certainly lack vector instructions. We want to argue that it only needs to be fast enough to keep up with data rate.
+
+The dip after 4 columns in 8-bit data and 2 columns in 16-bit data corresponds to the switch from column-major bitpacking to rowmajor bitpacking.
+
+% % ------------------------------------------------
+% \subsection{\mine vs Other Transforms}
+% % ------------------------------------------------
+
+% We repeated the above experiments with various preprocessors (Figure~\ref{fig:ndims_vs_preproc_speed}.
 
 % \begin{figure}[h]
 % \begin{center}
-% % \includegraphics[width=\linewidth, trim={0 1cm 0 0},clip]{moose0}
-% \includegraphics[width=\linewidth]{encoding_speed}
-% \vspace*{-2mm}
-% % \caption{Bolt encodes data vectors significantly faster than existing algorithms.}
-% \caption{Bolt encodes both data and query vectors significantly faster than similar algorithms.}
-% \label{fig:encoding_speeds}
+%     \includegraphics[width=\linewidth]{paper/ndims_vs_comp_speed}
+%     \caption{\fire is just as fast as double delta coding and only slightly slower than delta coding.}
+%     \label{fig:ndims_vs_preproc_speed}
 % \end{center}
 % \end{figure}
 
-% \vspace{-2mm}
+% % ------------------------------------------------
+% \subsection{Quantization Error}
+% % ------------------------------------------------
 
+% % Given that many time series as stored as floating point values, it is natural to wonder what
 
-% ------------------------------------------------
-\subsection{\mine vs Other Transforms}
-% ------------------------------------------------
+% While floating point values are not the focus of our paper, a straightforward means of generalizing \minesp to floats is to first quantize the floating point data. The downside of doing this is that, because floating point numbers are not uniformly distributed along the real line, such quantization can be lossy. We therefore carried out an experiment to determine how lossy such quantization tends to be on real data.
 
-We repeated the above experiments with various preprocessors (Figure~\ref{fig:ndims_vs_preproc_speed}.
+% We did this by quantizing the UCR time series datasets and measuring the noise that this introduces relative to the variance of the data. Specifically, we linearly offset and rescaled the time series in each dataset such that the minimum and maximum values in any time series correspond to $(0, 255)$ for 8-bit quantization or $(0, 65,535)$ for 16-bit quantization. We then obtained the quantized data by applying the floor function to this linearly transformed data.
 
-\begin{figure}[h]
-\begin{center}
-    \includegraphics[width=\linewidth]{paper/ndims_vs_comp_speed}
-    \caption{\fire is just as fast as double delta coding and only slightly slower than delta coding.}
-    \label{fig:ndims_vs_preproc_speed}
-\end{center}
-\end{figure}
+% To measure the error this introduces, we then inverted the linear transformation and computed the mean squared error between the original and this ``reconstructed'' data. The resulting error values for each dataset, normalized by the dataset's variance, are shown in Figure~\ref{fig:quantize_errs}. These normalized values can be understood as signal-to-noise ratio measurements, where the noise is the quantization error. As the figure illustrates, the quantization error is orders of magnitude smaller than the variance for nearly all datasets, and never worse than one order of magnitude even for 8-bit quantization.
 
-% ------------------------------------------------
-\subsection{Quantization Error}
-% ------------------------------------------------
+% \begin{figure}[h]
+% \begin{center}
+%     \includegraphics[width=\linewidth]{paper/quantize_errs}
+%     \caption{Quantizing floating-point time series introduces error that is orders of magnitude smaller than the variance of the data. For every 10 Decibels of signal-to-noise ratio, the variance is 10 times larger than the quantization error. Even with 8 bits, quantization introduces less than 1\% error on 84 of 85 datasets.}
+%     \label{fig:quantize_errs}
+% \end{center}
+% \end{figure}
 
-% Given that many time series as stored as floating point values, it is natural to wonder what
-
-While floating point values are not the focus of our paper, a straightforward means of generalizing \minesp to floats is to first quantize the floating point data. The downside of doing this is that, because floating point numbers are not uniformly distributed along the real line, such quantization can be lossy. We therefore carried out an experiment to determine how lossy such quantization tends to be on real data.
-
-We did this by quantizing the UCR time series datasets and measuring the noise that this introduces relative to the variance of the data. Specifically, we linearly offset and rescaled the time series in each dataset such that the minimum and maximum values in any time series correspond to $(0, 255)$ for 8-bit quantization or $(0, 65,535)$ for 16-bit quantization. We then obtained the quantized data by applying the floor function to this linearly transformed data.
-
-To measure the error this introduces, we then inverted the linear transformation and computed the mean squared error between the original and this ``reconstructed'' data. The resulting error values for each dataset, normalized by the dataset's variance, are shown in Figure~\ref{fig:quantize_errs}. These normalized values can be understood as signal-to-noise ratio measurements, where the noise is the quantization error. As the figure illustrates, the quantization error is orders of magnitude smaller than the variance for nearly all datasets, and never worse than one order of magnitude even for 8-bit quantization.
-
-\begin{figure}[h]
-\begin{center}
-    \includegraphics[width=\linewidth]{paper/quantize_errs}
-    \caption{Quantizing floating-point time series introduces error that is orders of magnitude smaller than the variance of the data. For every 10 Decibels of signal-to-noise ratio, the variance is 10 times larger than the quantization error. Even with 8 bits, quantization introduces less than 1\% error on 84 of 85 datasets.}
-    \label{fig:quantize_errs}
-\end{center}
-\end{figure}
-
-This of course does not indicate that all time series can be safely quantized. Two counterexamples of which we are aware are 1) timestamps where microsecond or nanosecond resolution matters, and 2) GPS coordinates, where small decimal places may correspond to many meters. However, the above results suggest that quantization is a suitable means of applying \minesp to floating-point data in many applications. This is bolstered by previous work showing that quantization even to a mere six bits [] rarely harms classification accuracy, and quantizing to two sometimes improves it [].
+% This of course does not indicate that all time series can be safely quantized. Two counterexamples of which we are aware are 1) timestamps where microsecond or nanosecond resolution matters, and 2) GPS coordinates, where small decimal places may correspond to many meters. However, the above results suggest that quantization is a suitable means of applying \minesp to floating-point data in many applications. This is bolstered by previous work showing that quantization even to a mere six bits [] rarely harms classification accuracy, and quantizing to two sometimes improves it [].
 
 % ------------------------------------------------
 \subsection{When to use Sprintz}
 % ------------------------------------------------
+
+% The above speed benchmarks provide a fairly
+
+The above experiments provide a fairly complete characterization of \mine's speed and a statistically meaningful assessment of its compression ratio in general. However, because one often wants to obtain the best results on a \textit{particular} dataset, it is helpful to know when \minesp is likely to work well or poorly.
+
+Regarding speed, we have found that the dimensionality and bitwidth almost completely determine \mine's throughput (c.f. Sections~\ref{sec:decomp_speed},~\ref{sec:comp_speed}). The exception is when there are long runs of constants, in which case the decompression speed approaches the speed of \texttt{memcpy} for \texttt{Sprintz -1} or the speed of \fire for \texttt{Sprintz -2} or \texttt{Sprintz -3}.
+% TODO run RLE stuff for speed vs ndims and then ref the sections at end of this paragraph
+
+% Regarding accuracy, there are several relevant data characteristics.
+Regarding accuracy, the dominant requirement is that the data must be relatively smooth. When this is not the case, predictive filtering (with only a two-component filter) has little value. Indeed, it can even be counterproductive. Consider the case of data that has an isolated nonzero value every few samples---e.g., the sequence $\{0, -1, 0, 0\}$. When delta coded, this yields $\{0, -1, 1, 0\}$, which requires an extra bit for \minesp bit packing. In general, \minesp has to pay the cost of abrupt changes twice---once when they happen, and once when they ``revert'' to the previous state.
+
+
+% However, they do not indicate when it is desirable to use \minesp instead of another method. We suggest the following decision criteria, and ilustrate corresponding success and failure cases below.
+
+
 
 Here are some example multivariate time series where \minesp does well. Note that this also serves to confirm our speed results.
 
@@ -223,41 +235,41 @@ Here are some example multivariate time series where \minesp does poorly relativ
 \end{center}
 \end{figure}
 
-% ------------------------------------------------
-\subsection{Query acceleration}
-% ------------------------------------------------
+% % ------------------------------------------------
+% \subsection{Query acceleration}
+% % ------------------------------------------------
 
-\begin{enumerate}
-\item Sliding Mean on 8b data?
-\item Max on 16b data? (Self-driving car acceleration, averaged over two time steps?)
-\item Sliding linear classifier? Examples of action (e.g. "climbing stairs") using MSRC-12 or PAMAP? "Sliding on ice" or something in car data?
-\end{enumerate}
+% \begin{enumerate}
+% \item Sliding Mean on 8b data?
+% \item Max on 16b data? (Self-driving car acceleration, averaged over two time steps?)
+% \item Sliding linear classifier? Examples of action (e.g. "climbing stairs") using MSRC-12 or PAMAP? "Sliding on ice" or something in car data?
+% \end{enumerate}
 
-We can also compare to Sprintz without pushing queries down into the decompress loop (ie, decompress everything first and then query) to show the benefit of our quasi-pushdown; I say ``quasi'' because, except when data gets run-length-encoded, we still do have to decompress it---just not store the decompressed output.
+% We can also compare to Sprintz without pushing queries down into the decompress loop (ie, decompress everything first and then query) to show the benefit of our quasi-pushdown; I say ``quasi'' because, except when data gets run-length-encoded, we still do have to decompress it---just not store the decompressed output.
 
-% ------------------------------------------------
-\subsection{Other Findings}
-% ------------------------------------------------
+% % ------------------------------------------------
+% \subsection{Other Findings}
+% % ------------------------------------------------
 
-We encountered a number of counter-intuitive findings regarding what does and does not improve compression ratio. In the interest of facilitating future research in this area, we briefly describe several of them here.
+% We encountered a number of counter-intuitive findings regarding what does and does not improve compression ratio. In the interest of facilitating future research in this area, we briefly describe several of them here.
 
-1) Ordering residuals by relative frequency. Absolute value correlates almost perfectly with relative frequency. % Since we'll plot it anyway, point out that residuals usually aren't Laplace distro; more like a power law (in constrast findings in \cite{shorten} for music). Or maybe make that its own bullet.
+% 1) Ordering residuals by relative frequency. Absolute value correlates almost perfectly with relative frequency. % Since we'll plot it anyway, point out that residuals usually aren't Laplace distro; more like a power law (in constrast findings in \cite{shorten} for music). Or maybe make that its own bullet.
 
-2) Residuals are heavier-tailed than a Laplace distribution, but less heavy-tailed than a power law (in constrast findings in \cite{shorten} for music).
+% 2) Residuals are heavier-tailed than a Laplace distribution, but less heavy-tailed than a power law (in constrast findings in \cite{shorten} for music).
 
-3) Nearest-neighbor search. Helped but not worth the bit cost to provide the neighbor index; true for blocks of size 8, 16, 32. (delta then nn) is much bettern than (nn then delta). This is especially interesting given how many motif discovery papers use compression as a heuristic for finding repeating patterns; the disconnect is that they don't include the cost of specifying that a discovered pattern is present.
+% 3) Nearest-neighbor search. Helped but not worth the bit cost to provide the neighbor index; true for blocks of size 8, 16, 32. (delta then nn) is much bettern than (nn then delta). This is especially interesting given how many motif discovery papers use compression as a heuristic for finding repeating patterns; the disconnect is that they don't include the cost of specifying that a discovered pattern is present.
 
 
-% ------------------------------------------------
-\subsection{Discussion}
-% ------------------------------------------------
+% % ------------------------------------------------
+% \subsection{Discussion}
+% % ------------------------------------------------
 
-Here's a plot of our expected read throughput as a function of number of cores, assuming a 20GB/s memory bandwidth. Is this informative? It's trying to connect it to databases and show that the combination of our high speed and high compression ratio is advantageous. I think it invites questions regarding why we didn't collect real data for this.
+% Here's a plot of our expected read throughput as a function of number of cores, assuming a 20GB/s memory bandwidth. Is this informative? It's trying to connect it to databases and show that the combination of our high speed and high compression ratio is advantageous. I think it invites questions regarding why we didn't collect real data for this.
 
-\begin{figure}[h]
-\begin{center}
-    \includegraphics[width=\linewidth]{paper/expected_thruput}
-    \caption{Expected read throughput on the UCI Gas dataset for various algorithms. Presumably \minesp will do better here since it has the best speed/ratio tradeoff, but who knows since this is currently fake data.}
-    \label{fig:expected_thruput}
-\end{center}
-\end{figure}
+% \begin{figure}[h]
+% \begin{center}
+%     \includegraphics[width=\linewidth]{paper/expected_thruput}
+%     \caption{Expected read throughput on the UCI Gas dataset for various algorithms. Presumably \minesp will do better here since it has the best speed/ratio tradeoff, but who knows since this is currently fake data.}
+%     \label{fig:expected_thruput}
+% \end{center}
+% \end{figure}

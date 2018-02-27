@@ -14,7 +14,7 @@ Many fewer algorithms exist for lossless time series compression. For floating-p
 
 For lossless compression of integer time series (including timestamps), existing approaches include directly applying general-purpose compressors \cite{respawnDB, openTSDB, chronicleDB, kairosDB, druid}, (double) delta encoding and then applying an integer compressor \cite{influxDB, gorilla}, or predictive coding and byte-packing \cite{akumuli}. These approaches can work well, but tend to offer both less compression and less speed than \mine.
 
-A final noteworthy method is Blosc \cite{blosc}. While not intended solely for time series (or integers), Blosc's assumption that every $k$ bytes (or bits \cite{bitshuf}) will be correlated for some $k$ is a natural fit for multivariate time series. %grouping of correlated bytes and/or bits makes it well-suited for multivariate time series.
+% A final noteworthy method is Blosc \cite{blosc}. While not intended solely for time series (or integers), Blosc's assumption that every $k$ bytes (or bits \cite{bitshuf}) will be correlated for some $k$ is a natural fit for multivariate time series. %grouping of correlated bytes and/or bits makes it well-suited for multivariate time series.
 
 
 % ------------------------ parquet
@@ -77,7 +77,7 @@ Both bit packing and Golomb coding are bit-based methods in that they do not gua
 
 
 \subsection{General-purpose compression}
-While \minesp is not intended to be a general-purpose compression algorithm, a reasonable alternative to using a specialized method would be to apply a general-purpose compression algorithm, possibly after delta coding or other preprocessing. Thanks largely to the development of Asymmetric Numeral Systems (ANS) \cite{ans} for entropy coding, general purpose compressors have advanced greatly in recent years. In particular, Zstd \cite{zstd}, Brotli \cite{brotli}, LZ4 \cite{lz4} and others have attained speed-compression tradeoffs significantly better than traditional methods such as GZIP \cite{gzip}, BZIP \cite{lzo}, etc. As described in Section~\ref{sec:intro}, however, these methods have much higher memory requirements that \mine.
+While \minesp is not intended to be a general-purpose compression algorithm, a reasonable alternative to using a specialized method would be to apply a general-purpose compression algorithm, possibly after delta coding or other preprocessing. Thanks largely to the development of Asymmetric Numeral Systems (ANS) \cite{ans} for entropy coding, general purpose compressors have advanced greatly in recent years. In particular, Zstd \cite{zstd}, Brotli \cite{brotli}, LZ4 \cite{lz4} and others have attained speed-compression tradeoffs significantly better than traditional methods such as GZIP \cite{gzip}, LZO \cite{lzo}, etc. As described in Section~\ref{sec:intro}, however, these methods have much higher memory requirements that \mine.
 
 % Also of note is Blosc \cite{blosc}, which is especially applicable to multivariate time series as a result of its grouping correlated bits and/or bytes together during preprocessing.
 
