@@ -54,14 +54,14 @@ For multivariate datasets, we allowed all methods but our own to operate on the 
 % \item \textbf{DeltaDelta} --- Delta encoding the delta encoding, as done in some popular time series databases \cite{something, influxDB}.
 \end{itemize}
 
-For Zlib, Zstd, and LZO, we use compression levels of 1 and 9, which correspond to lowest compression but highest speed and high compression but lower speed, respectively.
+For Zlib and Zstd, we use a compression level of 9 unless stated otherwise. This level heavily prioritizes compression ratio at the expense of increased compression time. We use it to improve the results for these methods in experiments wherein compression time is not penalized.
 
 We also assess three variations of \mine, corresponding to different speed/ratio tradeoffs. Following the convention used by existing compressors, we identify these variations as compression levels 1 to 3:
 \begin{enumerate}
 \itemsep-1mm
-    \item \textbf{\texttt{Sprintz -3}}. The full algorithm described in Section~\ref{sec:method}.
-    \item \textbf{\texttt{Sprintz -2}}. Like \texttt{Sprintz -3}, but without Huffman coding.
-    \item \textbf{\texttt{Sprintz -1}}. Like \texttt{Sprintz -2}, but with delta coding instead of \fire as the forecaster.
+    \item \textbf{\texttt{SprintzFIRE+Huf}}. The full algorithm described in Section~\ref{sec:method}.
+    \item \textbf{\texttt{SprintzFIRE}}. Like \texttt{SprintzFIRE+Huf}, but without Huffman coding.
+    \item \textbf{\texttt{SprintzDelta}}. Like \texttt{SprintzFIRE}, but with delta coding instead of \fire as the forecaster.
 \end{enumerate}
 
 % We also assess the above methods when applied to the delta-encoded representation of the time series, as well as the double-delta-encoded representation. We do not do this for FLAC and FastPFOR since they have similar preprocessing steps built in.
@@ -86,7 +86,11 @@ The distributions of compression ratios on these datasets for the above algorith
 
 Perhaps counter-intuitively, 8-bit data tends to yield higher compression ratios than 16-bit data. This is a product of the fact that the number of bits that are ``predictable'' is roughly constant. I.e., suppose that an algorithm can correctly predict the four most significant bits of a given value; this enables a 2:1 compression ratio in the 8-bit case, but only a 16:12 = 4:3 ratio in the 16-bit case. Interestingly, the fact that trailing bits tend to be too noisy to compress also suggests that one could use a lower bitwidth with little loss of information. % A more concise explanation is that all but the top few bits are difficult to distinguish from noise, so the larger the fraction of the value these bits constitute, the greater the compressibility.
 
-To assess \mine's performance statistically, we use a Nemenyi test \cite{nemenyiTest} as strongly recommended in \cite{cdDiagrams}. This test compares the mean rank of each algorithm across all datasets, where the highest-ratio algorithm is given rank 1, the second-highest rank 2, and so on. This test is desirable since it accounts for ratios varying as a function of dataset. Moreover, it prevents a small number of datasets from dominating the results. E.g., if we were to compress the entire archive as one blob, the largest several datasets would dominate the metric. Similarly, if we averaged the ratios, the datasets with highest variance would dominate. % admiting the largest and/or higest-variance ratios would dominate. % admiting the largest ratios would dominate.
+To assess \mine's performance statistically, we use a Nemenyi test \cite{nemenyiTest} as recommended in \cite{cdDiagrams}. This test compares the mean rank of each algorithm across all datasets, where the highest-ratio algorithm is given rank 1, the second-highest rank 2, and so on.
+
+The inuition for why this test is desirable is that not only accounts for multiple hypothesis testing in making pairwise comparisons, but also prevents a small number of datasets from dominating the results. To see why the latter attribute is important, consider two obvious alternatives to using ranks. If we treated the entire archive as one blob and reported the overall ratio, the metric would be dominated by performance on a small number of especially large datasets. If we instead compressed each dataset separately but operated on the ratios, instead of ranks, datasets with high ratios (and likely high variance) would dominate. By using ranks on each dataset, the Nemenyi test avoids both of these pitfalls.
+
+ % E.g., if we were to compress the entire archive as one blob, the largest several datasets would dominate the metric. Similarly, if we averaged the ratios, the datasets with highest variance would dominate. % admiting the largest and/or higest-variance ratios would dominate. % admiting the largest ratios would dominate.
 
 The results of the Nemenyi test are visualized in the Critical Difference Diagrams \cite{cdDiagrams} of Figure~\ref{fig:ratioCD}. These diagrams show the mean rank of each algorithm on the x-axis and join methods that are not statistically significantly different with a line. \minesp on high compression settings is significantly better than any existing algorithm. On slightly lower settings, it is still as effective as the best current methods (Zlib and Zstd).
 
@@ -106,6 +110,8 @@ The results of the Nemenyi test are visualized in the Critical Difference Diagra
     \label{fig:ratioCD}
 \end{center}
 \end{figure}
+
+In addition to this overall comparison, it is important to assess whether \fire improves performance compared to delta coding. Since this is a single hypothesis with matched pairs, we assess it using a Wilcoxon signed rank test. \fire wins on 51 of 85 datasets in the 8-bit case and 74 of 85 in the 16-bit case. This corresponds to p-values of .0094 and 4.09e-12, respectively. These results suggest that \fire is generally beneficial on 8-bit data but even more beneficial on 16-bit data.
 
 % As a more intuitive illustration, we also include the distributions of raw compression ratios (Figure~\ref{fig:ratioBox}). \minesp exhibits consistently strong performance across almost all datasets. High-speed codecs such as Snappy, LZ4, and the integer codecs (FastPFOR, SIMDBP128, Simple8B) hardely compress most datasets at all.
 
@@ -153,7 +159,7 @@ Though less important than decompression speed, it is also important that \mine'
 \begin{figure}[h]
 \begin{center}
     \includegraphics[width=\linewidth]{paper/ndims_vs_comp_speed}
-    \caption{\minesp compresses at hundred of MB/s even in the slowest case: the highest-ratio setting with incompressible 8-bit data (left). On lower settings with 16-bit data, it can exceed 1GB/s.}
+    \caption{\minesp compresses at hundred of MB/s even in the slowest case: the highest-ratio setting with incompressible 8-bit data. On lower settings with 16-bit data, it can exceed 1GB/s.}
     \label{fig:ndims_vs_comp_speed}
 \end{center}
 \end{figure}
@@ -162,19 +168,19 @@ Though less important than decompression speed, it is also important that \mine'
 
 The dip after 4 columns in 8-bit data and 2 columns in 16-bit data corresponds to the switch from column-major bitpacking to rowmajor bitpacking.
 
-% % ------------------------------------------------
-% \subsection{\mine vs Other Transforms}
-% % ------------------------------------------------
+% ------------------------------------------------
+\subsection{FIRE Speed}
+% ------------------------------------------------
 
-% We repeated the above experiments with various preprocessors (Figure~\ref{fig:ndims_vs_preproc_speed}.
+To characterize the speed of the \fire we repeated the above throughput experiments with both it and two other predictors commonly seen in the literature: delta and double delta coding. As shown in Figure~\ref{fig:ndims_vs_preproc_speed}, \fire can compress at up to 5GB/s and decompress at up to 6GB/s. This is nearly the exact same speed as the competing methods and close to the 7.5 GB/s speed of \texttt{memcpy} on the tested machine. Note that ``compression'' and ``decompression'' here mean converting raw samples to errors and reconstructing samples from sequences of errors, respectively. These operations do not change the data size, but are what run as subroutines in the \minesp compressor and decompressor.
 
-% \begin{figure}[h]
-% \begin{center}
-%     \includegraphics[width=\linewidth]{paper/ndims_vs_comp_speed}
-%     \caption{\fire is just as fast as double delta coding and only slightly slower than delta coding.}
-%     \label{fig:ndims_vs_preproc_speed}
-% \end{center}
-% \end{figure}
+\begin{figure}[h]
+\begin{center}
+    \includegraphics[width=\linewidth]{paper/ndims_vs_preproc_speed}
+    \caption{\fire is just as fast as double delta coding and only slightly slower than delta coding. For a moderate number of columns, it runs at 5-6GB/s on a machine with 7.5GB/s \texttt{memcpy} speed.}
+    \label{fig:ndims_vs_preproc_speed}
+\end{center}
+\end{figure}
 
 % ------------------------------------------------
 \subsection{When to use Sprintz}
@@ -184,7 +190,7 @@ The dip after 4 columns in 8-bit data and 2 columns in 16-bit data corresponds t
 
 The above experiments provide a fairly complete characterization of \mine's speed and a statistically meaningful assessment of its compression ratio in general. However, because one often wants to obtain the best results on a \textit{particular} dataset, it is helpful to know when \minesp is likely to work well or poorly.
 
-Regarding speed, we have found that the dimensionality and bitwidth almost completely determine \mine's throughput (c.f. Sections~\ref{sec:decomp_speed},~\ref{sec:comp_speed}). The exception is when there are long runs of constants, in which case the decompression speed approaches the speed of \texttt{memcpy} for \texttt{Sprintz -1} or the speed of \fire for \texttt{Sprintz -2} and \texttt{Sprintz -3}.
+Regarding speed, we have found that the dimensionality and bitwidth almost completely determine \mine's throughput (c.f. Sections~\ref{sec:decomp_speed},~\ref{sec:comp_speed}). The exception is when there are long runs of constants, in which case the decompression speed approaches the speed of \texttt{memcpy} for \texttt{SprintzDelta} or the speed of \fire for \texttt{SprintzFIRE} and \texttt{SprintzFIRE+Huf}.
 % TODO run RLE stuff for speed vs ndims and then ref the sections at end of this paragraphor \
 
 % Regarding accuracy, there are several relevant data characteristics.
@@ -197,7 +203,7 @@ As an illustration of when \minesp is and is not preferable, we run it and the c
 \begin{figure}[h]
 \begin{center}
     \includegraphics[width=\linewidth]{paper/tradeoff_success}
-    \caption{\minesp achieves excellent compression ratios and speed on smooth time series with many variables.}
+    \caption{\minesp achieves excellent compression ratios and speed on relatively smooth time series with many variables.}
     \label{fig:tradeoff_success}
 \end{center}
 \end{figure}

@@ -33,7 +33,11 @@ To facilitate a precise explanation of \minesp, we introduce the following defin
 
 These components are run on blocks of eight samples (motivated in Section~\ref{sec:bitpacking}), and can be modified to yield different compression-speed tradeoffs. Concretely, one can 1) skip entropy coding for greater speed and 2) choose between delta coding and our online learning method as forecasting algorithms. Our method is slightly slower but often improves compression.
 
-We chose these steps since they allow high speed while also exploiting the characteristics of time series. Forecasting leverages the high correlation of successive samples to reduce the entropy of the data. Run-length encoding allows for extreme compression in the (common) scenario that there is no change in the data---e.g., a user's smartphone may be stationary for many hours while the user is asleep. Bit packing is not desirable \textit{per se}, but provides a vectorizable and low-memory means of reducing the encoding size. Similarly, Huffman coding is not specific to time series but has low memory requirements and improves compression ratios.
+We chose these steps since they allow high speed while also exploiting the characteristics of time series. Forecasting leverages the high correlation of successive samples to reduce the entropy of the data. Run-length encoding allows for extreme compression in the (common) scenario that there is no change in the data---e.g., a user's smartphone may be stationary for many hours while the user is asleep. Bit packing, at least using the scheme we introduce, exploits temporal correlation in the variability of the data by using the same bitwidth for points that are within the same block. Huffman coding is not specific to time series but has low memory requirements and improves compression ratios.
+
+ % in general is not especially geared towards time series, but our bit packing scheme exploits temporal correlation in the variability of the data by using the same bitwidth for points that are within the same block. Huffman coding is not specific to time series but has low memory requirements and improves compression ratios.
+
+ % \textit{per se}, but provides a vectorizable and low-memory means of reducing the encoding size. Similarly, Huffman coding is not specific to time series but has low memory requirements and improves compression ratios.
 
 Before describing the four components in greater detail, we first provide an outline of the overall algorithms for compressing and decompressing blocks of data.
 
