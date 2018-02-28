@@ -39,7 +39,7 @@ For multivariate datasets, we allowed all methods but our own to operate on the 
 \item \textbf{SIMD-BP128} \cite{fastpfor} --- The fastest known method of compressing integers.
 \item \textbf{FastPFOR} \cite{fastpfor} --- An algorithm similar to SIMD-BP128, but with better compression.
 \item \textbf{Simple8b} \cite{simple8b} --- An integer algorithm compression algorithm used by InfluxDB \cite{influxDB}.
-\item \textbf{LZO} \cite{lzo} --- A stable and widely-used dictionary compressor employed by KairosDB \cite{kairosDB} and LittleTable \cite{littleTable}.
+% \item \textbf{LZO} \cite{lzo} --- A stable and widely-used dictionary compressor employed by KairosDB \cite{kairosDB} and LittleTable \cite{littleTable}.
 \item \textbf{Snappy} \cite{snappy} --- A general-purpose compression algorithm developed by Google and used by InfluxDB, KairosDB, OpenTSDB \cite{openTSDB}, RocksDB \cite{rocksDB}, the Hadoop Distributed File System \cite{hdfs} and numerous other projects.
 \item \textbf{Zstd} \cite{zstd} --- Facebook's state-of-the-art general purpose compression algorithm. It is based on LZ77 and entropy codes using a mix of Huffman coding and Finite State Entropy (FSE) \cite{fse}. It is available in RocksDB \cite{rocksDB}.
 % \item \textbf{Brotli} \cite{brotli} --- A recent compression algorithm introduced by Google and now standardized as a web content-encoding type.
@@ -54,7 +54,9 @@ For multivariate datasets, we allowed all methods but our own to operate on the 
 % \item \textbf{DeltaDelta} --- Delta encoding the delta encoding, as done in some popular time series databases \cite{something, influxDB}.
 \end{itemize}
 
-We also assess three variations of \mine, corresponding to different speed/ratio tradeoffs. Following the convention used by existing compressors, we identify these variations as compression ``levels'' 1 to 3:
+For Zlib, Zstd, and LZO, we use compression levels of 1 and 9, which correspond to lowest compression but highest speed and high compression but lower speed, respectively.
+
+We also assess three variations of \mine, corresponding to different speed/ratio tradeoffs. Following the convention used by existing compressors, we identify these variations as compression levels 1 to 3:
 \begin{enumerate}
 \itemsep-1mm
     \item \textbf{\texttt{Sprintz -3}}. The full algorithm described in Section~\ref{sec:method}.
@@ -92,14 +94,14 @@ The results of the Nemenyi test are visualized in the Critical Difference Diagra
 
 % Another option would be to compute the compression ratio for each dataset and average these numbers. This is also undesirable for similar reasons. Specifically, it allows performance on a small number of highly compressible datasets to dominate the overall metric.
 
-% Because these considerations closely parallel those associated with comparing classifiers across multiple datasets, we use the methodology outlined in \cite{cdDiagrams}. This means computing the rank of each algorithm for each dataset and comparing the mean ranks using a Nemenyi test. A rank of 1 indicates the best ratio, while 2 indicates the second-best ratio, and so on.
+% Because these considerations closely parallel those associated with comparing classifiers across multiple datasets, we use the methodology outlined in \cite{_Diagrams}. This means computing the rank of each algorithm for each dataset and comparing the mean ranks using a Nemenyi test. A rank of 1 indicates the best ratio, while 2 indicates the second-best ratio, and so on.
 
 % Results using this methodology are shown as a Critical Difference Diagram \cite{cdDiagrams} in Figure~\ref{fig:ratioCD}. Sprintz on high compression settings is significantly better than any existing algorithm. On slightly lower settings, it is still as effective as the best current methods (Zlib and Zstd).
 
 \begin{figure}[h]
 \begin{center}
-    \includegraphics[width=\linewidth]{paper/cd_diagram_8b_deltas=0}
-    \includegraphics[width=\linewidth]{paper/cd_diagram_16b_deltas=0}
+    \includegraphics[width=\linewidth]{paper/cd_diagram_8b}
+    \includegraphics[width=\linewidth]{paper/cd_diagram_16b}
     \caption{Compression performance of different algorithms on the UCR Time Series Archive. The x-axis is the mean rank of each method, where rank 1 on a given dataset had the highest ratio. Methods joined with a horizontal black line are not statistically significantly different.}
     \label{fig:ratioCD}
 \end{center}
@@ -174,28 +176,6 @@ The dip after 4 columns in 8-bit data and 2 columns in 16-bit data corresponds t
 % \end{center}
 % \end{figure}
 
-% % ------------------------------------------------
-% \subsection{Quantization Error}
-% % ------------------------------------------------
-
-% % Given that many time series as stored as floating point values, it is natural to wonder what
-
-% While floating point values are not the focus of our paper, a straightforward means of generalizing \minesp to floats is to first quantize the floating point data. The downside of doing this is that, because floating point numbers are not uniformly distributed along the real line, such quantization can be lossy. We therefore carried out an experiment to determine how lossy such quantization tends to be on real data.
-
-% We did this by quantizing the UCR time series datasets and measuring the noise that this introduces relative to the variance of the data. Specifically, we linearly offset and rescaled the time series in each dataset such that the minimum and maximum values in any time series correspond to $(0, 255)$ for 8-bit quantization or $(0, 65,535)$ for 16-bit quantization. We then obtained the quantized data by applying the floor function to this linearly transformed data.
-
-% To measure the error this introduces, we then inverted the linear transformation and computed the mean squared error between the original and this ``reconstructed'' data. The resulting error values for each dataset, normalized by the dataset's variance, are shown in Figure~\ref{fig:quantize_errs}. These normalized values can be understood as signal-to-noise ratio measurements, where the noise is the quantization error. As the figure illustrates, the quantization error is orders of magnitude smaller than the variance for nearly all datasets, and never worse than one order of magnitude even for 8-bit quantization.
-
-% \begin{figure}[h]
-% \begin{center}
-%     \includegraphics[width=\linewidth]{paper/quantize_errs}
-%     \caption{Quantizing floating-point time series introduces error that is orders of magnitude smaller than the variance of the data. For every 10 Decibels of signal-to-noise ratio, the variance is 10 times larger than the quantization error. Even with 8 bits, quantization introduces less than 1\% error on 84 of 85 datasets.}
-%     \label{fig:quantize_errs}
-% \end{center}
-% \end{figure}
-
-% This of course does not indicate that all time series can be safely quantized. Two counterexamples of which we are aware are 1) timestamps where microsecond or nanosecond resolution matters, and 2) GPS coordinates, where small decimal places may correspond to many meters. However, the above results suggest that quantization is a suitable means of applying \minesp to floating-point data in many applications. This is bolstered by previous work showing that quantization even to a mere six bits [] rarely harms classification accuracy, and quantizing to two sometimes improves it [].
-
 % ------------------------------------------------
 \subsection{When to use Sprintz}
 % ------------------------------------------------
@@ -204,36 +184,64 @@ The dip after 4 columns in 8-bit data and 2 columns in 16-bit data corresponds t
 
 The above experiments provide a fairly complete characterization of \mine's speed and a statistically meaningful assessment of its compression ratio in general. However, because one often wants to obtain the best results on a \textit{particular} dataset, it is helpful to know when \minesp is likely to work well or poorly.
 
-Regarding speed, we have found that the dimensionality and bitwidth almost completely determine \mine's throughput (c.f. Sections~\ref{sec:decomp_speed},~\ref{sec:comp_speed}). The exception is when there are long runs of constants, in which case the decompression speed approaches the speed of \texttt{memcpy} for \texttt{Sprintz -1} or the speed of \fire for \texttt{Sprintz -2} or \texttt{Sprintz -3}.
-% TODO run RLE stuff for speed vs ndims and then ref the sections at end of this paragraph
+Regarding speed, we have found that the dimensionality and bitwidth almost completely determine \mine's throughput (c.f. Sections~\ref{sec:decomp_speed},~\ref{sec:comp_speed}). The exception is when there are long runs of constants, in which case the decompression speed approaches the speed of \texttt{memcpy} for \texttt{Sprintz -1} or the speed of \fire for \texttt{Sprintz -2} and \texttt{Sprintz -3}.
+% TODO run RLE stuff for speed vs ndims and then ref the sections at end of this paragraphor \
 
 % Regarding accuracy, there are several relevant data characteristics.
 Regarding accuracy, the dominant requirement is that the data must be relatively smooth. When this is not the case, predictive filtering (with only a two-component filter) has little value. Indeed, it can even be counterproductive. Consider the case of data that has an isolated nonzero value every few samples---e.g., the sequence $\{0, -1, 0, 0\}$. When delta coded, this yields $\{0, -1, 1, 0\}$, which requires an extra bit for \minesp bit packing. In general, \minesp has to pay the cost of abrupt changes twice---once when they happen, and once when they ``revert'' to the previous state.
 
+Another specific case in which \mine is undesirable is when the the data distribution tends to switch between discrete states. For example, in electricity consumption data, an appliance tends to use little or no electricity when it is off, and a relatively constant amount when it is on. Switches between these states are expensive for \minesp, and predictive filtering offers little benefit on sequences of samples that are already almost constant. \minesp can still achieve reasonably good compression in this situation, but dictionary-based compressors will likely perform better. This is because they suffer no penalty from state changes and runs of constants are their best-case input in terms of both ratio and speed. Their ratio benefits because they can often run-length encode the number of repeated values, and their speed benefits because they can decode runs at memory speed by \texttt{memcpy}-ing the repeated values.
 
-% However, they do not indicate when it is desirable to use \minesp instead of another method. We suggest the following decision criteria, and ilustrate corresponding success and failure cases below.
-
-
-
-Here are some example multivariate time series where \minesp does well. Note that this also serves to confirm our speed results.
+As an illustration of when \minesp is and is not preferable, we run it and the comparison algorithms on several real-world datasets with differing characteristics. In Figure~\ref{fig:tradeoff_success}, we use the MSRC-12, PAMAP and UCI Gas datasets. These datasets contain relatively smooth time series and have 80, 31, and 18 variables, respectively. \minesp achieves an excellent ratio-speed tradeoff on all three datasets, and the highest compression of any method \textit{even on its lowest-compression setting} on the MSRC-12 dataset.
 
 \begin{figure}[h]
 \begin{center}
     \includegraphics[width=\linewidth]{paper/tradeoff_success}
-    \caption{\minesp totally crushes it on relative smooth data with many variables. Marker sizes are proportional to log compression speed (is this even useful?).}
+    \caption{\minesp achieves excellent compression ratios and speed on smooth time series with many variables.}
     \label{fig:tradeoff_success}
 \end{center}
 \end{figure}
 
-Here are some example multivariate time series where \minesp does poorly relative to others. In absolute terms it's actually still quite good, but the other methods crush it here because dictionary coding is a great fit for this data, whereas delta coding is terrible.
+In contrast, \minesp performs poorly on the AMPD Gas and AMPD Water datasets (Figure~\ref{fig:tradeoff_failure}). These datasets chronicle the natural gas and water consumption of a house over a year, and often switch between discrete states and/or have isolated nonzero values. They also have only 3 and 2 variables, respectively. \mine achieves more than $10\times$ compression, but dictionary-based methods such as Zstd and LZ4 achieve even greater compression while also decompressing faster.
+
+% \minesp tends to perform worse than dictionary encoders. \minesp
+
+% However, they do not indicate when it is desirable to use \minesp instead of another method. We suggest the following decision criteria, and ilustrate corresponding success and failure cases below.
+
+% Here are some example multivariate time series where \minesp does well. Note that this also serves to confirm our speed results.
+
+% Here are some example multivariate time series where \minesp does poorly relative to others. In absolute terms it's actually still quite good, but the other methods crush it here because dictionary coding is a great fit for this data, whereas delta coding is terrible.
 
 \begin{figure}[h]
 \begin{center}
     \includegraphics[width=\linewidth]{paper/tradeoff_fail}
-    \caption{\minesp is mediocre (relative to other methods) on non-smooth data that switches between discrete states.}
+    \caption{\minesp is less effective than other methods when data is non-smooth and has few variables.}
     \label{fig:tradeoff_failure}
 \end{center}
 \end{figure}
+
+% ------------------------------------------------
+\subsection{Generalizing to Floats}
+% ------------------------------------------------
+
+% Given that many time series as stored as floating point values, it is natural to wonder what
+
+While floating point values are not the focus of our paper, it is possible to apply \minesp to floats by first quantizing the floating point data. The downside of doing this is that, because floating point numbers are not uniformly distributed along the real line, such quantization is lossy. To assess the degree of loss, we carried out an experiment to measure the error induced when quantizing real data. Note that this experiment does not assess whether \minesp is the \textit{best} means of compressing floats---it merely suggests that using integer compressors like \minesp as lossy floating point compressors is reasonable and could be a fruitful avenue for future work. % We leave rigorous assessment of whether quantization followed by \minesp is the \textit{best} means of compressing floating point data to future work.
+
+We assessed the magnitude of typical quantization errors by quantizing the UCR time series datasets. Specifically, we linearly offset and rescaled the time series in each dataset such that the minimum and maximum values in any time series correspond to $(0, 255)$ for 8-bit quantization or $(0, 65,535)$ for 16-bit quantization. We then obtained the quantized data by applying the floor function to this linearly transformed data.
+%  and measuring the noise that this introduces relative to the variance of the data.
+
+To measure the error this introduced, we then inverted the linear transformation and computed the mean squared error between the original and this ``reconstructed'' data. The resulting error values for each dataset, normalized by the dataset's variance, are shown in Figure~\ref{fig:quantize_errs}. These normalized values can be understood as signal-to-noise ratio measurements, where the noise is the quantization error. As the figure illustrates, the quantization error is orders of magnitude smaller than the variance for nearly all datasets, and never worse than $10\times$ smaller even for 8-bit quantization.
+
+\begin{figure}[h]
+\begin{center}
+    \includegraphics[width=\linewidth]{paper/quantize_errs}
+    \caption{Quantizing floating-point time series introduces error that is orders of magnitude smaller than the variance of the data. Even with 8 bits, quantization introduces less than 1\% error on 84 of 85 datasets.}
+    \label{fig:quantize_errs}
+\end{center}
+\end{figure}
+
+This of course does not indicate that all time series can be safely quantized. Two counterexamples of which we are aware are 1) timestamps where microsecond or nanosecond resolution matters, and 2) GPS coordinates, where small decimal places may correspond to many meters. However, the above results suggest that quantization is a suitable means of applying \minesp to floating-point data in many applications. This is bolstered by previous work showing that quantization even to a mere six bits \cite{epenthesis} rarely harms classification accuracy, and quantizing to two bits sometimes improves it \cite{sax}.
 
 % % ------------------------------------------------
 % \subsection{Query acceleration}

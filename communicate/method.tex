@@ -9,7 +9,7 @@
 % To both establish notation and clarify the sorts of data for which \minesp is applicable, we introduce the following definitions.
 To facilitate a precise explanation of \minesp, we introduce the following definitions.
 
-\begin{Definition} \b{Sample.} A sample is a vector $\x \in \R^D$. $D$ is termed the sample's \b{dimensionality}. Each element of the sample is a scalar represented using a number of bits $w$, termed the \b{bitwidth}. The bitwidth $w$ is shared by all elements.
+\begin{Definition} \b{Sample.} A sample is a vector $\x \in \R^D$. $D$ is termed the sample's \b{dimensionality}. Each element of the sample is an integer represented using a number of bits $w$, termed the \b{bitwidth}. The bitwidth $w$ is shared by all elements.
 \end{Definition}
 
 \begin{Definition} \b{Time Series.} A time series $\X$ of length $T$ is a sequence of $T$ samples, $\x_1,\ldots,\x_T$. All samples $\x_t$ share the same bitwidth $w$ and dimensionality $D$, and the meaning of each dimension is consistent from sample to sample. If $D = 1$, $\X$ is called \b{univariate}; otherwise it is \b{multivariate}.
