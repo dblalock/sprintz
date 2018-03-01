@@ -11,7 +11,8 @@ In this section we describe how \minesp works. To do so, we first introduce rele
 \begin{Definition} \b{Sample.} A sample is a vector $\x \in \R^D$. $D$ is termed the sample's \b{dimensionality}. Each element of the sample is an integer represented using a number of bits $w$, termed the \b{bitwidth}. The bitwidth $w$ is shared by all elements.
 \end{Definition}
 \vspace{-5mm}
-\begin{Definition} \b{Time Series.} A time series $\X$ of length $T$ is a sequence of $T$ samples, $\x_1,\ldots,\x_T$. All samples $\x_t$ share the same bitwidth $w$ and dimensionality $D$, and the meaning of each dimension is consistent from sample to sample. If $D = 1$, $\X$ is called \b{univariate}; otherwise it is \b{multivariate}.
+\begin{Definition} \b{Time Series.} A time series $\X$ of length $T$ is a sequence of $T$ samples, $\x_1,\ldots,\x_T$. All samples $\x_t$ share the same bitwidth $w$ and dimensionality $D$. If $D = 1$, $\X$ is called \b{univariate}; otherwise it is \b{multivariate}.
+% , and the meaning of each dimension is consistent from sample to sample.
 \end{Definition}
 \vspace{-5mm}
 \begin{Definition} \b{Rows, Columns.} In a database context, we assume that each sample of a time series is one row and each dimension is one column. Because data arrives as samples and memory constraints may limit how many samples can be buffered, we assume that the data is stored in row-major order---i.e., such that each sample is stored contiguously.
@@ -32,7 +33,7 @@ In this section we describe how \minesp works. To do so, we first introduce rele
 
 These components are run on blocks of eight samples (motivated in Section~\ref{sec:bitpacking}), and can be modified to yield different compression-speed tradeoffs. Concretely, one can 1) skip entropy coding for greater speed and 2) choose between delta coding and our online learning method as forecasting algorithms. Our method is slightly slower but often improves compression.
 
-We chose these steps since they allow for high speed and exploit the characteristics of time series. Forecasting leverages the high correlation of successive samples to reduce the entropy of the data. Run-length encoding allows for extreme compression in the (common) scenario that there is no change in the data---e.g., a user's smartphone may be stationary for many hours while the user is asleep. Bit packing, at least using the scheme we introduce, exploits temporal correlation in the variability of the data by using the same bitwidth for points that are within the same block. Huffman coding is not specific to time series but has low memory requirements and improves compression ratios.
+We chose these steps since they allow for high speed and exploit the characteristics of time series. Forecasting leverages the high correlation of successive samples to reduce the entropy of the data. Run-length encoding allows for extreme compression in the (common) scenario that there is no change in the data---e.g., a user's smartphone may be stationary for many hours while the user is asleep. Our method of bit packing exploits temporal correlation in the variability of the data by using the same bitwidth for points that are within the same block. Huffman coding is not specific to time series but has low memory requirements and improves compression ratios.
 
  % in general is not especially geared towards time series, but our bit packing scheme exploits temporal correlation in the variability of the data by using the same bitwidth for points that are within the same block. Huffman coding is not specific to time series but has low memory requirements and improves compression ratios.
 
@@ -97,7 +98,7 @@ An overview of how \minesp compresses one block of samples is shown in Algorithm
 
 % ------------------------ decompress
 
-\minesp begins decompression (Algorithm~\ref{algo:decomp}) by decoding the Huffman-coded bitstream into a header and a payload. Once decoded, these two components are easy to separate since the header is first and always of fixed size. If the header is all 0s, the payload indicates the length of a run of zero errors. In this case, \minesp runs the predictor until the corresponding number of samples have been predicted. Since the errors are zero, the forecaster's predictions are the true sample values. In the nonzero case, \minesp unpacks the payload using the number of bits specified for each column by the header.
+\minesp begins decompression (Algorithm~\ref{algo:decomp}) by decoding the Huffman-coded bitstream into a header and a payload. Once decoded, these two components are easy to separate since the header is always first and of fixed size. If the header is all 0s, the payload indicates the length of a run of zero errors. In this case, \minesp runs the predictor until the corresponding number of samples have been predicted. Since the errors are zero, the forecaster's predictions are the true sample values. In the nonzero case, \minesp unpacks the payload using the number of bits specified for each column by the header.
 
 \begin{algorithm}[h]
 % \caption{decodeBlock(\bytes, $B$, $D$, $\vtheta$)}
@@ -138,15 +139,23 @@ An overview of how \minesp compresses one block of samples is shown in Algorithm
 
 \minesp forecasting can use either delta coding or \justfire \text{ } (Fast Integer REgression), a novel online forecasting algorithm we introduce.
 
+% ================================
+\subsubsection{Delta coding}
+% ================================
+
 Forecasting with delta coding consists of predicting each sample $\x_i$ to be equal to the previous sample $\x_{i-1}$. This method is stateless given $\x_{i-1}$ and is extremely fast. It is particularly fast when combined with run-length encoding, since it yields a run of zero errors if and only if the data is constant. This means that decompression of runs requires only copying a fixed vector, with no additional forecasting or training. Moreover, when answering queries, one can sometimes avoid decompression entirely---e.g., one can compute the max of all samples in the run by computing the max of only the first value.
 
-Forecasting with \fire is slightly more expensive but often yields better compression. % Before discussing the details of \fire, we first offer intuition regarding why it works.
+% ================================
+\subsubsection{FIRE}
+% ================================
+
+Forecasting with \fire is slightly more expensive than delta coding but often yields better compression. % Before discussing the details of \fire, we first offer intuition regarding why it works.
 
 % Because time series tend to have high correlation between consecutive values of a given variable, a given value $x_{i}$ can be approximated via a autoregressive models of the form:
 
-% ------------------------------------------------
-\subsubsection{Intuition}
-% ------------------------------------------------
+% % ------------------------------------------------
+% \subsubsection{FIRE}
+% % ------------------------------------------------
 The basic idea of \fire is to model each value as a linear combination of a fixed number of previous values and learn the coefficients of this combination. Specifically, we learn an autoregressive model of the form:
 % Consider a linear model for predicting a given value $x_i$ of some variable at time step $i$.
 \begin{align}
@@ -160,7 +169,8 @@ Different values of $a$ and $b$ are suitable for different data characterisics. 
 
 The reason \fire is effective is that it learns online what the best coefficients are for each variable.
 % \Fire learns appropriate coefficients online using gradient descent with L1 loss.
-To make prediction and learning as efficient as possible, however, \fire \text{ } restricts the coefficients to lie within a useful subspace. Specifically, we exploit the observation that all of the above cases can be written as:
+% To make prediction and learning as efficient as possible, however, \justfire
+To make prediction and learning as efficient as possible, \justfire \text{} restricts the coefficients to lie within a useful subspace. Specifically, we exploit the observation that all of the above cases can be written as:
 \begin{align}
     x_i = x_{i-1} + \alpha x_{i-1} - \alpha x_{i-2} + \eps_i
 \end{align}
@@ -181,11 +191,14 @@ for $\alpha \in [-\frac{1}{2}, 1]$. Letting $\delta_i \triangleq x_i - x_{i-1}$ 
 % \end{align}
 This means that we can capture all of the above cases by predicting the next delta as a rescaled version of the previous delta. This requires only a single addition and multiplication, and reduces the learning problem to that of finding a suitable value for a single parameter.
 
-% ------------------------------------------------
-\subsubsection{Details}
-% ------------------------------------------------
+% % ------------------------------------------------
+% \subsubsection{Details}
+% % ------------------------------------------------
 % Pseudocode for \fire prediction and training is given in Algorithm~\ref{algo:xff}.
-As shown in Algorithm~\ref{algo:xff}, a \fire forecaster is parametrized by three values (line~\ref{line:xffCtor}): the number of columns $D$, the learning rate $\eta$, and the bitwidth of the integers stored in the columns $w$. Internally, the forecaster also maintains an accumulator for each column (line~\ref{line:counter}) and the difference (delta) between the two most recently seen samples (line~\ref{line:deltas}).
+
+% To make this underlying model practical and performant for integers,
+% : \fire initialization (line~\ref{line:xffCtor}), prediction (line~\ref{line:xffPredict}), and training (line~\ref{line:xffTrain}).
+To train and predict using this model, we use the functions shown in Algorithm~\ref{algo:xff}. First, to initialize a \fire forecaster, one must specify three values: the number of columns $D$, the learning rate $\eta$, and the bitwidth of the integers stored in the columns $w$. Internally, the forecaster also maintains an accumulator for each column (line~\ref{line:counter}) and the difference (delta) between the two most recently seen samples (line~\ref{line:deltas}). The accumulator is a scaled version of the current $\alpha$ value with a bitwidth of $2w$. It enables fast updates of $\alpha$ with greater numerical precision than would by possible if modifying $\alpha$ directly. % updates without the expense of division or multiplication instructions.
 
 % ------------------------ xff pseudocode
 
@@ -203,17 +216,17 @@ As shown in Algorithm~\ref{algo:xff}, a \fire forecaster is parametrized by thre
 \State $\self$.deltas $\leftarrow $ zeros($D$) \label{line:deltas}
 \EndFunction
 
-\Function{Predict}{$\x_{i-1}$}
+\Function{Predict}{$\x_{i-1}$} \label{line:xffPredict}
 \State $\texttt{alphas} \leftarrow \self$.accumulators \rshift $\self$.learnShift
 % \State $\texttt{alphas} \leftarrow (\texttt{alphas} \text{ }\rshift 4) \text{ }\lshift 4$
 \State $\hat{\vdelta} \leftarrow$ (\texttt{alphas} $\odot$ $\self$.deltas) $\rshift \self$.bitWidth
 \RETURN $\x_{i-1} + \hat{\vdelta}$
 \EndFunction
 
-\Function{Train}{$\x_{i-1}$, $\x_{i}$, $\err_i$}
-\State $\texttt{gradients} \leftarrow \sign(\err_i) \odot \self$.deltas
+\Function{Train}{$\x_{i-1}$, $\x_{i}$, $\err_i$} \label{line:xffTrain}
+\State $\texttt{gradients} \leftarrow {-\sign(\err_i)} \odot \self$.deltas
 % \State $\self$.accumulators $\leftarrow \self$.accumulators + $\texttt{gradients}$
-\State $\self$.accumulators \texttt{+=} $\texttt{gradients}$
+\State $\self$.accumulators \texttt{-=} $\texttt{gradients}$
 \State $\self$.deltas $\leftarrow \x_{i} - \x_{i-1}$
 \EndFunction
 
@@ -221,10 +234,12 @@ As shown in Algorithm~\ref{algo:xff}, a \fire forecaster is parametrized by thre
 \end{algorithm}
 
 
+% To predict (line~\ref{line:xffPredict})
 To predict, the forecaster first derives the coefficient $\alpha$ for each column based on the accumulator. By right shifting the accumulator $\log2(\eta)$ bits, the forecaster obtains a learning rate of $2^{-\log2(\eta)} = \eta$. It then estimates the next deltas as the elementwise product (denoted $\odot$) of these coefficients and the previous deltas. It predicts the next sample to be the previous sample plus these estimated deltas.
 
 Because all values involved are integers, the multiplication is done using twice the bitwidth $w$ of the data type---e.g., using 16 bits for 8 bit data. The product is then right shifted by an amount equal to the bit width. This has the effect of performing a fixed-point multiplication with step size equal to $2^{-w}$.
 
+% The forecaster trains (line~\ref{line:xffTrain})
 The forecaster trains by performing a gradient update on the L1 loss between the true and predicted samples. I.e., given the loss:
 \begin{align}
     \mathcal{L}(x_i, \hat{x}_{i}) = \abs{x_i - \hat{x}_i}
@@ -246,7 +261,7 @@ for one column's value $x_i = \x_{ij}$ for some $j$ and coefficient $\alpha$, th
 &\propto -\sign(\eps) \cdot \vdelta_{i-1}
 % \end{equation*}
 \end{align}
-where we define $\eps \triangleq \x_{i} - \hat{\x}_{i}$ and ignore the $2^{-w}$ as a constant that can be absorbed into the learning rate. In all experiments, we set the learning rate $\eta$ to $\frac{1}{2}$. This value is unlikely to be ideal for any particular dataset, but we found in preliminary experiments that it consistently worked reasonably well on all of the datasets we tried. % and was large enough to avoid zeroing out small gradients.
+where we define $\eps \triangleq \x_{i} - \hat{\x}_{i}$ and ignore the $2^{-w}$ as a constant that can be absorbed into the learning rate. In all experiments reported here, we set the learning rate $\eta$ to $\frac{1}{2}$. This value is unlikely to be ideal for any particular dataset, but preliminary experiments showed that it consistently worked reasonably well. % and was large enough to avoid zeroing out small gradients.
 
 In practice, \fire differs slightly from the above \text{} pseudocode. First, instead of computing the coefficient for each sample, we compute it once at the start of each block. Second, instead of performing a gradient update after each sample, we average the gradients of all samples in each block and then perform one update. Third, we truncate the coefficient to the four most significant bits. This facilitates learning coefficients of exactly 0 or $2^w$; the former reduces variance in the case of noisy data and the latter, which amounts to double delta coding, often predicts the next value exactly for sufficiently smooth data. Finally, we only compute a gradient for every other sample, since this has little or no effect on the accuracy and slightly improves speed.
 
@@ -270,15 +285,17 @@ Given the zigzag encoded errors, the number of bits $w^\prime$ required in each 
 
 Once the number of bits $w^\prime$ required for each column is known, the zigzag-encoded errors can be bit packed. First, \minesp writes out a header consisting of $D$ unsigned integers, one for each column, storing the bitwidths. Each integer is stored in $\log2(w)$ bits, where $w$ is the bitwidth of the data. Since there are $w+1$ possible values of $w^\prime$ (including 0), width $w-1$ is treated as a width of $w$ by both the encoder and decoder. E.g., 8-bit data that could only be compressed to 7 bits is both stored and decoded with a bitwidth of 8.
 
-After writing the headers, \minesp takes the appropriate number of low bits from each element and packs them into the payload. When there are few columns, all the bits for a given column are stored contiguously (i.e., column-major order). When there are many columns, the bits for each \textit{sample} are stored contiguously (i.e., row-major order). In the latter case, up to seven bits of padding are added at the end of each row so that all rows begin on a byte boundary. This means that the data for each column begins at a fixed bit offset within each row, facilitating vectorization of the decompressor. The threshold for switching between the two formats is a sample width of $32$ bits.
+After writing the headers, \minesp takes the appropriate number of low bits from each element and packs them into the payload. When there are few columns, all the bits for a given column are stored contiguously (i.e., column-major order). When there are many columns, the bits for each \textit{sample} are stored contiguously (i.e., row-major order). In the latter case, up to seven bits of padding are added at the end of each row so that all rows begin on a byte boundary. This means that the data for each column begins at a fixed bit offset within each row, facilitating vectorization of the decompressor. The threshold for choosing between the two formats is a sample width of $32$ bits.
 
-The reason for this threshold is as follows. Because the block begins in row-major order and we seek to reconstruct it the same way, the row-major bit packing case is the more natural. For small numbers of columns, however, the row padding can significantly reduce the compression ratio. Indeed, for univariate 8-bit data, it makes compression ratios greater than 1 impossible. This gives rise to the column-major case; using a block size of eight samples and column-major order, each column's data always falls on a byte boundary without any padding. The downside of this approach is that both encoder and decoder must transpose the block; for up to four 8-bit columns or two 16-bit columns, however, this can be done quickly using SIMD shuffling instructions.\footnote{For recent processors with AVX-512 instructions, one could double these column counts, but we refrain from assuming that these instructions will be available.} This gives rise to the cutoff of 32 bit sample width for switching between the formats.
+The reason for this threshold is as follows. Because the block begins in row-major order and we seek to reconstruct it the same way, the row-major bit packing case is the more natural. For small numbers of columns, however, the row padding can significantly reduce the compression ratio. Indeed, for univariate 8-bit data, it makes compression ratios greater than 1 impossible. This gives rise to the column-major case; using a block size of eight samples and column-major order, each column's data always falls on a byte boundary without any padding. The downside of this approach is that both encoder and decoder must transpose the block. However, for up to four 8-bit columns or two 16-bit columns, this can be done quickly using SIMD shuffling instructions.\footnote{For recent processors with AVX-512 instructions, one could double these column counts, but we refrain from assuming that these instructions will be available.} This gives rise to the cutoff of 32 bit sample width for choosing between the formats.
+
+As a minor bit packing optimization, one can store the headers for two or more blocks contiguously, so that there is one group of headers followed by one group of payloads. This allows many headers to share one set of padding bits between the headers and payload. Grouping headers does not require buffering more than one block of input, but it does require buffering the appropriate number of blocks of output. In addition to slightly improving compression ratio, it also enables more headers to be unpacked with a given number of vector instructions in the decompressor. Microbenchmarks show up to $10\%$ improvement in decompression speed as the number of blocks in a group grows towards eight. However, we use groups of only two in all reported experiments to ensure that our results tend towards pessimism and are applicable under even the most extreme memory constraints.
 
 % ------------------------------------------------
 \subsection{Entropy Coding}
 % ------------------------------------------------
 
-We entropy code the bit packed representation of each block using Huff0, an off-the-shelf Huffman coder \cite{fse}. Note that this is faster than Huffman coding the original data or the errors since the bit packed block is (usually) shorter than the original data. We use Huffman coding instead of Finite-State Entropy \cite{fse} or an arithmetic coding scheme these are slower and we never observed a meaningful increase in compression ratio.
+We entropy code the bit packed representation of each block using Huff0, an off-the-shelf Huffman coder \cite{fse}. Note that this is faster than Huffman coding the original data or the errors, since the bit packed block is (usually) shorter than the original data. We use Huffman coding instead of Finite-State Entropy \cite{fse} or an arithmetic coding scheme these are slower and we never observed a meaningful increase in compression ratio.
 
 % ------------------------------------------------
 \subsection{Vectorization}
