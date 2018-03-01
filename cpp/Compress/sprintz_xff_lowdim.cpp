@@ -35,6 +35,9 @@ static const int debug = 0;
 // static const int debug = 3;
 // static const int debug = 4;
 
+// static const bool truncate_coeffs = true;
+static const bool truncate_coeffs = false;
+
 // ------------------------------------------------ delta + rle low ndims
 
 template<typename int_t, typename uint_t>
@@ -163,7 +166,9 @@ int64_t compress_rowmajor_xff_rle_lowdim(const uint_t* src, uint32_t len,
                 uint_t prev_val = prev_vals_ar[dim];
                 int_t prev_delta = prev_deltas_ar[dim];
 
-                const uint8_t shft = elem_sz_nbits - 4;
+                // const uint8_t shft = elem_sz_nbits - 4;
+                const uint8_t shft = truncate_coeffs ? elem_sz_nbits - 4 : 0;
+                // if (!truncate_coeffs) { shft = 0; }
                 counter_t counter = coef_counters_ar[dim];
                 counter_t coef = (coef_counters_ar[dim] >> (learning_shift + shft)) << shft;
                 int_t grad_sum = 0;
@@ -575,12 +580,25 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                         (const __m256i*)odd_counters_ptr);
 
                     // set coef[i] to ((counter[i] >> learn_shift) >> 4) << 4)
-                    __m256i filter_coeffs_even  = _mm256_srai_epi16(
-                        coef_counters_even, learning_shift + 4);
-                    __m256i filter_coeffs_odd  = _mm256_srai_epi16(
-                        coef_counters_odd, learning_shift + 4);
-                    filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 4);
-                    filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 4);
+                    // __m256i filter_coeffs_even = _mm256_srai_epi16(
+                    //     coef_counters_even, learning_shift + 4);
+                    // __m256i filter_coeffs_odd  = _mm256_srai_epi16(
+                    //     coef_counters_odd, learning_shift + 4);
+                    __m256i filter_coeffs_even;
+                    __m256i filter_coeffs_odd;
+                    if (truncate_coeffs) {
+                        filter_coeffs_even = _mm256_srai_epi16(
+                            coef_counters_even, learning_shift + 4);
+                        filter_coeffs_odd  = _mm256_srai_epi16(
+                            coef_counters_odd, learning_shift + 4);
+                        filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 4);
+                        filter_coeffs_odd = _mm256_slli_epi16(filter_coeffs_odd, 4);
+                    } else {
+                        filter_coeffs_even = _mm256_srai_epi16(
+                        coef_counters_even, learning_shift);
+                        filter_coeffs_odd = _mm256_srai_epi16(
+                            coef_counters_odd, learning_shift);
+                    }
 
                     for (int32_t bb = 0; bb < length; bb++) {
                         __m256i prev_vals = _mm256_loadu_si256(prev_vals_ptr);
@@ -618,7 +636,8 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                         dest += ndims * block_sz;
                     } // for each block
                 } else if (past_data_start && elem_sz == 2) { // errs of 0 at very start -> all zeros
-                    const uint8_t shft = elem_sz_nbits - 4;
+                    // const uint8_t shft = elem_sz_nbits - 4;
+                    const uint8_t shft = truncate_coeffs ? elem_sz_nbits - 4 : 0;
                     if (ndims == 1) {
                         // const counter_t* counters = (const counter_t*)coeffs_ar_even;
                         counter_t counter = *(counter_t*)coeffs_ar_even;
@@ -776,19 +795,34 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                     (const __m256i*)odd_counters_ptr);
 
                 // set coef[i] to ((counter[i] >> learn_shift) >> 4) << 4)
-                __m256i filter_coeffs_even  = _mm256_srai_epi16(
-                    coef_counters_even, learning_shift + 4);
-                __m256i filter_coeffs_odd  = _mm256_srai_epi16(
-                    coef_counters_odd, learning_shift + 4);
-                filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 4);
-                filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 4);
+                // __m256i filter_coeffs_even  = _mm256_srai_epi16(
+                //     coef_counters_even, learning_shift + 4);
+                // __m256i filter_coeffs_odd  = _mm256_srai_epi16(
+                //     coef_counters_odd, learning_shift + 4);
+                // filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 4);
+                // filter_coeffs_odd  = _mm256_slli_epi16(filter_coeffs_odd, 4);
+                __m256i filter_coeffs_even;
+                __m256i filter_coeffs_odd;
+                if (truncate_coeffs) {
+                    filter_coeffs_even = _mm256_srai_epi16(
+                        coef_counters_even, learning_shift + 4);
+                    filter_coeffs_odd  = _mm256_srai_epi16(
+                        coef_counters_odd, learning_shift + 4);
+                    filter_coeffs_even = _mm256_slli_epi16(filter_coeffs_even, 4);
+                    filter_coeffs_odd = _mm256_slli_epi16(filter_coeffs_odd, 4);
+                } else {
+                    filter_coeffs_even = _mm256_srai_epi16(
+                    coef_counters_even, learning_shift);
+                    filter_coeffs_odd = _mm256_srai_epi16(
+                        coef_counters_odd, learning_shift);
+                }
 
                 __m256i gradients_sum = _mm256_setzero_si256();
 
                 // variables for 1D case
                 uint8_t prev_val = prev_vals_ar[0];
                 int8_t prev_delta = prev_deltas_ar[0];
-                const uint8_t shft = elem_sz_nbits - 4;
+                const uint8_t shft = truncate_coeffs ? elem_sz_nbits - 4 : 0;
                 counter_t* counters_ar = (counter_t*)coeffs_ar_even;
                 counter_t counter = counters_ar[0];
                 // printf("raw counter: %d\n", counter);
@@ -941,7 +975,7 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                 __m256i raw_verrs = _mm256_loadu_si256((const __m256i*)errs_ar);
                 __m256i verrs = mm256_zigzag_decode_epi16(raw_verrs);
 
-                const uint8_t quantize_shft = elem_sz_nbits - 4;
+                const uint8_t quantize_shft = truncate_coeffs ? elem_sz_nbits - 4 : 0;
                 if (ndims == 1) {
                     counter_t* counters_ar = (counter_t*)coeffs_ar_even;
                     counter_t counter = counters_ar[0];
