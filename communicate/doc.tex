@@ -6,6 +6,8 @@
 \usepackage{balance}  % vldb requirement; for  \balance command on last page
 \input{setup.tex}
 
+\usepackage[all]{nowidow}
+
 \newcommand{\mine}{\textsc{Sprintz}}
 \newcommand{\minesp}{\textsc{Sprintz}\text{ }}
 \newcommand{\fire}{\textsc{Fire}\text{ }}
@@ -79,15 +81,23 @@
 
 % By 2020, mobile and connected devices will be produce over \%d\% of the world's data. Much of
 
-Due to the rapid proliferation of connected devices, sensor-generated time series constitute a large and growing portion of the world's data. In order to reduce storage, power, and transmission costs, it is desirable to compress this data. % to the greatest extent possible. % Many time series databases propose some method of doing this, but, to the best of our knowledge, there is neither a systematic assessment of what approaches are most effective nor a compression algorithm that clearly outperforms others on such data. % Unfortunately, existing compression algorithms either provide only limited compression when applied to time series, degrade data quality, or are not suitable for execution on low-power processors.
+ % to the greatest extent possible. % Many time series databases propose some method of doing this, but, to the best of our knowledge, there is neither a systematic assessment of what approaches are most effective nor a compression algorithm that clearly outperforms others on such data. % Unfortunately, existing compression algorithms either provide only limited compression when applied to time series, degrade data quality, or are not suitable for execution on low-power processors.
 
-We introduce a time series compression algorithm that achieves state-of-the-art compression ratios and up to twice the speed of its closest rivals. Moreover, because our approach requires $<$1KB of memory, it can be run on low-power sensors at the network edge, offloading computation from the central database and reducing network load. A key component of our method is a high-speed forecasting algorithm that can be trained online and significantly outperforms alternatives such as delta coding.% in addition to our own.
+Due to the rapid proliferation of connected devices, sensor-generated time series constitute a large and growing portion of the world's data. In order to reduce storage, power, and transmission costs, it is desirable to compress this data.
+
+We introduce a time series compression algorithm that achieves state-of-the-art compression ratios and up to twice the speed of its closest rivals. Moreover, because our approach requires $<$1KB of memory, it can be run on low-power sensors at the network edge, offloading computation from the central database and reducing network load. A key component of our method is a high-speed forecasting algorithm that can be trained online and significantly outperforms alternatives such as delta coding.
+
+Extensive experiments on datasets from many domains show that these results hold not only for sensor data but also across a wide array of other time series.
+
+%, our primary application of interest, but also across a wide array of other time series.
+
+% in addition to our own.
 
 % but also accelerates many queries of practical interest relative to existing compression schemes.
 
 % We also provide an open-source benchmark library that can be used to assess dozens of different queries and compressors on various datasets.
 
-Extensive experiments on datasets from many domains show that these results hold not only for sensor data, our primary application of interest, but also across a wide array of other time series. % Our approach also outperforms even domain-specific algorithms designed for more powerful hardware in some cases.
+ % Our approach also outperforms even domain-specific algorithms designed for more powerful hardware in some cases.
 
 \end{abstract}
 
@@ -162,7 +172,7 @@ Extensive experiments on datasets from many domains show that these results hold
 \section{Conclusion} \label{sec:conclusion}
 % ================================================================
 
-We introduce \mine, a compression algorithm for multivariate integer time series that achieves state-of-the-art compression ratios and speeds of up to 3GB/s in a single thread. \minesp compression imposes extremely small memory requirements, making it suitable for both compression at the network edge and server-side compression in the presence of massive numbers of streams. % Data stored in \minesp format can be queried at nearly the speed of uncompressed data for even lightweight queries. Moreover,
+We introduce \mine, a compression algorithm for multivariate integer time series that achieves state-of-the-art compression ratios across a large number of publicly available datasets. It also attains speeds of up to 3GB/s in a single thread and predictable performance as a function of the number of variables being compressed. Finally, it imposes extremely small memory requirements, making it suitable for compression both at the server and at the network edge. % and server-side compression in the presence of large numbers of streams. % Data stored in \minesp format can be queried at nearly the speed of uncompressed data for even lightweight queries. Moreover,
 
 % As a core component of \minesp, we also introduce the \fire forecaster. \fire achieves throughput of up to 5GB/s while also adapting online to the distribution of the data. \fire can be used as a preprocessor before any compression algorithm and often improves compression ratio dramatically.
 

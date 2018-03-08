@@ -1,5 +1,7 @@
 
-In this section we describe how \minesp works. To do so, we first introduce relevant definitions and an overview of the algorithm. We subsequently discuss each component of the algorithm in detail.
+% In this section we describe how \minesp works. To do so, we first introduce relevant definitions, followed by an overview of the algorithm. We subsequently discuss each component of the algorithm in detail.
+
+To describe how \minesp works, we first formally define time series and provide an overview of the algorithm. We subsequently discuss each component of the algorithm in detail.
 
 % ------------------------------------------------
 \vspace{2mm}
@@ -134,12 +136,14 @@ An overview of how \minesp compresses one block of samples is shown in Algorithm
 \end{algorithm}
 
 % ------------------------------------------------
+\vspace{3mm}
 \subsection{Forecasting}
 % ------------------------------------------------
 
 \minesp forecasting can use either delta coding or \justfire \text{ } (Fast Integer REgression), a novel online forecasting algorithm we introduce.
 
 % ================================
+% \vspace{3mm}
 \subsubsection{Delta coding}
 % ================================
 
@@ -198,7 +202,7 @@ This means that we can capture all of the above cases by predicting the next del
 
 % To make this underlying model practical and performant for integers,
 % : \fire initialization (line~\ref{line:xffCtor}), prediction (line~\ref{line:xffPredict}), and training (line~\ref{line:xffTrain}).
-To train and predict using this model, we use the functions shown in Algorithm~\ref{algo:xff}. First, to initialize a \fire forecaster, one must specify three values: the number of columns $D$, the learning rate $\eta$, and the bitwidth of the integers stored in the columns $w$. Internally, the forecaster also maintains an accumulator for each column (line~\ref{line:counter}) and the difference (delta) between the two most recently seen samples (line~\ref{line:deltas}). The accumulator is a scaled version of the current $\alpha$ value with a bitwidth of $2w$. It enables fast updates of $\alpha$ with greater numerical precision than would by possible if modifying $\alpha$ directly. % updates without the expense of division or multiplication instructions.
+To train and predict using this model, we use the functions shown in Algorithm~\ref{algo:xff}. First, to initialize a \fire forecaster, one must specify three values: the number of columns $D$, the learning rate $\eta$, and the bitwidth of the integers stored in the columns $w$. Internally, the forecaster also maintains an accumulator for each column (line~\ref{line:counter}) and the difference (delta) between the two most recently seen samples (line~\ref{line:deltas}). The accumulator is a scaled version of the current $\alpha$ value with a bitwidth of $2w$. It enables fast updates of $\alpha$ with greater numerical precision than would be possible if modifying $\alpha$ directly. % updates without the expense of division or multiplication instructions.
 
 % ------------------------ xff pseudocode
 
@@ -290,13 +294,13 @@ After writing the headers, \minesp takes the appropriate number of low bits from
 
 The reason for this threshold is as follows. Because the block begins in row-major order and we seek to reconstruct it the same way, the row-major bit packing case is the more natural. For small numbers of columns, however, the row padding can significantly reduce the compression ratio. Indeed, for univariate 8-bit data, it makes compression ratios greater than 1 impossible. This gives rise to the column-major case; using a block size of eight samples and column-major order, each column's data always falls on a byte boundary without any padding. The downside of this approach is that both encoder and decoder must transpose the block. However, for up to four 8-bit columns or two 16-bit columns, this can be done quickly using SIMD shuffling instructions.\footnote{For recent processors with AVX-512 instructions, one could double these column counts, but we refrain from assuming that these instructions will be available.} This gives rise to the cutoff of 32 bit sample width for choosing between the formats.
 
-As a minor bit packing optimization, one can store the headers for two or more blocks contiguously, so that there is one group of headers followed by one group of payloads. This allows many headers to share one set of padding bits between the headers and payload. Grouping headers does not require buffering more than one block of input, but it does require buffering the appropriate number of blocks of output. In addition to slightly improving compression ratio, it also enables more headers to be unpacked with a given number of vector instructions in the decompressor. Microbenchmarks show up to $10\%$ improvement in decompression speed as the number of blocks in a group grows towards eight. However, we use groups of only two in all reported experiments to ensure that our results tend towards pessimism and are applicable under even the most extreme memory constraints.
+As a minor bit packing optimization, one can store the headers for two or more blocks contiguously, so that there is one group of headers followed by one group of payloads. This allows many headers to share one set of padding bits between the headers and payload. Grouping headers does not require buffering more than one block of input, but it does require buffering the appropriate number of blocks of output. In addition to slightly improving compression ratio, it also enables more headers to be unpacked with a given number of vector instructions in the decompressor. Microbenchmarks show up to $10\%$ improvement in decompression speed as the number of blocks in a group grows towards eight. However, we use groups of only two in all reported experiments to ensure that our results tend towards pessimism and are applicable under even the most extreme buffer size constraints.
 
 % ------------------------------------------------
 \subsection{Entropy Coding}
 % ------------------------------------------------
 
-We entropy code the bit packed representation of each block using Huff0, an off-the-shelf Huffman coder \cite{fse}. Note that this is faster than Huffman coding the original data or the errors, since the bit packed block is (usually) shorter than the original data. We use Huffman coding instead of Finite-State Entropy \cite{fse} or an arithmetic coding scheme these are slower and we never observed a meaningful increase in compression ratio.
+We entropy code the bit packed representation of each block using Huff0, an off-the-shelf Huffman coder \cite{fse}. Note that this is faster than Huffman coding the original data or the errors, since the bit packed block is (usually) shorter than the original data. We use Huffman coding instead of Finite-State Entropy \cite{fse} or an arithmetic coding scheme since they are slower and we never observed a meaningful increase in compression ratio.
 
 % ------------------------------------------------
 \subsection{Vectorization}
