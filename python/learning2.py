@@ -176,8 +176,8 @@ class OnlineRegressor(object):
         self.last_delta = 0
         self.coef = 0
         self.coef = 256
-        # self.counter = 0
-        self.counter = 256 << (1 + self.numbits - 8)  # TODO indirect to learning rate, not just 1 # noqa
+        self.counter = 0
+        # self.counter = 256 << (1 + self.numbits - 8)  # TODO indirect to learning rate, not just 1 # noqa
         # self.counter = 8 << 1  # equivalent to adding 8 to round to nearest?
         # self.counter = self.coef
         self.t = 0
@@ -357,8 +357,14 @@ class OnlineRegressor(object):
                     # these both seem to work pretty well; prolly need to directly
                     # compare them
                     # grad = -err * np.sign(xval)
-                    grad = -np.sign(err) * xval  # significantly better than prev line
+                    # grad = -np.sign(err) * xval  # significantly better than prev line
+                    grad = np.sign(err) * xval  # significantly better than prev line
                     # ^ duh; above is minimizer for L1 loss
+                    # grad = -np.sign(err) * np.sign(xval) << (self.numbits - 8)
+
+                    # sub_from = ((1 << self.numbits) - 1) * np.sign(xval)
+                    # approx_recip_x = sub_from - xval
+                    # grad = -np.sign(err) * approx_recip_x
 
                     grads += int(grad)
                     # grads += grad >> 1  # does this help with overflow?
@@ -435,7 +441,8 @@ class OnlineRegressor(object):
                 #
                 # this is the pair of lines that we know works well for UCR
                 #
-                self.counter -= grad
+                # self.counter -= grad
+                self.counter += grad
                 self.coef = self.counter >> (learning_rate_shift + (self.numbits - 8))
 
                 # self.coef = self.counter >> learning_rate_shift

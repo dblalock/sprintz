@@ -1417,9 +1417,9 @@ def main():
 
     # numbits = 60  # 63 and 64 break our quantization somehow
     # numbits = 24
-    numbits = 16
+    # numbits = 16
     # numbits = 12
-    # numbits = 8
+    numbits = 8
 
     # num_neighbors = 256
     num_neighbors = 1024
@@ -1462,8 +1462,9 @@ def main():
     # k_left = 256
     # k_right = 32
 
+    n = 2
     # n = 8
-    n = 32
+    # n = 32
     # n = 100
     # n = 200
     # n = 500
@@ -1520,7 +1521,8 @@ def main():
         print "{} raveled data shape: {}".format(ds.name, ds.X.shape)
         print np.max(ds.X)
 
-    dsets = ucr.smallUCRDatasets() if small else ucr.origUCRDatasets()
+    # dsets = ucr.smallUCRDatasets() if small else ucr.origUCRDatasets()
+    dsets = ucr.smallUCRDatasets() if small else ucr.allUCRDatasets()
     base_save_dir = 'ucr'
 
     # ds = dsets[0]
@@ -1658,13 +1660,13 @@ def main():
     # for d in dslist[26:27]:  # OSULeaf
     # for d in dslist[27:28]:  # Olive Oil
     # for d in dslist[30:31]:  # starlight curves
-    # for d in dslist[1:2]:  # adiac
     # for d in dslist[2:3]:  # beef
     # for d in dslist[4:6]:
     # for d in dslist[3:4]: # CBF
     # for d in dslist:
     # for d in (dslist[26], dslist[27], dslist[30], dslist[1], dslist[14]):
-    for d in dslist[:31]:
+    # for d in dslist[:31]:
+    for d in dslist[1:2]:  # adiac
         print "------------------------ {}".format(d.name)
         # continue # TODO rm
         plot_dset(d, numbits=numbits, n=n,
