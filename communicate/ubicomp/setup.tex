@@ -1,0 +1,174 @@
+%-------------------------------------------------------------- Includes
+
+\usepackage{bbm}  % who knows?
+
+\usepackage{amsmath}          % basic math
+\usepackage{amssymb} 			    % math symbols
+% \usepackage{amsthm}           % theorems
+\usepackage{textcomp}
+
+% \usepackage{float}            % make figures work
+% \usepackage{cite}             % citations would be nice
+\usepackage{url}              % better urls; magically keeping doc from breaking due to urls in refs
+
+% \usepackage{tabu}
+\usepackage{array}            % multiline table cells; somehow
+\usepackage{tabularx}         % better tables
+% \usepackage[table]{xcolor}    % colored table cells  % incompatible with sigconf
+\usepackage{colortbl}
+\newcolumntype{Y}{>{\centering\arraybackslash}X}	% centered column type for tabularx
+
+% stuff for piecewise functions
+\usepackage{mathtools}          %loads amsmath as well
+\DeclarePairedDelimiter\Floor\lfloor\rfloor
+\DeclarePairedDelimiter\Ceil\lceil\rceil
+
+\DeclareMathOperator*{\argmin}{arg\,min} % argmin
+\DeclareMathOperator*{\argmax}{arg\,max} % argmax
+
+\usepackage{pbox}   % for trick to force linebreaks in table cells
+
+\usepackage{setspace}
+% \usepackage{setspace}
+
+% \usepackage{booktabs} % acm recommended, and for pandas latex tables
+
+%-------------------------------------------------------------- Algorithm setup
+
+% \usepackage{algorithm2e}
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode} % I think this removes trailing "end {if,for,while}"
+\usepackage{algorithmicx}
+
+% \algnewcommand{\LineComment}[1]{\State \(\triangleright\) #1} % left-aligned comments
+% \algnewcommand{\SideComment}[1]{\(//\) #1}
+\algnewcommand{\COMMENT}[2][.5\linewidth]{\leavevmode\hfill\makebox[#1][l]{//~#2}}
+\algnewcommand{\COMMENTT}[2][.5\linewidth]{\leavevmode\hfill\makebox[#1][l]{\hphantom{aa} // ~#2}}
+\algnewcommand{\LineComment}[1]{\State \(//\) #1}	% left-aligned comments
+\algnewcommand\RETURN{\State \textbf{return} }
+
+\newenvironment{struct}[1][htb]
+  {\renewcommand{\algorithmcfname}{Class}% Update algorithm name
+   \begin{algorithm}[#1]%
+  }{\end{algorithm}}
+
+%-------------------------------------------------------------- Figures setup
+
+% \usepackage[pdftex]{graphicx}
+\usepackage{graphicx}
+\usepackage[space]{grffile}   % allow spaces in file names
+% declare the path(s) where your graphic files are
+\graphicspath{{../figs/}}
+% and their extensions so you won't have to specify these
+\DeclareGraphicsExtensions{.pdf,.jpeg,.jpg,.png}
+
+
+%\textfloatsep: space between last top float or first bottom float and the text (default = 20.0pt plus 2.0pt minus 4.0pt).
+%\intextsep : space left on top and bottom of an in-text float (default = 12.0pt plus 2.0pt minus 2.0pt).
+% \setlength{\textfloatsep}{4pt}
+% \setlength{\intextsep}{4pt}
+
+\usepackage{caption}
+% \usepackage[font={small,it}]{caption}
+\usepackage[font={bf}]{caption}
+\setlength{\abovecaptionskip}{2pt} % less space between captions and figures
+% \setlength{\abovecaptionskip}{-2pt} % less space between captions and figures
+% \setlength{\abovecaptionskip}{-5pt}	% less space between captions and figures
+% \setlength{\belowcaptionskip}{-13pt}  % less space below captions
+% \setlength{\belowcaptionskip}{-10pt}  % less space below captions
+\setlength{\belowcaptionskip}{-4pt}	% less space below captions
+
+% \usepackage{paralist}
+% \setdefaultleftmargin{10pt}{10pt}{}{}{}{}
+
+% \usepackage{changepage}
+% \usepackage{tabulary}
+
+% \usepackage{outlines}
+\usepackage{enumitem}
+\newcommand{\ItemSpacing}{0mm}
+\newcommand{\ParSpacing}{0mm}
+% \setenumerate[1]{itemsep={\ItemSpacing},parsep={\ParSpacing},label=\arabic*.}
+% \setenumerate[2]{itemsep={\ItemSpacing},parsep={\ParSpacing},label=\arabic*.}
+\setenumerate[2]{itemsep={\ItemSpacing},parsep={\ParSpacing}}
+
+% \usepackage[linewidth=1pt]{mdframed}
+% \mdfsetup{frametitlealignment=\center, skipabove=0, innertopmargin=1mm,
+% innerleftmargin=2mm, leftmargin=0mm, rightmargin=0mm}
+
+%-------------------------------------------------------------- Miscellaneous setup
+
+% \newlength\myindent
+% \setlength\myindent{2em}
+% \newcommand\bindent{%
+%   \begingroup
+%   \setlength{\itemindent}{\myindent}
+%   \addtolength{\algorithmicindent}{\myindent}
+% }
+% \newcommand\eindent{\endgroup}
+
+% remove unwanted space between paragraphs;
+% it's set by the IEEE conference format, but no papers from this conference have it
+% \parskip 0ex plus 0.2ex minus 0.1ex
+
+% make vectors be bold instead of with arrows
+\renewcommand{\vec}[1]{\mathbf{#1}}
+% add 'mat' command to make matrices bold
+\newcommand{\mat}[1]{\mathbf{#1}}
+
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+\newtheorem{Definition}{Definition}[section]
+
+% ------------------------ convenience commands
+\newcommand\eps\varepsilon
+\DeclareMathOperator{\infimum}{inf}
+\renewcommand\inf\infty
+
+\renewcommand{\b}[1]{\textbf{#1}}
+
+\renewcommand{\c}{\vec{c}}
+\newcommand{\q}{\vec{q}}
+\renewcommand{\r}{\vec{r}}
+\newcommand{\x}{\vec{x}}
+\newcommand{\xhat}{\hat{\vec{x}}}
+\newcommand{\y}{\vec{y}}
+\newcommand{\yhat}{\hat{\vec{y}}}
+\newcommand{\z}{\vec{z}}
+\newcommand{\zhat}{\hat{\vec{z}}}
+\newcommand{\X}{\mat{X}}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\vtheta}{\vec{\theta}}
+\newcommand{\vdelta}{\vec{\delta}}
+
+% \newcommand{\rshift}{\texttt{>>}\text{ }}
+% \newcommand{\lshift}{\texttt{<<}\text{ }}
+\renewcommand{\rshift}{\texttt{>>}\text{ }}
+\renewcommand{\lshift}{\texttt{<<}\text{ }}
+
+\newcommand{\onehalf}{\frac{1}{2}}
+
+\newcommand{\piOver}[1]{\frac{\pi}{#1}}
+
+\renewcommand{\sp}{\text{ }}
+
+% \newcommand{\pitwo}{\frac{\pi}{2}}
+% \newcommand{\pifour}{\frac{\pi}{4}}
+
+% \newcommand{\norm}[1]{\left\lVert #1 \right\rVert}
+\DeclarePairedDelimiter\abs{\lvert}{\rvert}%
+\DeclarePairedDelimiter\norm{\lVert}{\rVert}%
+
+\DeclareMathOperator{\Beta}{Beta}
+\DeclareMathOperator{\Normal}{\mathcal{N}}
+\DeclareMathOperator{\erf}{erf}
+\DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator{\sign}{sign}
+\DeclareMathOperator{\log2}{\text{log}_2}
+
+% make *all* text 10pt
+% \renewcommand{\footnotesize}{\normalsize}
+% \renewcommand{\footnotesize}{\small}
+% \renewcommand{\small}{\normalsize}

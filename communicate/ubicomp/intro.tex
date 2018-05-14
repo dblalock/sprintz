@@ -1,0 +1,78 @@
+
+% Time series are ubiquitous and only growing in importance thanks to the proliferation of sensor data from autonomous vehicles, smart phones, wearables, and other connected devices. Although a huge volume of this data is stored in modern databases---many of them designed specifically for time series []---there has been relatively little work on how best to compress this data.
+
+% Alternative 1st paragraph:
+
+% Thanks to the exponentially increasing [] number of embedded, mobile, and wearable devices producing sensor data, there is a rapidly growing need to store time series. This has given rise to numerous time series databases to manage and query this data, both in industry [] and academia [].
+
+% In order to store the data efficiently, all of these systems require some form of compression algorithm.
+
+Time series are ubiquitous and only growing in importance thanks to the proliferation of sensor data from autonomous vehicles, smart phones, wearables, and other connected devices. Much of this data is currently stored in databases---many of them designed specifically for time series \cite{respawnDB, openTSDB, chronicleDB, kairosDB, druid, influxDB, gorilla}. Consequently, an improved means of compressing time series could greatly enhance the storage, network, and computation efficiency of many database systems.
+
+% Moreover, a compression algorithm optimized for time series could support many
+
+% there has been relatively little work on how best to compress such data. An improved method of doing so could increase storage, network, and computation efficiency for nearly all databases storing time series.
+
+% Although a huge volume of this data is currently stored in databases---many of them designed specifically for time series \cite{respawnDB, openTSDB, chronicleDB, kairosDB, druid, influxDB, gorilla}---there has been relatively little work on how best to compress such data. An improved method of doing so could increase storage, network, and computation efficiency for nearly all databases storing time series.
+
+ % As a result, existing systems are not only using more storage space than is necessary, but are also % to represent time series at rest.
+
+% Most modern databases store data in a compressed form
+
+% Lack of a  only means increased storage requirements, but also reduced performance.
+
+From a compression perspective, time series have four attributes uncommon in other data.
+
+\begin{enumerate}
+    \item \textbf{Lack of exact repeats}. In text or structured records, there are many sequences of bytes---often corresponding to words or phrases---that will exactly repeat many times. This makes dictionary-based methods a natural fit. In time series, however, the presence of noise makes exact repeats less common \cite{extract, epenthesis}.
+    \item \textbf{Multiple variables}. Real-world time series often consist of multiple variables that are collected and accessed together. For example, the Inertial Measurement Unit (IMU) in modern smart phones collects three-dimensional acceleration, gyroscope, and magnetometer data, for a total of nine variables sampled at each time step. These variables are also likely to be read together, since each on its own is insufficient to characterize the phone's motion. %These variables are all sampled and fed to the processor together, resulting in every ninth value being from the same variable. This means that there is often a strong lag correlation in the data (in this case with a lag of nine). % , for a total of nine variables sampled at each time step. % These variables are all sampled and fed to the processor together, resulting in every ninth value in memory order being
+    \item \textbf{Low bitwidth}. Any data collected by a sensor will be digitized into an integer by an Analog-to-Digital Converter (ADC). Nearly all ADCs have a precision of 32 bits or fewer \cite{digikeyADCs}, and typically 16 or fewer of these bits are useful. For example, even lossless audio codecs store only 16 bits per sample \cite{flac, shorten}. Even data that is not collected from a sensor can often be stored using six or fewer bits without loss of performance for many tasks \cite{epenthesis, mdlIntrinsic, sax}.
+    \item \textbf{Temporal correlation}. Since the real world usually evolves slowly relative to the sampling rate, successive samples of a time series tend to have similar values. However, when multiple variables are present and samples are stored contiguously, this correlation is often present only with a lag---e.g., with nine IMU variables, every ninth value is similar. Such lag correlations violate the assumptions of most compressors, which treat adjacent bytes as the most likely to be related.
+    % quantization even to a mere six bits [] rarely harms classification accuracy, and quantizing to two sometimes improves it [].
+\end{enumerate}
+
+% Existing databases
+
+At present, even databases specialized for time series typically use general-purpose compression algorithms that are not optimized for these characteristics. Common codecs chosen include dictionary-based methods such as LZ4 \cite{lz4} or Snappy \cite{snappy}, floating-point compression algorithms \cite{gorilla}, or generic integer compression algorithms \cite{influxDB, simple8b}, possibly with some form of invertible preprocessing \cite{influxDB, gorilla, berkeleyTreeDB}.
+
+%such as LZ4 \cite{lz4} or Snappy \cite{snappy}, floating-point compression algorithms \cite{gorilla}, or generic integer compression algorithms \cite{influxDB, simple8b}, possibly with some form of invertible preprocessing \cite{influxDB, gorilla, berkeleyTreeDB}.
+
+These methods can be effective, but have several drawbacks. First, they can be performance bottlenecks. Buevich et al. report that ``Enabling compression adds a factor of six slowdown'' \cite{respawnDB} in their reads, even with the relatively fast gzip decoder. Second, as we show experimentally, there is considerable room for improvement in compression ratios. Finally, because of the nature of time series data and workloads, there are a number of requirements for a time series compression algorithm that existing approaches do not satisfy. In particular:
+
+% These methods are effective to some extent, but there is considerable room for improvement. As Buevich et al. report, ``Enabling compression adds a factor of six slowdown.''
+
+% as we show experimentally, there is considerable room for improvement. Moreover, because of the nature of time series data and workloads, there are a number of desirable attributes for a time series compression algorithm that these approaches often lack. In particular:
+
+% Because of the nature of time series data and workloads, an ideal compression algorithm would have the following characteristics, in addition to high compression ratio:
+
+% Unfortunately, each of these approaches has drawbacks. Moreoever, as we show experimentally, it is possible to achieve a much better speed-compression tradeoff than what current methods offer.
+
+% In addition to high compression ratio, it is desirable for a time series compression algorithm to have the following properties:
+
+\begin{enumerate}
+% \itemsep0mm
+% \item \b{Support for fast scans}. Time series workloads are not only read-heavy \cite{respawnDB, berkeleyTreeDB, influxDB}, but often necessitate scans through the data []. This means not only that high decompression speed is essential, but that it is desirable to push down queries directly to the compressed representation.
+\item \b{Small block size}. To accelerate queries over arbitrary time intervals, many databases use indexing structures that partition time series into many small segments \cite{berkeleyTreeDB, respawnDB}. A compression algorithm must therefore be effective even on small numbers ($<$1024) of samples. This also enables offloading compression to clients, which may be low-power sensors with only a few kilobytes of RAM \cite{respawnDB}.
+\item \b{High decompression speed}. Time series workloads are not only read-heavy \cite{respawnDB, berkeleyTreeDB, influxDB}, but often necessitate materializing data (or downsampled versions thereof) for visualization, clustering, computing correlations, or other operations \cite{respawnDB}. At the same time, writing is often append-only \cite{gorilla, respawnDB}, so compression need only be fast enough to keep up with the rate of data ingestion.
+% \item \b{Low memory}. To reduce network usage and offload computation to clients, it is desirable for the compressor to run on clients []. Unfortunately, clients producing time series data are often low-power sensors with only a few KB of RAM [].
+% \item \b{High decompression speed}. While compression speed is also desirable, time series workloads are often read-heavy [] or even append-only [], meaning that decompression will run many more times than compression. Moreover, as mentioned above, compression can often be carried out at the client.
+% \item \b{Exploit related columns}. Time series often consist of several signals that will almost always be accessed together. For example, one would rarely access only X-axis acceleration without Y-axis and Z-axis, or longitude without latitude. It is desirable to make accessing related columns together inexpensive.
+% \item \b{Amenable to low-bitwidth integer data}. Most real-world signals are digitized using an Analog-to-Digital Converter (ADC). This means that the data can be represented as integers of at most 32 bits \cite{digikeyADCs}, and typically 16 or fewer. For example, even lossless audio codecs store only 16 bits \cite{flac, shorten}. % Furthermore, there is empirical evidence that most time series can be quantized to 6 or fewer bits with little or no loss of information []. % (as measured by misclassification rate) []. % Consequently, we focus on compressing 8b and 16b integer time series. % Data coming from sensors will almost always be digitized by an Analog-to-Digital Converter (ADC)
+\item \b{Lossless}. Given that time series are almost always noisy and often oversampled, it might not seem necessary to compress them losslessly. However, noise and oversampling 1) tend to vary across applications, and 2) can be addressed in an application-specific way as a preprocessing step. Consequently, instead of assuming that some level of downsampling or some particular smoothing will be appropriate for all data, it is better for the compression algorithm to preserve what it is given and leave preprocessing up to the application developer.
+\end{enumerate}
+
+Existing methods used in databases almost universally violate Requirement 1. This is because modern general-purpose compressors tend to require large dictionaries of previously seen byte strings to be effective \cite{lz4, snappy, gzip, zlib}. Examples of such compressors used in databases are LZ4 \cite{lz4, chronicleDB, rocksDB, druid}, Snappy \cite{snappy, openTSDB, influxDB, kairosDB, parquet}, and gzip \cite{respawnDB, parquet}, among others. In the time series literature, existing algorithms either violate Requirement 3 through lossy compression \cite{sax, tsCompressSmartGrid, ecgCompressLossy, apca, lemireSegmentation}, or are specialized for floating-point data \cite{gorilla} or timestamps \cite{gorilla, berkeleyTreeDB, fastpfor}.
+
+% The primary contribution of this work is \minesp (Sprintz PReserves Integer Time Series),
+The primary contribution of this work is \mine,
+a compression algorithm for integer time series that offers state-of-the-art compression ratios and speed while also satisfying all of the above requirements. It needs $<$1KB of memory, can use blocks of data as small as eight samples, and can decompress at up to 3GB/s in a single thread. \mine's effectiveness stems from exploiting 1) temporal correlations in each variable's value and variance, and 2) the potential for parallelization across different variables, realized through the use of vector instructions.
+
+A key component of its operation is a novel, vectorized forecasting algorithm for integers. This algorithm can simultaneously train online and generate predictions at close to the speed of \texttt{memcpy}, in addition to significantly improving compression ratios compared to delta coding.
+
+The remainder of this paper is structured as follows. In Section~\ref{sec:method}, we introduce relevant definitions and describe our method. In Section~\ref{sec:results}, we evaluate \minesp in comparison to existing algorithms across a number of publicly available datasets. We also discuss when \minesp is most advantageous based on these results. We defer an overview of related work to Section~\ref{sec:relatedWork} in order to first provide context regarding our problem and methodology.
+
+ % and speed, uses $<$1KB of memory, and can use blocks of data as small as eight samples.
+
+% As part of \mine, we also introduce \fire (Fast Integer REgression),
+% As part of \mine, we also introduce \fire,
+% an online forecasting algorithm for predictive coding. \fire can simultaneously train on and generate predictions for over 5GB of data per second per thread, a rate currently surpassed only by branch predictors and other algorithms with direct hardware support.
