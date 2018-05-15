@@ -1,4 +1,16 @@
 
+\minesp draws upon ideas from time series compression, time series forecasting, integer compression, general-purpose compression, and high-performance computing. We review relevant work in more detail below, but the main distinguishing characteristics of \minesp are its abilities to:
+\begin{enumerate}
+    \item Bit pack with extremely small block sizes
+    \item Bit pack low-bitwidth integers effectively
+    \item Exploit correlation between successive samples in \textit{multivariate} time series
+    \item Naturally integrate both run-length encoding and bit packing
+    \item Exploit vectorized hardware through forecaster, learning algorithm, and bit packing method co-design
+    \item Quickly and losslessly compress a wide variety of time series while obtaining excellent compression ratios
+\end{enumerate}
+
+ % Because the ideas we use from the last two areas are well-known in the relevant communities, we focus our review on the other areas.
+
 % ------------------------------------------------
 \subsection{Compression of time series}
 % ------------------------------------------------
@@ -76,7 +88,9 @@ Both bit packing and Golomb coding are bit-based methods in that they do not gua
 
 % Before applying any of these coding schemes, it is common to apply some transform to the raw data to make the values closer to 0. Such transforms include delta encoding, \cite{fastpfor, bbp}, delta-delta encoding \cite{influxDB}, and linear predictive coding (LPC) \cite{flac}. LPC deterministically generates a prediction for each sample based on the previous samples, and stores the error in the prediction instead of the raw value; when the errors are small, the integers stored are closer to 0. Delta coding and delta-delta coding are special cases wherein each sample is predicted to be the previous sample, or a linear extrapolation from the previous two samples, respectively.
 
+% ------------------------------------------------
 \subsection{General-purpose compression}
+% ------------------------------------------------
 While \minesp is not intended to be a general-purpose compression algorithm, a reasonable alternative to using a specialized method would be to apply a general-purpose compression algorithm, possibly after delta coding or other preprocessing. Thanks largely to the development of Asymmetric Numeral Systems (ANS) \cite{ans} for entropy coding, general purpose compressors have advanced greatly in recent years. In particular, Zstd \cite{zstd}, Brotli \cite{brotli}, LZ4 \cite{lz4} and others have attained speed-compression tradeoffs significantly better than traditional methods such as GZIP \cite{gzip}, LZO \cite{lzo}, etc. As described in Section~\ref{sec:intro}, however, these methods have much higher memory requirements that \mine.
 
 % Also of note is Blosc \cite{blosc}, which is especially applicable to multivariate time series as a result of its grouping correlated bits and/or bytes together during preprocessing.
@@ -89,11 +103,11 @@ While \minesp is not intended to be a general-purpose compression algorithm, a r
 
 % Predictive coding in some form is a common element of many compression algorithms. This consists of having some forecaster predict the values of the next byte(s) to be compressed and only storing the prediction error, rather than the original value. When the forecaster is better than chance, the errors will be drawn from a lower-entropy distribution than that of the raw data. In particular, they will often be tightly concentrated around zero \cite{shorten}. The original data can be reconstructed from the errors by having the decoder run the same forecaster and add the encoded errors to its predictions.
 
-For numeric data such as time series, there are four types of predictive coding commonly in use: predictive filtering \cite{png}, delta coding \cite{fastpfor, bbp}, double-delta coding \cite{influxDB, gorilla}, and XOR-based encoding \cite{gorilla}. In predictive filtering, each prediction is a linear combination of a fixed number of recent samples. This can be understood as an autoregressive model or the application of a Finite Impulse Response (FIR) filter. When the filter is learned online, this is termed ``adaptive filtering.''
+For numeric data such as time series, there are four types of predictive coding commonly in use: predictive filtering \cite{png}, delta coding \cite{fastpfor, bbp}, double-delta coding \cite{influxDB, gorilla}, and XOR-based encoding \cite{gorilla}. In predictive filtering, each prediction is a linear combination of a fixed number of recent samples. This can be understood as an autoregressive model or the application of a Finite Impulse Response (FIR) filter. When the filter is learned from the data, this is termed ``adaptive filtering.'' Many audio compressors use some form of adaptive filtering \cite{shorten, flac, aac}.
 
 Delta coding is a special case of predictive filtering where the prediction is always the previous value. Double-delta coding, also called delta-delta coding or delta-of-deltas coding, consists of applying delta coding twice in succession. XOR-based encoding is similar to delta coding, but replaces subtraction of the previous value with the XOR operation. This modification is often desirable for floating-point data \cite{gorilla}.
 
-\fire can be understood as a special case of adaptive filtering. While adaptive filtering is a well-studied mathematical problem in the signal processing literature, we are unaware of a practical algorithm that attains speed within an order of magnitude of that of \justfire. %. or that accounts for the subtleties of low-precision integers.
+\fire can be understood as a special case of adaptive filtering. While adaptive filtering is a well-studied mathematical problem in the signal processing literature, we are unaware of a practical algorithm that attains speed within an order of magnitude of that of \justfire. I.e., \justfire's primary novelty is as a vectorized \textit{algorithm} for fitting and predicting multivariate time series, rather than as a mathematical \textit{model} of multivariate time series. That said, it does incorporate different modeling assumptions than other compression algorithms for time series in that it reduces the model to one parameter, omits a bias term, and learns online. % It considers training speed and vectorization in a way that is orthogonal to all adaptive filtering work of which we are aware. It also differs from the adpative filtering in audio codecs in that there is only one coefficient to learn and it is learned online. %. or that accounts for the subtleties of low-precision integers.
 
 % Indeed, the only methods
 

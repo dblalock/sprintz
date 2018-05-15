@@ -87,8 +87,6 @@
 %     \email{guttag@csail.mit.edu}
 % }
 
-\maketitle
-
 % ------------------------------------------------
 \begin{abstract}
 % ------------------------------------------------
@@ -97,21 +95,13 @@
 
  % to the greatest extent possible. % Many time series databases propose some method of doing this, but, to the best of our knowledge, there is neither a systematic assessment of what approaches are most effective nor a compression algorithm that clearly outperforms others on such data. % Unfortunately, existing compression algorithms either provide only limited compression when applied to time series, degrade data quality, or are not suitable for execution on low-power processors.
 
-Due to the rapid proliferation of connected devices, sensor-generated time series constitute a large and growing portion of the world's data. In order to reduce storage, power, and transmission costs, it is desirable to compress this data.
+% Thanks to the proliferation of smartphones, wearables, autonomous vehicles, and other connected devices, it is becoming common to collect large quantities of sensor-generated time series.
 
-We introduce a time series compression algorithm that achieves state-of-the-art compression ratios and up to twice the speed of its closest rivals. Moreover, because our approach requires $<$1KB of memory, it can be run on low-power sensors at the network edge, offloading computation from the central database and reducing network load. A key component of our method is a high-speed forecasting algorithm that can be trained online and significantly outperforms alternatives such as delta coding.
+Thanks to the rapid proliferation of connected devices, sensor-generated time series constitute a large and growing portion of the world's data. In order to reduce storage, power, and transmission costs, it is desirable to compress this data, ideally at the point of collection. Unfortunately, existing compression algorithms either perform poorly on sensor-generated time series or violate the memory or latency requirements of many embedded sensing systems.
+
+We introduce a time series compression algorithm that achieves state-of-the-art compression ratios while requiring less than 1KB of memory and as little as eight samples of latency. Moreover, this method is suitable not only for low-power devices collecting data, but also servers storing and querying data; in the latter context, it can decompress at over 3GB/s in a single thread, a significant fraction of memory bandwidth and even faster than many algorithms with lower compression ratios. A key component of our method is a high-speed forecasting algorithm that can be trained online and significantly outperforms alternatives such as delta coding.
 
 Extensive experiments on datasets from many domains show that these results hold not only for sensor data but also across a wide array of other time series.
-
-%, our primary application of interest, but also across a wide array of other time series.
-
-% in addition to our own.
-
-% but also accelerates many queries of practical interest relative to existing compression schemes.
-
-% We also provide an open-source benchmark library that can be used to assess dozens of different queries and compressors on various datasets.
-
- % Our approach also outperforms even domain-specific algorithms designed for more powerful hardware in some cases.
 
 \end{abstract}
 
@@ -119,6 +109,31 @@ Extensive experiments on datasets from many domains show that these results hold
 % CCS taxonomy stuff / keywords
 % ------------------------------------------------
 
+\begin{CCSXML}
+<ccs2012>
+ <concept>
+  <concept_id>10002951.10002952.10002971.10003451.10002975</concept_id>
+  <concept_desc>Information systems~Data compression</concept_desc>
+  <concept_significance>500</concept_significance>
+ </concept>
+ <concept>
+  <concept_id>10010520.10010553.10010562</concept_id>
+  <concept_desc>Computer systems organization~Embedded systems</concept_desc>
+  <concept_significance>300</concept_significance>
+ </concept>
+ <concept>
+  <concept_id>10002950.10003648.10003688.10003693</concept_id>
+  <concept_desc>Mathematics of computing~Time series analysis</concept_desc>
+  <concept_significance>100</concept_significance>
+ </concept>
+</ccs2012>
+\end{CCSXML}
+
+\ccsdesc[500]{Information systems~Data compression}
+\ccsdesc[300]{Computer systems organization~Embedded systems}
+\ccsdesc[100]{Mathematics of computing~Time series analysis}
+
+\keywords{Data Compression, Time Series, Embedded Systems}
 
 % \begin{CCSXML}
 % <ccs2012>
@@ -145,6 +160,10 @@ Extensive experiments on datasets from many domains show that these results hold
 % \ccsdesc[100]{Hardware~Signal processing systems}
 
 % \keywords{Compression, Time Series, Performance}
+
+
+\maketitle
+
 
 % ================================================================
 \section{Introduction} \label{sec:intro}

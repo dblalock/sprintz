@@ -1,20 +1,21 @@
 
 % In this section we describe how \minesp works. To do so, we first introduce relevant definitions, followed by an overview of the algorithm. We subsequently discuss each component of the algorithm in detail.
 
-To describe how \minesp works, we first formally define time series and provide an overview of the algorithm. We subsequently discuss each component of the algorithm in detail.
+% To describe how \minesp works, we first formally define time series and provide an overview of the algorithm. We subsequently discuss each component of the algorithm in detail.
+To describe how \minesp works, we first provide an overview of the algorithm, then discuss each of its component in detail.
 
-% ------------------------------------------------
-\subsection{Definitions}
-% ------------------------------------------------
-% To both establish notation and clarify the sorts of data for which \minesp is applicable, we introduce the following definitions.
-% To facilitate a precise explanation of \minesp, we introduce the following definitions.
-\begin{Definition} \b{Sample.} A sample is a vector $\x \in \R^D$. $D$ is termed the sample's \b{dimensionality}. Each element of the sample is an integer represented using a number of bits $w$, termed the \b{bitwidth}. The bitwidth $w$ is shared by all elements.
-\end{Definition}
-\begin{Definition} \b{Time Series.} A time series $\X$ of length $T$ is a sequence of $T$ samples, $\x_1,\ldots,\x_T$. All samples $\x_t$ share the same bitwidth $w$ and dimensionality $D$. If $D = 1$, $\X$ is called \b{univariate}; otherwise it is \b{multivariate}.
-% , and the meaning of each dimension is consistent from sample to sample.
-\end{Definition}
-\begin{Definition} \b{Rows, Columns.} In a database context, we assume that each sample of a time series is one row and each dimension is one column. Because data arrives as samples and memory constraints may limit how many samples can be buffered, we assume that the data is stored in row-major order---i.e., such that each sample is stored contiguously.
-\end{Definition}
+% % ------------------------------------------------
+% \subsection{Definitions}
+% % ------------------------------------------------
+% % To both establish notation and clarify the sorts of data for which \minesp is applicable, we introduce the following definitions.
+% % To facilitate a precise explanation of \minesp, we introduce the following definitions.
+% \begin{Definition} \b{Sample.} A sample is a vector $\x \in \R^D$. $D$ is termed the sample's \b{dimensionality}. Each element of the sample is an integer represented using a number of bits $w$, termed the \b{bitwidth}. The bitwidth $w$ is shared by all elements.
+% \end{Definition}
+% \begin{Definition} \b{Time Series.} A time series $\X$ of length $T$ is a sequence of $T$ samples, $\x_1,\ldots,\x_T$. All samples $\x_t$ share the same bitwidth $w$ and dimensionality $D$. If $D = 1$, $\X$ is called \b{univariate}; otherwise it is \b{multivariate}.
+% % , and the meaning of each dimension is consistent from sample to sample.
+% \end{Definition}
+% \begin{Definition} \b{Rows, Columns.} In a database context, we assume that each sample of a time series is one row and each dimension is one column. Because data arrives as samples and memory constraints may limit how many samples can be buffered, we assume that the data is stored in row-major order---i.e., such that each sample is stored contiguously.
+% \end{Definition}
 
 % ------------------------------------------------
 \subsection{Overview}
@@ -29,7 +30,7 @@ To describe how \minesp works, we first formally define time series and provide 
 \item \b{Entropy coding.} \minesp Huffman codes the headers and payloads.
 \end{enumerate}
 
-These components are run on blocks of eight samples (motivated in Section~\ref{sec:bitpacking}), and can be modified to yield different compression-speed tradeoffs. Concretely, one can 1) skip entropy coding for greater speed and 2) choose between delta coding and our online learning method as forecasting algorithms. Our method is slightly slower but often improves compression.
+These components are run on blocks of eight samples (motivated in Section~\ref{sec:bitpacking}), and can be modified to yield different compression-speed tradeoffs. Concretely, one can 1) skip entropy coding for greater speed and 2) choose between delta coding and our online learning method as forecasting algorithms. The latter is slightly slower but often improves compression.
 
 We chose these steps since they allow for high speed and exploit the characteristics of time series. Forecasting leverages the high correlation of successive samples to reduce the entropy of the data. Run-length encoding allows for extreme compression in the (common) scenario that there is no change in the data---e.g., a user's smartphone may be stationary for many hours while the user is asleep. Our method of bit packing exploits temporal correlation in the variability of the data by using the same bitwidth for points that are within the same block. Huffman coding is not specific to time series but has low memory requirements and improves compression ratios.
 
@@ -278,7 +279,7 @@ In practice, \fire differs from the above pseudocode in three ways. First, inste
 \subsection{Bit Packing} \label{sec:bitpacking}
 % ------------------------------------------------
 
-An illustration of \mine's bit packing is given in Figure~\ref{fig:overview}. The prediction errors from delta coding or \fire are zigzag encoded \cite{zigzag} and then the minimum number of bits required is computed for each column. Zigzag encoding is an invertible transform that interleaves positive and negative integers such that each integer is represented by twice its absolute value, or twice its absolute value minus one for negative integers. This makes all values nonnegative and maps numbers closer to zero to smaller values.
+An illustration of \mine's bit packing is given in Figure~\ref{fig:overview}. The prediction errors from delta coding or \fire are zigzag encoded \cite{zigzag} and then the minimum number of bits required is computed for each column. Zigzag encoding is an invertible transform that interleaves positive and negative integers such that each integer is represented by twice its absolute value, or twice its absolute value minus one for negative integers. This makes all values nonnegative and maps them such that integers father from zero become larger numbers.
 % ). % We zigzag encode because it is extremely efficient and facilitates computing the number of bits necesasary.
 
 Given the zigzag encoded errors, the number of bits $w^\prime$ required in each column can be computed as the bitwidth minus the fewest leading zeros in any of that column's errors. E.g., in Figure~\ref{fig:overview}a, the first column's largest encoded value is 16, represented as \texttt{00010000}, which has three leading zeros. This means that we require $w^\prime = 8 - 3 = 5$ bits to store the values in this column. One can find this value by ORing all the values in a column together and then using a built-in function such as GCC's $\texttt{\_\_builtin\_clz}$ to compute the number of leading zeros in a single assembly instruction (c.f. \cite{fastpfor}). This optimization motivates our use of zigzag encoding to make all values nonnegative.
