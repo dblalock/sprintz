@@ -9,11 +9,11 @@
 
 % Time series are ubiquitous and only growing in importance t
 
-Thanks to the proliferation of smartphones, wearables, autonomous vehicles, and other connected devices, it is becoming common to collect large quantities of sensor-generated time series. Once this data is centralized in one's servers, many tools exist \cite{spark, mapreduce, hive, hdfs, influxDB, druid, littleTable, openTSDB} to analyze and create value from it. However, centralizing it can be challenging due to power constraints on the devices collecting the data. In particular, transmitting data wirelessly is extremely power-intensive---on a representative set of chips \cite{cc2540, cc2640}, transmitting data over Bluetooth Low Energy (BLE) costs tens of \textit{milliwatts}, while computing at full power costs only tens of \textit{microwatts} and sitting idle costs close to 1 microwatt.
+Thanks to the proliferation of smartphones, wearables, autonomous vehicles, and other connected devices, it is becoming common to collect large quantities of sensor-generated time series. Once this data is centralized in one's servers, many tools exist to analyze and create value from it \cite{spark, mapreduce, hive, hdfs, influxDB, druid, littleTable, openTSDB}. However, centralizing it can be challenging due to power constraints on the devices collecting the data. In particular, transmitting data wirelessly is extremely power-intensive---on a representative set of chips \cite{cc2540, cc2640}, transmitting data over Bluetooth Low Energy (BLE) costs tens of \textit{milliwatts}, while computing at full power costs only tens of \textit{microwatts} and sitting idle costs close to 1 microwatt.
 
-One strategy for reducing this power consumption is to extract information locally and only transmit summaries \cite{guttagAnanthaEEG, socialFMRI}; this can be effective in some cases, but requires both a use case for which summaries are sufficient and an excellent method of constructing these summaries. Devising such a method can be a significant endeavor; e.g., \cite{guttagAnanthaEEG} conducted a research project to identify features in their data that would allow for accurate classification of brain activity.
+One strategy for reducing this power consumption is to extract information locally and only transmit summaries \cite{guttagAnanthaEEG, socialFMRI, respawnDB}; this can be effective in some cases, but requires both a predefined use case for which summaries are sufficient and an excellent method of constructing these summaries. Devising such a method can be a significant endeavor; e.g., \cite{guttagAnanthaEEG} conducted a research project to identify features in their data that would allow for accurate classification of brain activity.
 
-A complementary and more general approach is to compress the data before transmitting it \cite{socialFMRI, lachCompress, sensorTransforms, iotSignals, iotCompressCrap}. This can be somewhat effective, but existing methods either 1) design specialized compression algorithms that are only applicable for specific sensor data, such as audio \cite{flac, shorten, aac, vorbis} or EEG \cite{guttagAnanthaEEG, eegCS} recordings; or 2) use compression algorithms that are ill-suited to sensor-generated time series. More specifically, existing algorithms violate one or more of the following design requirements:
+A complementary and more general approach is to compress the data before transmitting it \cite{socialFMRI, lachCompress, sensorTransforms, iotSignals, iotCompressCrap}. This allows arbitrary subsequent analysis and does not require elaborate summary construction algorithms and also avoids hardcoding This can be somewhat effective, but existing methods either 1) design specialized compression algorithms that are only applicable for specific sensor data, such as audio \cite{flac, shorten, aac, vorbis} or EEG \cite{guttagAnanthaEEG, eegCS} recordings; or 2) use compression algorithms that are ill-suited to sensor-generated time series. More specifically, existing algorithms violate one or more of the following design requirements:
 
 \begin{enumerate}
 % \itemsep0mm
@@ -37,6 +37,17 @@ A key component of its operation is a novel, vectorized forecasting algorithm fo
 The remainder of this paper is structured as follows. In Section~\ref{sec:problem}, we introduce relevant definitions, background, and details regarding the problem we consider. In Sections~\ref{sec:method} and \ref{sec:results}, we describe \minesp and evaluate it across a number of publicly available datasets. We also discuss when \minesp is most advantageous relative to other approaches based on these results. We defer an overview of related work to Section~\ref{sec:relatedWork} in order to first provide context regarding our problem and methodology.
 
 % The contribution of this work is the introduction of \mine (Sprintz PReserves INteger Time SerieZ), a lossless compression algorithm for time series that does not assume a particular application domain (e.g., music) and is suitable for execution on low-power hardware. As we show experimentally, \mine achieves higher compression ratios than any other method across a wide range of datasets while maintaining decompression speeds over 1GB/s in a single thread.
+
+
+
+
+
+TODO couple more sentences about what our method leverages
+TODO list additional contributions
+
+
+
+
 
 
 % ================================================================
