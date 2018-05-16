@@ -7,7 +7,7 @@ See the [Sprintz paper](https://github.com/dblalock/sprintz/blob/master/assets/s
 
 To reproduce any of the results in the paper, you can do the following.
 
-## Dependencies
+## Install Dependencies
 
 - [Joblib](https://github.com/joblib/joblib) - for caching function output
 - [Pandas](http://pandas.pydata.org) - for storing results and reading in data
