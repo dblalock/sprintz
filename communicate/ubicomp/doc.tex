@@ -44,48 +44,10 @@
 \title{Sprintz: Time Series Compression for the Internet of Things}
 % ================================================================
 
-% \author{Davis W. Blalock}
-% \affiliation{
-%   \institution{Computer Science and Artificial \\ Intelligence Laboratory}
-%   \institution{Massachusetts Institute of Technology}
-% }
-% \email{dblalock@mit.edu}
-
-% \author{John V. Guttag}
-% \affiliation{
-%   \institution{Computer Science and Artificial \\ Intelligence Laboratory}
-%   \institution{Massachusetts Institute of Technology}
-% }
-% \email{guttag@mit.edu}
-
-% \numberofauthors{3}
-
-% \vldbAuthors{Davis Blalock, Sam Madden, John Guttag}
-
 
 \author{Anonymous Authors}
 \affiliation{ \institution{Anonymous Affiliation}}
 
-% \author{
-%     \alignauthor
-%     Davis Blalock    \\
-%     \affaddr{Computer Science and Artificial Intelligence Laboratory}\\
-%     % \affaddr{Massachusetts Institute of Technology} \\
-%     \affaddr{MIT} \\
-%     \email{dblalock@mit.edu}
-%     \alignauthor
-%     Sam Madden    \\
-%     \affaddr{Computer Science and Artificial Intelligence Laboratory}\\
-%     % \affaddr{Massachusetts Institute of Technology} \\
-%     \affaddr{MIT} \\
-%     \email{madden@csail.mit.edu}
-%     \alignauthor
-%     John Guttag    \\
-%     \affaddr{Computer Science and Artificial Intelligence Laboratory}\\
-%     % \affaddr{Massachusetts Institute of Technology} \\
-%     \affaddr{MIT} \\
-%     \email{guttag@csail.mit.edu}
-% }
 
 % ------------------------------------------------
 \begin{abstract}
@@ -99,7 +61,7 @@
 
 % To both reduce the storage and network costs of aggregating this data and the power cost of transmitting it.
 
-Thanks to the rapid proliferation of connected devices, sensor-generated time series constitute a large and growing portion of the world's data. Often, this data is collected from distributed, resource-constrained devices and centralized at one or more servers. A key challenge in this setup is reducing the size of the transmitted data without sacrificing its quality. Lower quality reduces the data's utility, but smaller size enables both reduced network and storage costs at the servers and reduced power consumption in sensing devices. A natural solution is to compress the data at the sensing device. Unfortunately, existing compression algorithms either violate the memory and latency requirements of many resource-constrained devices or, as we show experimentally, perform poorly on sensor-generated time series.
+Thanks to the rapid proliferation of connected devices, sensor-generated time series constitute a large and growing portion of the world's data. Often, this data is collected from distributed, resource-constrained devices and centralized at one or more servers. A key challenge in this setup is reducing the size of the transmitted data without sacrificing its quality. Lower quality reduces the data's utility, but smaller size enables both reduced network and storage costs at the servers and reduced power consumption in sensing devices. A natural solution is to compress the data at the sensing devices. Unfortunately, existing compression algorithms either violate the memory and latency requirements common in these devices or, as we show experimentally, perform poorly on sensor-generated time series.
 
 We introduce a time series compression algorithm that achieves state-of-the-art compression ratios while requiring less than 1KB of memory and adding virtually no latency. This method is suitable not only for low-power devices collecting data, but also for servers storing and querying data; in the latter context, it can decompress at over 3GB/s in a single thread, even faster than many algorithms with much lower compression ratios. A key component of our method is a high-speed forecasting algorithm that can be trained online and significantly outperforms alternatives such as delta coding.
 
@@ -209,6 +171,10 @@ Extensive experiments on datasets from many domains show that these results hold
 % ================================================================
 
 We introduce \mine, a compression algorithm for multivariate integer time series that achieves state-of-the-art compression ratios across a large number of publicly available datasets. It also attains speeds of up to 3GB/s in a single thread and predictable performance as a function of the number of variables being compressed. Moreover, it only only needs to buffer eight or sixteen samples at a time, enabling low latency in the streaming case and limited memory consumption. Finally, it imposes extremely small memory requirements, making it suitable for compression both at the server and at the network edge. % and server-side compression in the presence of large numbers of streams. % Data stored in \minesp format can be queried at nearly the speed of uncompressed data for even lightweight queries. Moreover,
+
+
+% TODO some sort of more concrete/real example
+
 
 % As a core component of \minesp, we also introduce the \fire forecaster. \fire achieves throughput of up to 5GB/s while also adapting online to the distribution of the data. \fire can be used as a preprocessor before any compression algorithm and often improves compression ratio dramatically.
 

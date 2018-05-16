@@ -11,9 +11,11 @@
 
 Thanks to the proliferation of smartphones, wearables, autonomous vehicles, and other connected devices, it is becoming common to collect large quantities of sensor-generated time series. Once this data is centralized in one's servers, many tools exist to analyze and create value from it \cite{spark, mapreduce, hive, hdfs, influxDB, druid, littleTable, openTSDB}. However, centralizing it can be challenging due to power constraints on the devices collecting the data. In particular, transmitting data wirelessly is extremely power-intensive---on a representative set of chips \cite{cc2540, cc2640}, transmitting data over Bluetooth Low Energy (BLE) costs tens of \textit{milliwatts}, while computing at full power costs only tens of \textit{microwatts} and sitting idle costs close to 1 microwatt.
 
-One strategy for reducing this power consumption is to extract information locally and only transmit summaries \cite{guttagAnanthaEEG, socialFMRI, respawnDB}; this can be effective in some cases, but requires both a predefined use case for which summaries are sufficient and an excellent method of constructing these summaries. Devising such a method can be a significant endeavor; e.g., \cite{guttagAnanthaEEG} conducted a research project to identify features in their data that would allow for accurate classification of brain activity.
+One strategy for reducing this power consumption is to extract information locally and only transmit summaries \cite{guttagAnanthaEEG, socialFMRI, respawnDB}. This can be effective in some cases, but requires both a predefined use case for which a summary is sufficient and an appropriate method of constructing this summary. Devising such a method can be a significant endeavor; e.g., \cite{guttagAnanthaEEG} conducted a research project to identify features in their data that would allow for accurate classification of brain activity.
 
-A complementary and more general approach is to compress the data before transmitting it \cite{socialFMRI, lachCompress, sensorTransforms, iotSignals, iotCompressCrap}. This allows arbitrary subsequent analysis and does not require elaborate summary construction algorithms and also avoids hardcoding This can be somewhat effective, but existing methods either 1) design specialized compression algorithms that are only applicable for specific sensor data, such as audio \cite{flac, shorten, aac, vorbis} or EEG \cite{guttagAnanthaEEG, eegCS} recordings; or 2) use compression algorithms that are ill-suited to sensor-generated time series. More specifically, existing algorithms violate one or more of the following design requirements:
+A complementary and more general approach is to compress the data before transmitting it \cite{socialFMRI, lachCompress, sensorTransforms, iotSignals, iotCompressCrap}. This allows arbitrary subsequent analysis and does not require elaborate summary construction algorithms. Unforunately, existing compression methods either 1) are only applicable for specific types of data, such as timestamps \cite{gorilla, berkeleyTreeDB, fastpfor}, audio \cite{flac, shorten, aac, vorbis} or EEG \cite{guttagAnanthaEEG, eegCS} recordings; or 2) use compression algorithms that are ill-suited to sensor-generated time series.
+
+More specifically, existing algorithms (e.g., \cite{sax, tsCompressSmartGrid, ecgCompressLossy, apca, lz4, zstd, zlib, gzip, lemireSegmentation}) violate one or more of the following design requirements:
 
 \begin{enumerate}
 % \itemsep0mm
@@ -27,26 +29,21 @@ A complementary and more general approach is to compress the data before transmi
 \item \b{Lossless}. Given that time series are almost always noisy and often oversampled, it might not seem necessary to compress them losslessly. However, noise and oversampling 1) tend to vary across applications, and 2) can be addressed in an application-specific way as a preprocessing step. Consequently, instead of assuming that some level of downsampling or some particular smoothing will be appropriate for all data, it is better for the compression algorithm to preserve what it is given and leave preprocessing up to the application developer.
 \end{enumerate}
 
-Existing compression algorithms almost universally violate Requirement 1. This is because modern general-purpose compressors tend to require large dictionaries of previously seen byte strings to be effective \cite{lz4, snappy, gzip, zlib}. In the time series literature, existing algorithms either violate Requirement 3 through lossy compression \cite{sax, tsCompressSmartGrid, ecgCompressLossy, apca, lemireSegmentation}, or are specialized for floating-point data \cite{gorilla} or timestamps \cite{gorilla, berkeleyTreeDB, fastpfor}.
+% Existing compression algorithms almost universally violate Requirement 1. This is because modern general-purpose compressors tend to require large dictionaries of previously seen byte strings to be effective \cite{lz4, snappy, gzip, zlib}. In the time series literature, existing algorithms either violate Requirement 3 through lossy compression \cite{sax, tsCompressSmartGrid, ecgCompressLossy, apca, lemireSegmentation}
 
 The primary contribution of this work is \mine,
-a compression algorithm for time series that offers state-of-the-art compression ratios and speed while also satisfying all of the above requirements. It needs $<$1KB of memory, can use blocks of data as small as eight samples, and can decompress at up to 3GB/s in a single thread. \mine's effectiveness stems from exploiting 1) temporal correlations in each variable's value and variance, and 2) the potential for parallelization across different variables, realized through the use of vector instructions.
+a compression algorithm for time series that offers state-of-the-art compression ratios and speed while also satisfying all of the above requirements. It requires $<$1KB of memory, can use blocks of data as small as eight samples, and can decompress at up to 3GB/s in a single thread. \mine's effectiveness stems from exploiting 1) temporal correlations in each variable's value and variance, and 2) the potential for parallelization across different variables, realized through the use of vector instructions.
 
-A key component of its operation is a novel, vectorized forecasting algorithm for integers. This algorithm can simultaneously train online and generate predictions at close to the speed of \texttt{memcpy}, in addition to significantly improving compression ratios compared to delta coding.
+A key component of \mine's operation is a novel, vectorized forecasting algorithm for integers. This algorithm can simultaneously train online and generate predictions at close to the speed of \texttt{memcpy}, in addition to significantly improving compression ratios compared to delta coding.
+
+A second contribution is an empirical comparison of a range of algorithms currently used to compress time series, evaluated across a wide array of public datasets. We also make available code to easily reproduce these experiments, including the plots in the paper. To the best of our knowledge, this constitutes the largest public benchmark for time series compression.
 
 The remainder of this paper is structured as follows. In Section~\ref{sec:problem}, we introduce relevant definitions, background, and details regarding the problem we consider. In Sections~\ref{sec:method} and \ref{sec:results}, we describe \minesp and evaluate it across a number of publicly available datasets. We also discuss when \minesp is most advantageous relative to other approaches based on these results. We defer an overview of related work to Section~\ref{sec:relatedWork} in order to first provide context regarding our problem and methodology.
 
 % The contribution of this work is the introduction of \mine (Sprintz PReserves INteger Time SerieZ), a lossless compression algorithm for time series that does not assume a particular application domain (e.g., music) and is suitable for execution on low-power hardware. As we show experimentally, \mine achieves higher compression ratios than any other method across a wide range of datasets while maintaining decompression speeds over 1GB/s in a single thread.
 
-
-
-
-
-TODO couple more sentences about what our method leverages
-TODO list additional contributions
-
-
-
+% TODO couple more sentences about what our method leverages
+% TODO list additional contributions
 
 
 
@@ -61,7 +58,7 @@ Before elaborating upon how our method works, we first introduce relevant defini
 % ------------------------------------------------
 % To both establish notation and clarify the sorts of data for which \minesp is applicable, we introduce the following definitions.
 % To facilitate a precise explanation of \minesp, we introduce the following definitions.
-\begin{Definition} \b{Sample.} A sample is a vector $\x \in \R^D$. $D$ is termed the sample's \b{dimensionality}. Each element of the sample is an integer represented using a number of bits $w$, termed the \b{bitwidth}. The bitwidth $w$ is shared by all elements.
+\begin{Definition} \b{Sample.} A sample is a vector $\x \in \R^D$. $D$ is the sample's \b{dimensionality}. Each element of the sample is an integer represented using a number of bits $w$, the \b{bitwidth}. The bitwidth $w$ is shared by all elements.
 \end{Definition}
 \begin{Definition} \b{Time Series.} A time series $\X$ of length $T$ is a sequence of $T$ samples, $\x_1,\ldots,\x_T$. All samples $\x_t$ share the same bitwidth $w$ and dimensionality $D$. If $D = 1$, $\X$ is called \b{univariate}; otherwise it is \b{multivariate}.
 % , and the meaning of each dimension is consistent from sample to sample.
@@ -70,12 +67,12 @@ Before elaborating upon how our method works, we first introduce relevant defini
 \end{Definition}
 
 % ------------------------------------------------
-\subsection{Limited Hardware}
+\subsection{Hardware Constraints}
 % ------------------------------------------------
 
 Many connected devices are powered by batteries or harvested energy \cite{bsnChallenges}. This results in strict power budgets and, in order to satisfy them, omission of certain functionality. In particular, many devices lack hardware support for floating point operations, SIMD (vector) instructions, and integer division. Moreover, they often have no more than a few kilobytes of memory, clocks in the tens of MHz at most, and 8-, 16-, or 32-bit processors instead of 64-bit \cite{cc2540, cc2640, quark}.
 
-We do not assume that the hardware decompressing the data is so limited. Instead, this hardware is likely a modern x86 server with SIMD instructions, gigabytes of RAM, and a multi-GHz clock. However, because the amount of data it must store and query can be large, compression ratio and decompression speed are still important.
+We assume that the hardware used to decompress the data is more capable than these devices. It is likely a modern x86 server with SIMD instructions, gigabytes of RAM, and a multi-GHz clock. However, because the amount of data it must store and query can be large, compression ratio and decompression speed are still important.
 
 % ------------------------------------------------
 \subsection{Data Characteristics}
