@@ -36,7 +36,7 @@ a compression algorithm for time series that offers state-of-the-art compression
 
 A key component of \mine's operation is a novel, vectorized forecasting algorithm for integers. This algorithm can simultaneously train online and generate predictions at close to the speed of \texttt{memcpy}, in addition to significantly improving compression ratios compared to delta coding.
 
-A second contribution is an empirical comparison of a range of algorithms currently used to compress time series, evaluated across a wide array of public datasets. We also make available code to easily reproduce these experiments, including the plots in the paper. To the best of our knowledge, this constitutes the largest public benchmark for time series compression.
+A second contribution is an empirical comparison of a range of algorithms currently used to compress time series, evaluated across a wide array of public datasets. We also make available code to easily reproduce these experiments, including the plots and statistical tests in the paper. To the best of our knowledge, this constitutes the largest public benchmark for time series compression.
 
 The remainder of this paper is structured as follows. In Section~\ref{sec:problem}, we introduce relevant definitions, background, and details regarding the problem we consider. In Sections~\ref{sec:method} and \ref{sec:results}, we describe \minesp and evaluate it across a number of publicly available datasets. We also discuss when \minesp is most advantageous relative to other approaches based on these results. We defer an overview of related work to Section~\ref{sec:relatedWork} in order to first provide context regarding our problem and methodology.
 
@@ -51,7 +51,7 @@ The remainder of this paper is structured as follows. In Section~\ref{sec:proble
 \section{Definitions and Background} \label{sec:problem}
 % ================================================================
 
-Before elaborating upon how our method works, we first introduce relevant definitions and provide relevant information regarding the problem domain.
+Before elaborating upon how our method works, we first introduce necessary definitions and provide relevant information regarding the problem being solved.
 
 % ------------------------------------------------
 \subsection{Definitions}
@@ -60,10 +60,10 @@ Before elaborating upon how our method works, we first introduce relevant defini
 % To facilitate a precise explanation of \minesp, we introduce the following definitions.
 \begin{Definition} \b{Sample.} A sample is a vector $\x \in \R^D$. $D$ is the sample's \b{dimensionality}. Each element of the sample is an integer represented using a number of bits $w$, the \b{bitwidth}. The bitwidth $w$ is shared by all elements.
 \end{Definition}
-\begin{Definition} \b{Time Series.} A time series $\X$ of length $T$ is a sequence of $T$ samples, $\x_1,\ldots,\x_T$. All samples $\x_t$ share the same bitwidth $w$ and dimensionality $D$. If $D = 1$, $\X$ is called \b{univariate}; otherwise it is \b{multivariate}.
+\begin{Definition} \b{Time Series.} A time series $\X$ of length $T$ is a sequence of $\text{ }T$ samples, $\x_1,\ldots,\x_T$. All samples $\x_t$ share the same bitwidth $w$ and dimensionality $D$. If $D = 1$, $\X$ is called \b{univariate}; otherwise it is \b{multivariate}.
 % , and the meaning of each dimension is consistent from sample to sample.
 \end{Definition}
-\begin{Definition} \b{Rows, Columns.} We assume that each sample of a time series is one row and each dimension is one column. Because data arrives as samples and memory constraints may limit how many samples can be buffered, we assume that the data is stored in row-major order---i.e., such that each sample is stored contiguously.
+\begin{Definition} \b{Rows, Columns.} When represented in memory, we assume that each sample of a time series is one row and each dimension is one column. Because data arrives as samples and memory constraints may limit how many samples can be buffered, we assume that the data is stored in row-major order---i.e., such that each sample is stored contiguously.
 \end{Definition}
 
 % ------------------------------------------------
@@ -72,7 +72,7 @@ Before elaborating upon how our method works, we first introduce relevant defini
 
 Many connected devices are powered by batteries or harvested energy \cite{bsnChallenges}. This results in strict power budgets and, in order to satisfy them, omission of certain functionality. In particular, many devices lack hardware support for floating point operations, SIMD (vector) instructions, and integer division. Moreover, they often have no more than a few kilobytes of memory, clocks in the tens of MHz at most, and 8-, 16-, or 32-bit processors instead of 64-bit \cite{cc2540, cc2640, quark}.
 
-We assume that the hardware used to decompress the data is more capable than these devices. It is likely a modern x86 server with SIMD instructions, gigabytes of RAM, and a multi-GHz clock. However, because the amount of data it must store and query can be large, compression ratio and decompression speed are still important.
+In contrast, we assume that the hardware used to decompress the data does not share these limitations. It is likely a modern x86 server with SIMD instructions, gigabytes of RAM, and a multi-GHz clock. However, because the amount of data it must store and query can be large, compression ratio and decompression speed are still important.
 
 % ------------------------------------------------
 \subsection{Data Characteristics}
@@ -82,7 +82,7 @@ From a compression perspective, time series have four attributes uncommon in oth
 
 \begin{enumerate}
     \item \textbf{Lack of exact repeats}. In text or structured records, there are many sequences of bytes---often corresponding to words or phrases---that will exactly repeat many times. This makes dictionary-based methods a natural fit. In time series, however, the presence of noise makes exact repeats less common \cite{extract, epenthesis}.
-    \item \textbf{Multiple variables}. Real-world time series often consist of multiple variables that are collected and accessed together. For example, the Inertial Measurement Unit (IMU) in modern smart phones collects three-dimensional acceleration, gyroscope, and magnetometer data, for a total of nine variables sampled at each time step. These variables are also likely to be read together, since each on its own is insufficient to characterize the phone's motion. %These variables are all sampled and fed to the processor together, resulting in every ninth value being from the same variable. This means that there is often a strong lag correlation in the data (in this case with a lag of nine). % , for a total of nine variables sampled at each time step. % These variables are all sampled and fed to the processor together, resulting in every ninth value in memory order being
+    \item \textbf{Multiple variables}. Real-world time series often consist of multiple variables that are collected and accessed together. For example, the Inertial Measurement Unit (IMU) in modern smartphones collects three-dimensional acceleration, gyroscope, and magnetometer data, for a total of nine variables sampled at each time step. These variables are also likely to be read together, since each on its own is insufficient to characterize the phone's motion. %These variables are all sampled and fed to the processor together, resulting in every ninth value being from the same variable. This means that there is often a strong lag correlation in the data (in this case with a lag of nine). % , for a total of nine variables sampled at each time step. % These variables are all sampled and fed to the processor together, resulting in every ninth value in memory order being
     \item \textbf{Low bitwidth}. Any data collected by a sensor will be digitized into an integer by an Analog-to-Digital Converter (ADC). Nearly all ADCs have a precision of 32 bits or fewer \cite{digikeyADCs}, and typically 16 or fewer of these bits are useful. For example, even lossless audio codecs store only 16 bits per sample \cite{flac, shorten}. Even data that is not collected from a sensor can often be stored using six or fewer bits without loss of performance for many tasks \cite{epenthesis, mdlIntrinsic, sax}.
     \item \textbf{Temporal correlation}. Since the real world usually evolves slowly relative to the sampling rate, successive samples of a time series tend to have similar values. However, when multiple variables are present and samples are stored contiguously, this correlation is often present only with a lag---e.g., with nine IMU variables, every ninth value is similar. Such lag correlations violate the assumptions of most compressors, which treat adjacent bytes as the most likely to be related.
     % quantization even to a mere six bits [] rarely harms classification accuracy, and quantizing to two sometimes improves it [].

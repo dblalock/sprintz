@@ -170,7 +170,16 @@ Extensive experiments on datasets from many domains show that these results hold
 \section{Conclusion} \label{sec:conclusion}
 % ================================================================
 
-We introduce \mine, a compression algorithm for multivariate integer time series that achieves state-of-the-art compression ratios across a large number of publicly available datasets. It also attains speeds of up to 3GB/s in a single thread and predictable performance as a function of the number of variables being compressed. Moreover, it only only needs to buffer eight or sixteen samples at a time, enabling low latency in the streaming case and limited memory consumption. Finally, it imposes extremely small memory requirements, making it suitable for compression both at the server and at the network edge. % and server-side compression in the presence of large numbers of streams. % Data stored in \minesp format can be queried at nearly the speed of uncompressed data for even lightweight queries. Moreover,
+We introduce \mine, a compression algorithm for multivariate integer time series that achieves state-of-the-art compression ratios across a large number of publicly available datasets. It also attains speeds of up to 3GB/s in a single thread and predictable performance as a function of the number of variables being compressed. Moreover, it only needs to buffer eight samples at a time, enabling low latency for continuously arriving data. Finally, \minesp has extremely low memory requirements, making it feasible to run even on resource-constrained devices.
+
+As part of evaluating \mine, we also conducted what is, to the best of our knowledge, the largest empirical investigation of time series compression that has been reported. To both ensure reproducibility of our work and facilitate future research in this area, we make available all of our experiments as a public benchmark.
+
+% To both ensure reproducibility of our work and facilitate future research in this area, we also make available all of our experiments as a public benchmark for time series compression. To the best of our knowledge, this is the largest such benchmark currently available.
+
+% also contribute a public benchmark for time series compression algorithms. To the best of our knowledge, the largest publicly available set of benchmarks for time series compression, which we hope will facilitate future research in this area.
+
+
+ % and server-side compression in the presence of large numbers of streams. % Data stored in \minesp format can be queried at nearly the speed of uncompressed data for even lightweight queries. Moreover,
 
 
 % TODO some sort of more concrete/real example
