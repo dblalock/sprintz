@@ -82,7 +82,7 @@ int64_t call_appropriate_query_func(const IntT* src, UintT* dest,
     NoopQuery<UintT> qNoop(ndims);
     int64_t ret = -1;
     switch (qp.op) {
-    case (REDUCE_MIN): break; // TODO
+//    case (REDUCE_MIN): break; // TODO
     case (REDUCE_MAX):
         ret = query_rowmajor_xff_rle<Materialize>(src, dest, ndims, ngroups,
             remaining_len, qMax);

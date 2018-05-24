@@ -22,7 +22,7 @@
 
 #include  "query.hpp"
 
-static const int debug = 0;
+// static const int debug = 0;
 // static const int debug = 3;
 // static const int debug = 4;
 
@@ -35,6 +35,9 @@ SPRINTZ_FORCE_INLINE int64_t query_rowmajor_delta_rle(const int_t* src,
     uint_t* dest, uint16_t ndims, uint32_t ngroups, uint16_t remaining_len,
     Func& func)
 {
+    // static const int gDebug = 4;
+    static const int gDebug = 0;
+
     CHECK_INT_UINT_TYPES_VALID(int_t, uint_t);
     static const uint8_t elem_sz = sizeof(uint_t);
     typedef typename ElemSzTraits<elem_sz>::bitwidth_t bitwidth_t;
@@ -59,7 +62,8 @@ SPRINTZ_FORCE_INLINE int64_t query_rowmajor_delta_rle(const int_t* src,
     assert(vector_sz >= stripe_sz);
 
 
-    // printf("running delta rowmajor rle!\n");
+    // printf("running delta rowmajor rle!  ");
+    // printf("DoWrite = %d\n", (int)DoWrite);
 //    func(); // TODO rm
 
     // uint8_t* orig_dest = dest;
@@ -68,9 +72,12 @@ SPRINTZ_FORCE_INLINE int64_t query_rowmajor_delta_rle(const int_t* src,
     uint_t* orig_dest = dest;
     const int_t* orig_src = src;
 
-    int gDebug = debug;
-    int debug = (elem_sz == 2) ? gDebug : 0;
+    // int gDebug = debug;
+    // int debug = (elem_sz == 2) ? gDebug : 0;
+    int debug = gDebug;
     // int debug = false;
+
+    // exit(1); // TODO rm
 
     if (debug > 0) {
         int32_t min_orig_len = ngroups * group_sz_blocks * block_sz * ndims;
@@ -82,6 +89,8 @@ SPRINTZ_FORCE_INLINE int64_t query_rowmajor_delta_rle(const int_t* src,
             dump_elements(src, min_orig_len + 4, ndims);
         }
     }
+
+    // if (debug > 2) { exit(1); } // TODO rm
 
     // ------------------------ handle edge cases
 
@@ -408,24 +417,3 @@ SPRINTZ_FORCE_INLINE int64_t query_rowmajor_delta_rle(const int_t* src,
     }
     return dest + remaining_len - orig_dest;
 }
-
-// template<typename QueryT>
-// SPRINTZ_FORCE_INLINE int64_t query_rowmajor_delta_rle_8b(const int8_t* src,
-//     uint8_t* dest, uint16_t ndims, uint32_t ngroups, uint16_t remaining_len,
-//     QueryT q)
-// {
-//     // return query_rowmajor_delta_rle(src, dest, ndims, ngroups, remaining_len);
-//     // NoopQuery q;
-//     // printf("calling wrapper: query_rowmajor_delta_rle_8b\n");
-//     return query_rowmajor_delta_rle(src, dest, ndims, ngroups, remaining_len, q);
-// }
-// template<typename QueryT>
-// SPRINTZ_FORCE_INLINE int64_t query_rowmajor_delta_rle_16b(const int16_t* src,
-//     uint16_t* dest, uint16_t ndims, uint32_t ngroups, uint16_t remaining_len,
-//     QueryT q)
-// {
-//     // NoopQuery q;
-//     // printf("calling wrapper: query_rowmajor_delta_rle_16b\n");
-//     return query_rowmajor_delta_rle(src, dest, ndims, ngroups, remaining_len, q);
-// }
-

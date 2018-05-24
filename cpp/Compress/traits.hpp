@@ -94,7 +94,7 @@ template<int Nbytes, typename ScalarT, typename ContextT> struct Packet {
 
     // XXX ths is a total hack that assumes AVX2 ints; if we try to use the
     // default constructors, it ends up trapping
-    Packet(const Packet& v) { vec = _mm256_undefined_si256(); }
+    Packet(const Packet& v) { vec = v.vec; }
     Packet() { vec = _mm256_undefined_si256(); }
 
     vector_t vec;

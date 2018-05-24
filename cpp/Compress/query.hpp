@@ -15,7 +15,7 @@
 #include "util.h" // DIV_ROUND_UP
 #include <vector>
 
-enum Operation { REDUCE_MIN, REDUCE_MAX, REDUCE_SUM };
+enum Operation { NOOP = 0, REDUCE_MAX, REDUCE_SUM };
 
 typedef struct QueryParams {
     Operation op;
@@ -167,10 +167,11 @@ template<typename DataT>
 class NoopQuery {
 public:
     using vec_t = typename scalar_traits<DataT>::vector_type;
+    using state_t = std::vector<DataT>;
     explicit NoopQuery(int64_t ndims) {}
     void operator()(uint32_t vstripe, const vec_t& prev_vals,
         const vec_t& vals, uint32_t nrepeats=1) { }
-    int result() { return 0; }
+    state_t result() { return state_t{}; }
 };
 
 // class MaxQuery: public VectorizedQuery<DataT> {

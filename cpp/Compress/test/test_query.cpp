@@ -56,15 +56,18 @@ void test_query(QueryParams qp, CompF&& f_comp, DecompF&& f_decomp)
 
 // ================================================================ Delta
 
-TEST_CASE("query rowmajor delta rle 8b", "[rowmajor][delta][rle][8b][query]") {
-    printf("executing rowmajor delta rle 8b query test\n");
+TEST_CASE("query rowmajor delta rle 8b", "[rowmajor][delta][rle][8b][query][materialize]") {
+    printf("executing rowmajor delta rle 8b query materialize test\n");
     auto query_func = [](int8_t* src, uint8_t* dest) {
         QueryParams qp;
+        qp.op = NOOP;
         qp.materialize = true;
 //        qp.materialize = false; // this should, and does, fail
         return query_rowmajor_delta_rle_8b(src, dest, qp);
+//        return decompress_rowmajor_delta_rle_8b(src, dest); // works
     };
     uint16_t ndims = 3;
+//    uint16_t ndims = 1;
     auto ndims_list = ar::range(1, ndims + 1);
     for (auto _ndims : ndims_list) {
         auto ndims = (uint16_t)_ndims;
@@ -77,7 +80,19 @@ TEST_CASE("query rowmajor delta rle 8b", "[rowmajor][delta][rle][8b][query]") {
 //            return query_rowmajor_delta_rle_16b(src, dest);
 //        };
 
-        test_codec<1>(comp, query_func);
+//        auto SZ = 128;
+//         Vec_u8 raw(SZ);
+//         {
+//             for (int i = 0; i < SZ; i++) {
+////                 raw(i) = (i % 2) ? (i + 64) % 128 : 0;
+////                 raw(i) = i;
+//                 raw(i) = (i%16)^2 + ((i/16)%16);
+//             }
+//             // TEST_COMPRESSOR(SZ, COMP_FUNC, DECOMP_FUNC);
+//             test_compressor<1>(raw, comp, query_func, "debug test");
+//         }
+//
+        test_codec<1>(comp, query_func); // TODO uncomment
     }
 //    TEST_CODEC_MANY_NDIMS_8b(compress_rowmajor_delta_rle_8b, query_rowmajor_delta_rle_8b);
 //     TEST_CODEC_NDIMS_RANGE(1, compress_rowmajor_delta_rle_8b, query_func, 1, 3);
@@ -85,10 +100,10 @@ TEST_CASE("query rowmajor delta rle 8b", "[rowmajor][delta][rle][8b][query]") {
 }
 
 TEST_CASE("query rowmajor delta rle 16b", "[rowmajor][delta][rle][16b][query]") {
-    printf("executing rowmajor delta rle 16b query test\n");
+    printf("executing rowmajor delta rle 16b query materialize test\n");
     // TEST_CODEC_MANY_NDIMS_16b(compress_rowmajor_16b, decompress_rowmajor_16b);
 
-     uint16_t ndims = 3;
+    uint16_t ndims = 3;
     auto ndims_list = ar::range(1, ndims + 1);
 //     auto ndims_list = ar::range(ndims, ndims + 1);
 //    auto ndims_list = ar::range(1, 129 + 1);
@@ -101,6 +116,7 @@ TEST_CASE("query rowmajor delta rle 16b", "[rowmajor][delta][rle][16b][query]") 
         };
         auto decomp = [](int16_t* src, uint16_t* dest) {
             QueryParams qp;
+            qp.materialize = true;
             return query_rowmajor_delta_rle_16b(src, dest, qp);
         };
 
