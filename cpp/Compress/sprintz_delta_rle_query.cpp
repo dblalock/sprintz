@@ -16,10 +16,10 @@
 
 template<bool Materialize, class IntT, class UintT>
 // int64_t call_appropriate_query_func(const IntT* src, UintT* dest,
-int64_t poop(const IntT* src, UintT* dest,
+int64_t dispatch_query(const IntT* src, UintT* dest,
     uint16_t ndims, uint32_t ngroups, uint16_t remaining_len, QueryParams qp)
 {
-    // printf(">>>>>>>>> called poop!\n");
+    // printf(">>>>>>>>> called dispatch_query!\n");
 
     // exit(1); // TODO rm
 
@@ -148,14 +148,14 @@ int64_t query_rowmajor_delta_rle_8b(const int8_t* src, uint8_t* dest,
         // printf("about to call appropriate query func; qp.materialize: %d\n", (int)qp.materialize);
         // auto ret = call_appropriate_query_func<true>(src, dest, ndims, ngroups,
         //     remaining_len, qp);
-        auto ret = poop<true>(src, dest, ndims, ngroups,
+        auto ret = dispatch_query<true>(src, dest, ndims, ngroups,
             remaining_len, qp);
         // printf("got back ret = %d\n", (int)ret);
         return ret;
     } else {
 //        return call_appropriate_query_func<false>(src, dest, ndims, ngroups,
 //            remaining_len, qp);
-        return poop<false>(src, dest, ndims, ngroups,
+        return dispatch_query<false>(src, dest, ndims, ngroups,
                            remaining_len, qp);
     }
 }
@@ -171,12 +171,12 @@ int64_t query_rowmajor_delta_rle_16b(const int16_t* src, uint16_t* dest,
     if (qp.materialize) {
 //        return call_appropriate_query_func<true>(src, dest, ndims, ngroups,
 //            remaining_len, qp);
-        return poop<true>(src, dest, ndims, ngroups,
+        return dispatch_query<true>(src, dest, ndims, ngroups,
                                                  remaining_len, qp);
     } else {
 //        return call_appropriate_query_func<false>(src, dest, ndims, ngroups,
 //            remaining_len, qp);
-        return poop<false>(src, dest, ndims, ngroups,
+        return dispatch_query<false>(src, dest, ndims, ngroups,
                                                   remaining_len, qp);
     }
 }
