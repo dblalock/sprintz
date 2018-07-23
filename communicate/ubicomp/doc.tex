@@ -23,45 +23,43 @@
 \newcommand{\fire}{\textsc{Fire}\text{ }}
 \newcommand{\justfire}{\textsc{Fire}}
 
+\setcopyright{rightsretained}
+
 \begin{document}
-
-% \setcopyright{rightsretained}
-
-%Conference
-% \copyrightyear{2017}
-% \acmYear{2017}
-% \setcopyright{acmlicensed}
-% \acmConference{KDD '17}{August 13--17, 2017}{Halifax, NS, Canada}\acmPrice{15.00}\acmDOI{10.1145/3097983.3098195}
-% \acmConference{KDD'17}{}{August 13--17, 2017, Halifax, NS, Canada.} \acmPrice{15.00} \acmDOI{10.1145/3097983.3098195}
-% \acmISBN{978-1-4503-4887-4/17/08}
-% \acmISBN{ISBN 978-1-4503-4887-4/17/08}
-
-% \fancyhead{}  % apparently KDD printer wants no headers so can add their own
-% \vldbTitle{Sprintz: Time Series Compression for the Internet of Things}
-% \vldbDOI{https://doi.org/TBD}
 
 % ================================================================
 \title{Sprintz: Time Series Compression for the Internet of Things}
 % ================================================================
 
+% \author{Anonymous Authors}
+% \affiliation{ \institution{Anonymous Affiliation}}
 
-\author{Anonymous Authors}
-\affiliation{ \institution{Anonymous Affiliation}}
+\author{Davis Blalock}
+\affiliation{
+  % \institution{Computer Science and Artificial \\ Intelligence Laboratory}
+  \institution{Massachusetts Institute of Technology}
+}
+\email{dblalock@mit.edu}
 
+\author{Samuel Madden}
+\affiliation{
+  % \institution{Computer Science and Artificial \\ Intelligence Laboratory}
+  \institution{Massachusetts Institute of Technology}
+}
+\email{guttag@mit.edu}
+
+\author{John Guttag}
+\affiliation{
+  % \institution{Computer Science and Artificial \\ Intelligence Laboratory}
+  \institution{Massachusetts Institute of Technology}
+}
+\email{guttag@mit.edu}
 
 % ------------------------------------------------
 \begin{abstract}
 % ------------------------------------------------
 
-% By 2020, mobile and connected devices will be produce over \%d\% of the world's data. Much of
-
- % to the greatest extent possible. % Many time series databases propose some method of doing this, but, to the best of our knowledge, there is neither a systematic assessment of what approaches are most effective nor a compression algorithm that clearly outperforms others on such data. % Unfortunately, existing compression algorithms either provide only limited compression when applied to time series, degrade data quality, or are not suitable for execution on low-power processors.
-
-% Thanks to the proliferation of smartphones, wearables, autonomous vehicles, and other connected devices, it is becoming common to collect large quantities of sensor-generated time series.
-
-% To both reduce the storage and network costs of aggregating this data and the power cost of transmitting it.
-
-Thanks to the rapid proliferation of connected devices, sensor-generated time series constitute a large and growing portion of the world's data. Often, this data is collected from distributed, resource-constrained devices and centralized at one or more servers. A key challenge in this setup is reducing the size of the transmitted data without sacrificing its quality. Lower quality reduces the data's utility, but smaller size enables both reduced network and storage costs at the servers and reduced power consumption in sensing devices. A natural solution is to compress the data at the sensing devices. Unfortunately, existing compression algorithms either violate the memory and latency requirements common in these devices or, as we show experimentally, perform poorly on sensor-generated time series.
+Thanks to the rapid proliferation of connected devices, sensor-generated time series constitute a large and growing portion of the world's data. Often, this data is collected from distributed, resource-constrained devices and centralized at one or more servers. A key challenge in this setup is reducing the size of the transmitted data without sacrificing its quality. Lower quality reduces the data's utility, but smaller size enables both reduced network and storage costs at the servers and reduced power consumption in sensing devices. A natural solution is to compress the data at the sensing devices. Unfortunately, existing compression algorithms either violate the memory and latency constraints common for these devices or, as we show experimentally, perform poorly on sensor-generated time series.
 
 We introduce a time series compression algorithm that achieves state-of-the-art compression ratios while requiring less than 1KB of memory and adding virtually no latency. This method is suitable not only for low-power devices collecting data, but also for servers storing and querying data; in the latter context, it can decompress at over 3GB/s in a single thread, even faster than many algorithms with much lower compression ratios. A key component of our method is a high-speed forecasting algorithm that can be trained online and significantly outperforms alternatives such as delta coding.
 
@@ -99,35 +97,7 @@ Extensive experiments on datasets from many domains show that these results hold
 
 \keywords{Data Compression, Time Series, Embedded Systems}
 
-% \begin{CCSXML}
-% <ccs2012>
-% <concept>
-% <concept_id>10003752.10003809.10010031.10002975</concept_id>
-% <concept_desc>Theory of computation~Data compression</concept_desc>
-% <concept_significance>500</concept_significance>
-% </concept>
-% <concept>
-% <concept_id>10003752.10003809.10010047</concept_id>
-% <concept_desc>Theory of computation~Online algorithms</concept_desc>
-% <concept_significance>300</concept_significance>
-% </concept>
-% <concept>
-% <concept_id>10010583.10010588.10003247</concept_id>
-% <concept_desc>Hardware~Signal processing systems</concept_desc>
-% <concept_significance>100</concept_significance>
-% </concept>
-% </ccs2012>
-% \end{CCSXML}
-
-% \ccsdesc[500]{Theory of computation~Data compression}
-% \ccsdesc[300]{Theory of computation~Online algorithms}
-% \ccsdesc[100]{Hardware~Signal processing systems}
-
-% \keywords{Compression, Time Series, Performance}
-
-
 \maketitle
-
 
 % ================================================================
 \section{Introduction} \label{sec:intro}
@@ -141,11 +111,12 @@ Extensive experiments on datasets from many domains show that these results hold
 
 % \input{problem.tex}
 
-% % ================================================================
-% \section{Related Work} \label{sec:relatedWork}
-% % ================================================================
+% ================================================================
+\vspace{3mm}
+\section{Related Work} \label{sec:relatedWork}
+% ================================================================
 
-% \input{related_work.tex}
+\input{related_work.tex}
 
 % ================================================================
 \section{Method} \label{sec:method}
@@ -159,12 +130,18 @@ Extensive experiments on datasets from many domains show that these results hold
 
 \input{results.tex}
 
-% ================================================================
-\vspace{3mm}
-\section{Related Work} \label{sec:relatedWork}
-% ================================================================
+% % ================================================================
+% \vspace{3mm}
+% \section{Related Work} \label{sec:relatedWork}
+% % ================================================================
 
-\input{related_work.tex}
+% \input{related_work.tex}
+
+% % ================================================================
+% \section{Future Work} \label{sec:futureWork}
+% % ================================================================
+
+% The above experiments demonstrate that \minesp achieves
 
 % ================================================================
 \section{Conclusion} \label{sec:conclusion}
@@ -173,6 +150,8 @@ Extensive experiments on datasets from many domains show that these results hold
 We introduce \mine, a compression algorithm for multivariate integer time series that achieves state-of-the-art compression ratios across a large number of publicly available datasets. It also attains speeds of up to 3GB/s in a single thread and predictable performance as a function of the number of variables being compressed. Moreover, it only needs to buffer eight samples at a time, enabling low latency for continuously arriving data. Finally, \minesp has extremely low memory requirements, making it feasible to run even on resource-constrained devices.
 
 As part of evaluating \mine, we also conducted what is, to the best of our knowledge, the largest empirical investigation of time series compression that has been reported. To both ensure reproducibility of our work and facilitate future research in this area, we make available all of our experiments as a public benchmark.
+
+In future work, we hope to characterize the relationship between compression and power savings, both for \minesp and for other methods. The savings are upper bounded by the compression ratio in the limit of data transmission consuming all power, but real-world systems have various overheads that cause significant deviation from this idealized model.
 
 % To both ensure reproducibility of our work and facilitate future research in this area, we also make available all of our experiments as a public benchmark for time series compression. To the best of our knowledge, this is the largest such benchmark currently available.
 

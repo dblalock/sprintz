@@ -1,0 +1,20 @@
+1
+Mentioned restriction to integer data in paragraph introducing Sprintz. Also referred reader to floating point dicussion in the results here. We tried adding some discussion of floating point more immediately but found that it derailed the introduction.
+
+3 Related work:
+Moved this earlier in the paper and clarified relationship between common time series representations and compression.
+
+4.1 Overview:
+Fixed typo in Algorithm 1, line 8
+
+4.3 Bit packing
+Modified Figure 1 to print better in greyscale, which seems to have been the main source of difficulty. Also added more explicit annotations to be thorough. Didn't add reference to the initial state since this seemed to clutter the figure, we address it in the text, and we don't actually treat the first values as special---as stated, we merely initialize the "previous values" to 0.
+
+4.4 Entropy coding:
+Significantly expanded to describe Huffman coding alphabet bit and further discuss rationale for how we use huffman coding
+
+5.1 Datasets:
+Clarified floating point/vs integer nature of datasets in paragraph after list of datasets
+
+Conclusion:
+Added discussion of power savings as future work. We would like to obtain data regarding the relationship between compression ratio and power usage, but this is a significant undertaking that requires rewriting much of our code, in addition to creating application-level code to generate realistic workloads.
