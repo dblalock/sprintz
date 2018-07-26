@@ -1,20 +1,20 @@
-1
-Mentioned restriction to integer data in paragraph introducing Sprintz. Also referred reader to floating point dicussion in the results here. We tried adding some discussion of floating point more immediately but found that it derailed the introduction.
+1 Introduction:
+We inserted a brief discussion of the ramifications of working with integer data into the paragraph introducing Sprintz. We also referred the reader to the discussion of floating point that occurs later in the paper.
 
 3 Related work:
-Moved this earlier in the paper and clarified relationship between common time series representations and compression.
+As recommended, we moved moved this earlier in the paper and clarified the relationship between common time series representations (SAX, etc.) and compression.
 
 4.1 Overview:
-Fixed typo in Algorithm 1, line 8
+Fixed the typo in Algorithm 1, line 8 and added nbits as an argument to the function.
 
 4.3 Bit packing
-Modified Figure 1 to print better in greyscale, which seems to have been the main source of difficulty. Also added more explicit annotations to be thorough. Didn't add reference to the initial state since this seemed to clutter the figure, we address it in the text, and we don't actually treat the first values as special---as stated, we merely initialize the "previous values" to 0.
+Modified Figure 1 to print better in greyscale, which seems to have been the main source of difficulty. We all also added more explicit annotations to the figure. We tried adding the initial state to the figure, but concluded that it made things too cluttered. Instead we addressed the initial values in the text. We made it clear that we don't actually treat the first values as special--we merely initialize the "previous values" to 0.
 
 4.4 Entropy coding:
-Significantly expanded to describe Huffman coding alphabet bit and further discuss rationale for how we use huffman coding
+We significantly expanded this discussion to describe the Huffman coding alphabet bitwidth and explain our rationale for the way we use Huffman coding.
 
 5.1 Datasets:
-Clarified floating point/vs integer nature of datasets in paragraph after list of datasets
+We clarified the floating point vs integer nature of the datasets in the paragraph after list of datasets.
 
 Conclusion:
-Added discussion of power savings as future work. We would like to obtain data regarding the relationship between compression ratio and power usage, but this is a significant undertaking that requires rewriting much of our code, in addition to creating application-level code to generate realistic workloads.
+We added discussion of power savings as future work; we don’t want to speculate about the possible power savings. It is easy to put an upper-bound on the savings (which we mention), but difficult to know how closely we can approach this bound. We would like to obtain data regarding the relationship between compression ratio and power usage, but this is a significant undertaking that requires rewriting much of our code, in addition to creating application-level code to generate realistic workloads.

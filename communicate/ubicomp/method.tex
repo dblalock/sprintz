@@ -73,7 +73,7 @@ An overview of how \minesp compresses one block of samples is shown in Algorithm
 \EndFor
 \For {$j \leftarrow 1,\ldots,D$} \COMMENTT {For each column} \label{line:eachColStart}
     \State{$ \nbits_j \leftarrow \max_i\{ $requiredNumBits$(\err_{ij}) \} $}
-    \State{$ \packed_j \leftarrow $ bitPack$(\{\err_{1j},\ldots,\err_{Bj} \}, \nbits_j) $}  \label{line:bodyEnd}
+    \State{$ \packed_j \leftarrow $ bitPack$(\{\err_{1j},\ldots,\err_{Bj} \},\text{ }\nbits_j) $}  \label{line:bodyEnd}
 \EndFor
 
 \LineComment{Run-length encode if all errors are zero}
@@ -139,23 +139,16 @@ An overview of how \minesp compresses one block of samples is shown in Algorithm
 \minesp forecasting can use either delta coding or \justfire \text{ } (Fast Integer REgression), a novel online forecasting algorithm we introduce.
 
 % ================================
-%
 \subsubsection{Delta coding}
 % ================================
 
-Forecasting with delta coding consists of predicting each sample $\x_i$ to be equal to the previous sample $\x_{i-1}$. This method is stateless given $\x_{i-1}$ and is extremely fast. It is particularly fast when combined with run-length encoding, since it yields a run of zero errors if and only if the data is constant. This means that decompression of runs requires only copying a fixed vector, with no additional forecasting or training. Moreover, when answering queries, one can sometimes avoid decompression entirely---e.g., one can compute the max of all samples in the run by computing the max of only the first value.
+Forecasting with delta coding consists of predicting each sample $\x_i$ to be equal to the previous sample $\x_{i-1}$, where $\x_{0} \triangleq \vec{0}$. This method is stateless given $\x_{i-1}$ and is extremely fast. It is particularly fast when combined with run-length encoding, since it yields a run of zero errors if and only if the data is constant. This means that decompression of runs requires only copying a fixed vector, with no additional forecasting or training. Moreover, when answering queries, one can sometimes avoid decompression entirely---e.g., one can compute the max of all samples in the run by computing the max of only the first value.
 
 % ================================
 \subsubsection{FIRE}
 % ================================
 
-Forecasting with \fire is slightly more expensive than delta coding but often yields better compression. % Before discussing the details of \fire, we first offer intuition regarding why it works.
-
-% Because time series tend to have high correlation between consecutive values of a given variable, a given value $x_{i}$ can be approximated via a autoregressive models of the form:
-
-% % ------------------------------------------------
-% \subsubsection{FIRE}
-% % ------------------------------------------------
+Forecasting with \fire is slightly more expensive than delta coding but often yields better compression.
 The basic idea of \fire is to model each value as a linear combination of a fixed number of previous values and learn the coefficients of this combination. Specifically, we learn an autoregressive model of the form:
 % Consider a linear model for predicting a given value $x_i$ of some variable at time step $i$.
 \begin{align}
@@ -198,7 +191,7 @@ This means that we can capture all of the above cases by predicting the next del
 
 % To make this underlying model practical and performant for integers,
 % : \fire initialization (line~\ref{line:xffCtor}), prediction (line~\ref{line:xffPredict}), and training (line~\ref{line:xffTrain}).
-To train and predict using this model, we use the functions shown in Algorithm~\ref{algo:xff}. First, to initialize a \fire forecaster, one must specify three values: the number of columns $D$, the learning rate $\eta$, and the bitwidth $w$ of the integers stored in the columns. Internally, the forecaster also maintains an accumulator for each column (line~\ref{line:counter}) and the difference (delta) between the two most recently seen samples (line~\ref{line:deltas}). The accumulator is a scaled version of the current $\alpha$ value with a bitwidth of $2w$. It enables fast updates of $\alpha$ with greater numerical precision than would be possible if modifying $\alpha$ directly. % updates without the expense of division or multiplication instructions.
+To train and predict using this model, we use the functions shown in Algorithm~\ref{algo:xff}. First, to initialize a \fire forecaster, one must specify three values: the number of columns $D$, the learning rate $\eta$, and the bitwidth $w$ of the integers stored in the columns. Internally, the forecaster also maintains an accumulator for each column (line~\ref{line:counter}) and the difference (delta) between the two most recently seen samples (line~\ref{line:deltas}). The accumulator is a scaled version of the current $\alpha$ value with a bitwidth of $2w$. It enables fast updates of $\alpha$ with greater numerical precision than would be possible if modifying $\alpha$ directly. The accumulators and deltas are both initialized to zeros. % updates without the expense of division or multiplication instructions.
 
 % ------------------------ xff pseudocode
 
