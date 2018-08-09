@@ -16,7 +16,7 @@ From an application persective, \minesp is distinct in that it enables higher-ra
 
 
 % ------------------------------------------------
-\subsection{Compression of time series}
+\subsection{Compression of Time Series}
 % ------------------------------------------------
 
 Most work on compressing time series has focused on lossy techniques. The most common approach is to approximate the data as a sequence of low-order polynomials \cite{swab, lemireSegmentation, tsCompressSmartGrid, iotCompressCrap, apca, paa}. An alternative, commonly seen in the data mining literature, is to discretize the time series using Symbolic Aggregate Approximation (SAX) \cite{sax} or its variations \cite{isax, isax2}. These approaches are designed to preserve enough information about the time series to support indexing or specific data mining algorithms (e.g. \cite{isax, fastShapelet, hotSax}), rather than to compress the time series \textit{per se}. As a result, they are extremely lossy; a hundred-sample time series might be compressed into one or two bytes, depending on the exact discretization parameters. % This is a result of these methods being intended to facilitate certain tasks, rather compress data \textit{per se}. % , but do construct representations that can be understood as lossy encodings of the data.
@@ -77,7 +77,7 @@ For lossless compression of integer time series (including timestamps), existing
 %   -snappy, lz4, zstd
 
 
-\subsection{Compression of integers}
+\subsection{Compression of Integers}
 
 % Integer compression is not as well-studied as general-purpose compression, but has seen great progress in recent years.
 
@@ -93,7 +93,7 @@ Both bit packing and Golomb coding are bit-based methods in that they do not gua
 % Before applying any of these coding schemes, it is common to apply some transform to the raw data to make the values closer to 0. Such transforms include delta encoding, \cite{fastpfor, bbp}, delta-delta encoding \cite{influxDB}, and linear predictive coding (LPC) \cite{flac}. LPC deterministically generates a prediction for each sample based on the previous samples, and stores the error in the prediction instead of the raw value; when the errors are small, the integers stored are closer to 0. Delta coding and delta-delta coding are special cases wherein each sample is predicted to be the previous sample, or a linear extrapolation from the previous two samples, respectively.
 
 % ------------------------------------------------
-\subsection{General-purpose compression}
+\subsection{General-Purpose Compression}
 % ------------------------------------------------
 % While \minesp is only designed to compress integer time series, a
 A reasonable alternative to using a time series compressor would be to apply a general-purpose compression algorithm, possibly after delta coding or other preprocessing. Thanks largely to the development of Asymmetric Numeral Systems (ANS) \cite{ans} for entropy coding, general purpose compressors have advanced greatly in recent years. In particular, Zstd \cite{zstd}, Brotli \cite{brotli}, LZ4 \cite{lz4} and others have attained speed-compression tradeoffs significantly better than traditional methods such as GZIP \cite{gzip}, LZO \cite{lzo}, etc. However, these methods have much higher memory requirements than \minesp and, empirically, often do not compress as well and/or decompress as quickly.

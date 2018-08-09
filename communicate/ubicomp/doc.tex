@@ -10,20 +10,27 @@
 \usepackage[all]{nowidow}
 
 % Metadata Information
+% \acmJournal{IMWUT}
+% \acmVolume{2}
+% \acmNumber{3}
+% \acmArticle{0}
+% \acmYear{2018}
+% \acmMonth{9}
+% \acmArticleSeq{15}
+\setcopyright{acmlicensed}
 \acmJournal{IMWUT}
-\acmVolume{0}
-\acmNumber{0}
-\acmArticle{0}
-\acmYear{2018}
-\acmMonth{5}
-\acmArticleSeq{15}
+\acmYear{2018} \acmVolume{2} \acmNumber{3} \acmArticle{93} \acmMonth{9} \acmPrice{15.00}\acmDOI{10.1145/3264903}
+
+\received{May 2018}
+\received{July 2018}
+\received[accepted]{September 2018}
 
 \newcommand{\mine}{\textsc{Sprintz}}
 \newcommand{\minesp}{\textsc{Sprintz}\text{ }}
 \newcommand{\fire}{\textsc{Fire}\text{ }}
 \newcommand{\justfire}{\textsc{Fire}}
 
-\setcopyright{rightsretained}
+% \setcopyright{rightsretained}
 
 \begin{document}
 
@@ -46,7 +53,7 @@
   % \institution{Computer Science and Artificial \\ Intelligence Laboratory}
   \institution{Massachusetts Institute of Technology}
 }
-\email{guttag@mit.edu}
+\email{madden@csail.mit.edu}
 
 \author{John Guttag}
 \affiliation{
@@ -98,6 +105,8 @@ Extensive experiments on datasets from many domains show that these results hold
 \keywords{Data Compression, Time Series, Embedded Systems}
 
 \maketitle
+
+\renewcommand{\shortauthors}{D. Blalock et al.}
 
 % ================================================================
 \section{Introduction} \label{sec:intro}
@@ -153,6 +162,12 @@ As part of evaluating \mine, we also conducted what is, to the best of our knowl
 
 In future work, we hope to characterize the relationship between compression and power savings, both for \minesp and for other methods. The savings are upper bounded by the compression ratio in the limit of data transmission consuming all power, but real-world systems have various overheads that cause significant deviation from this idealized model.
 
+
+% ================================================================
+\section*{Acknowledgments}
+% ================================================================
+
+This material is based upon work supported by the National Science Foundation Graduate Research Fellowship under Grant No. 1122374. Any opinion, findings, and conclusions or recommendations expressed in this material are those of the authors(s) and do not necessarily reflect the views of the National Science Foundation.
 
 % \IEEEtriggeratref{27}	% trigger column break to make cols even
 % \bibliographystyle{ACM-Reference-Format}

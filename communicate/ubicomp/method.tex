@@ -139,7 +139,7 @@ An overview of how \minesp compresses one block of samples is shown in Algorithm
 \minesp forecasting can use either delta coding or \justfire \text{ } (Fast Integer REgression), a novel online forecasting algorithm we introduce.
 
 % ================================
-\subsubsection{Delta coding}
+\subsubsection{Delta Coding}
 % ================================
 
 Forecasting with delta coding consists of predicting each sample $\x_i$ to be equal to the previous sample $\x_{i-1}$, where $\x_{0} \triangleq \vec{0}$. This method is stateless given $\x_{i-1}$ and is extremely fast. It is particularly fast when combined with run-length encoding, since it yields a run of zero errors if and only if the data is constant. This means that decompression of runs requires only copying a fixed vector, with no additional forecasting or training. Moreover, when answering queries, one can sometimes avoid decompression entirely---e.g., one can compute the max of all samples in the run by computing the max of only the first value.
