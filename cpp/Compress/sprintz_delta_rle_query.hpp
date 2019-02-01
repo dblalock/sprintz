@@ -153,6 +153,8 @@ SPRINTZ_FORCE_INLINE int64_t query_rowmajor_delta_rle(const int_t* src,
 
     // ================================ main loop
 
+    // printf("got to start of main loop without segfaulting!\n");
+
     for (uint64_t g = 0; g < ngroups; g++) {
         const uint8_t* header_src = (const uint8_t*)src;
         src = (int_t*)(((int8_t*)src) + total_header_bytes);
@@ -388,15 +390,24 @@ SPRINTZ_FORCE_INLINE int64_t query_rowmajor_delta_rle(const int_t* src,
         } // for each block
     } // for each group
 
+    // printf("got to end of main loop without segfaulting! about to free stuff...\n");
+
+    // printf("headers_tmp = %p, headers = %p\n", headers_tmp, headers);
+
     free(headers_tmp);
+    // printf("freed headers_tmp\n");
     free(headers);
+    // printf("freed headers\n");
     free(data_masks);
+    // printf("freed data masks\n");
     free(stripe_bitwidths);
+    // printf("freed stripe_bitwidths\n");
     free(stripe_bitoffsets);
+    // printf("freed most stuff; about to free deltas and prev_vals\n");
     free(deltas);
     free(prev_vals_ar);
 
-    // printf("bytes read: %lld\n", (uint64_t)(src - orig_src));
+    // printf("bytes read: %lld\n", (long long)(src - orig_src));
 
     // uint32_t remaining_len = orig_len - (dest - orig_dest);
 

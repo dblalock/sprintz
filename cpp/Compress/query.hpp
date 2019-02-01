@@ -11,9 +11,11 @@
 
 // namespace query {
 
-#include "traits.hpp"
-#include "util.h" // DIV_ROUND_UP
+#include <memory>
 #include <vector>
+
+#include "traits.hpp"
+#include "util.h" // div_round_up
 
 // namespace query {
 
@@ -78,6 +80,7 @@ static inline void accumulate(
     Packet<32, int32_t, CpuCtx>& accum2, Packet<32, int32_t, CpuCtx>& accum3,
     int32_t nrepeats=1)
 {
+    // printf("called accumulate!\n");
     auto x_low = _mm256_extracti128_si256(x.vec, 0);
     auto x_high = _mm256_extracti128_si256(x.vec, 1);
     auto x0 = _mm256_cvtepi8_epi32(x_low);
@@ -96,10 +99,15 @@ static inline void accumulate(
         x2 = _mm256_mullo_epi32(x2, vnrepeats);
         x3 = _mm256_mullo_epi32(x3, vnrepeats);
     }
+    // printf("about to write to accumulators\n");
     accum0.vec = _mm256_add_epi32(accum0.vec, x0);
+    // printf("wrote to one of the accumulators!\n");
     accum1.vec = _mm256_add_epi32(accum1.vec, x1);
+    // printf("wrote to half the accumulators!\n");
     accum2.vec = _mm256_add_epi32(accum2.vec, x2);
+    // printf("wrote to 3/4 of the accumulators!\n");
     accum3.vec = _mm256_add_epi32(accum3.vec, x3);
+    // printf("finished accumulate!\n");
 }
 
 static inline void accumulate(
@@ -188,7 +196,9 @@ public:
     using vec_t = typename scalar_traits<DataT>::vector_type;
 //    using state_t = std::vector<vec_t>;
     using packet_t = typename scalar_traits<DataT>::packet_type;
-    using state_t = std::vector<packet_t>;
+    // using state_t = std::vector<packet_t>;
+    // using state_t = std::unique_ptr<packet_t[]>;
+    using state_t = aligned_array<packet_t>;
     static const int scalar_sz = scalar_traits<DataT>::size;
     static const int vec_sz = vector_traits<vec_t>::size;
     static const int elems_per_vec = vec_sz / scalar_sz;
@@ -197,19 +207,30 @@ public:
     // explicit MaxQuery(int64_t ndims):
     //     state(DIV_ROUND_UP(ndims, elems_per_vec)) {}
     explicit MaxQuery(int64_t ndims) {
-        int needed_elems = DIV_ROUND_UP(ndims, elems_per_vec);
-        printf("MaxQuery: need %d elems\n", needed_elems);
-        printf("MaxQuery: sizeof(packet_t): %lu\n", sizeof(packet_t));
-        printf("MaxQuery: initial state vector size: %lu\n", state.size());
-        state.resize(needed_elems);
+        int needed_npackets = (int)div_round_up(ndims, elems_per_vec) + 3;
+        // printf("MaxQuery: need %d packets for %d dims\n", needed_npackets, (int)ndims);
+        bool zero = true; // XXX max could be less than zero
+        state = aligned_array<packet_t>(needed_npackets, true);
+        // printf("MaxQuery: sizeof(packet_t): %lu\n", sizeof(packet_t));
+        // printf("MaxQuery: initial state vector size: %lu\n", state.size());
+        // state.resize(needed_npackets);
+        // state.reserve(needed_npackets);
+        // printf("MaxQuery: resized state vector size, capacity: %lu, %lu\n", state.size(), state.capacity());
+        // printf("MaxQuery: resized state vector size: %lu\n", state.size());
     }
+
+    // ~MaxQuery() {
+    //     printf("about to delete MaxQuery\n");
+    //     // delete state;
+    // }
 
     void operator()(uint32_t vstripe, const vec_t& prev_vals,
         const vec_t& vals, uint32_t nrepeats=1)
     {
-        state[vstripe] = max(state[vstripe], vals);
+        // state[vstripe] = max(state[vstripe], vals);
+        state[0] = max(state[vstripe], vals); // TODO rm
     }
-    state_t result() { return state; }
+    const state_t& result() { return state; }
 
 private:
     state_t state;
@@ -221,7 +242,9 @@ public:
     using vec_t = typename scalar_traits<DataT>::vector_type;
     using accumulator_t = int32_t; // XXX handle other types
     using packet_t = typename scalar_traits<accumulator_t>::packet_type;
-    using state_t = std::vector<packet_t>;
+    // using state_t = std::vector<packet_t>;
+    using state_t = aligned_array<packet_t>;
+    // using state_t = std::unique_ptr<packet_t[]>;
 //    static const int scalar_sz = MAX(sizeof(DataT), 4);  // at least 32b accum
     static const int accum_sz = sizeof(accumulator_t);  // at least 32b accum
     static const int vec_sz = vector_traits<vec_t>::size;
@@ -229,8 +252,31 @@ public:
 
     // Add up to 3 extra vecs so accumulate() can read past the end of
     // the actual state in 16b case
-    explicit SumQuery(int64_t ndims):
-        state(div_round_up(ndims, elems_per_vec) + 3) {}
+    // explicit SumQuery(int64_t ndims):
+    //     state(div_round_up(ndims, elems_per_vec) + 3) {}
+    explicit SumQuery(int64_t ndims) {
+        int needed_npackets = (int)div_round_up(ndims, elems_per_vec) + 3;
+        // int needed_npackets = DIV_ROUND_UP(ndims, elems_per_vec) + 20; // TODO rm
+        // printf("SumQuery: ndims = %d, needed_npackets = %d\n", (int)ndims, needed_npackets);
+        // state = std::unique_ptr<packet_t[]>(
+        //     (packet_t*)_aligned_alloc(sizeof(packet_t), needed_npackets));
+        state = aligned_array<packet_t>(needed_npackets);
+        // state.reserve(needed_npackets);
+
+
+
+        // SELF: pick up here by using uniq_ptr for state
+
+
+
+        // state.resize(needed_npackets);
+        // printf("SumQuery: about to push back some packets...\n");
+        // for (int i = 0; i < needed_npackets; i++) {
+        //     state.push_back(packet_t());
+        //     // state[i].vec = _mm256_setzero_si256();
+        // }
+        // printf("SumQuery: initialized packets\n");
+    }
         // This segfaults:
         // state(round_up_to_multiple(div_round_up(ndims, elems_per_vec), 4)) {}
 
@@ -238,10 +284,12 @@ public:
         const vec_t& vals, uint32_t nrepeats=1)
     {
         uint32_t start_idx = vstripe * 4 / sizeof(DataT);  // XXX 64bit DataT
+        // printf("SumQuery: vstripe = %d, start_idx = %d, nrepeats = %d\n",
+        //     (int)vstripe, (int)start_idx, (int)nrepeats);
         accumulate(vals, state[start_idx], state[start_idx + 1],
             state[start_idx + 2], state[start_idx + 3], nrepeats);
     }
-    state_t result() { return state; }
+    const state_t& result() { return state; }
 
 private:
     state_t state;

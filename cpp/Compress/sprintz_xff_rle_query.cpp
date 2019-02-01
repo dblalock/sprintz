@@ -68,11 +68,10 @@ int64_t call_appropriate_query_func(const IntT* src, UintT* dest,
     // ensure that the compiler doesn't optimize everything away
     #define DUMMY_READ_QUERY_RESULT(q)                              \
         do {                                                        \
-            auto res = q.result();                                  \
-            auto elemsz = sizeof(res[0]);                           \
-            auto ptr = (uint8_t*)res.data();                        \
+            auto ptr = (uint8_t*)q.result().data();                 \
+            auto elemsz = sizeof(ptr[0]);                           \
             volatile uint8_t max = 0;                               \
-            for (int i = 0; i < res.size() * elemsz; i++) {         \
+            for (int i = 0; i < q.result().size() * elemsz; i++) {  \
                 if (ptr[i] > max) { max = ptr[i]; }                 \
             }                                                       \
         } while (0)

@@ -22,10 +22,10 @@
     #define CONSTEXPR
 #endif
 
+#include <algorithm>  // for std::swap
 #include <string.h>
 
 #include "immintrin.h"  // TODO memrep impl without avx2
-
 
 #define DIV_ROUND_UP(X, Y) ( ((X) / (Y)) + (((X) % (Y)) > 0) )
 
@@ -72,6 +72,87 @@ static inline int8_t copysign_i8(int8_t sign_of, int8_t val) {
     int8_t maybe_negated = (val ^ mask) - mask;
     return sign_of != 0 ? maybe_negated : 0; // let compiler optimize this
 }
+
+/* Allocate aligned memory in a portable way.
+ *
+ * Memory allocated with aligned alloc *MUST* be freed using _aligned_free.
+ *
+ * @param alignment The number of bytes to which memory must be aligned. This
+ *  value *must* be <= 255.
+ * @param bytes The number of bytes to allocate.
+ * @param zero If true, the returned memory will be zeroed. If false, the
+ *  contents of the returned memory are undefined.
+ * @returns A pointer to `size` bytes of memory, aligned to an `alignment`-byte
+ *  boundary.
+ */
+static inline void* _aligned_alloc(size_t alignment, size_t size, bool zero) {
+    size_t request_size = size + alignment;
+    char* buf = (char*)(zero ? calloc(1, request_size) : malloc(request_size));
+
+    uint64_t remainder = ((uint64_t)buf) % alignment;
+    size_t offset = alignment - remainder;
+    // if (offset == 0) { offset += alignment; }
+    char* ret = buf + (unsigned char)offset;
+
+    // store how many extra bytes we allocated in the byte just before the
+    // pointer we return
+    *(unsigned char*)(ret - 1) = offset;
+
+    return (void*)ret;
+}
+
+/* Free memory allocated with _aligned_alloc */
+static inline void _aligned_free(void* aligned_ptr) {
+    int offset = *(((char*)aligned_ptr) - 1);
+    free(((char*)aligned_ptr) - offset);
+}
+
+template<typename DataT, int AlignBytes=32>
+class aligned_array {
+public:
+
+    explicit aligned_array(size_t size=0, bool zero=true):
+        _data(size ?
+            (DataT*)_aligned_alloc(AlignBytes, size * sizeof(DataT), zero) :
+            nullptr),
+        _size(size)
+    {}
+    aligned_array(aligned_array&& other) noexcept :
+        aligned_array()
+    {
+        swap(*this, other);
+    }
+    //     _data(std::move(other._data)),
+    //     _size(other.size)
+    // {}
+    aligned_array& operator=(aligned_array other) {
+        swap(*this, other);
+        return *this;
+    }
+
+    ~aligned_array() {
+        // printf("freeing aligned array...");
+        if (_data != nullptr) { _aligned_free(_data); }
+        // printf("freed aligned array!");
+    }
+
+    DataT& operator[](size_t idx) { return _data[idx]; }
+    const DataT& operator[](size_t idx) const { return _data[idx]; }
+
+    size_t size() const { return _size; }
+    DataT* data() { return _data; }
+    const DataT* data() const { return _data; }
+
+    friend void swap(aligned_array& first, aligned_array& second) {
+        using std::swap;
+        swap(first._size, second._size);
+        swap(first._data, second._data);
+    }
+
+private:
+    DataT* _data;
+    size_t _size;
+};
 
 /**
  * Extends _mm256_shuffle_epi to map 4bit indices to 2B values

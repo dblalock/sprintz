@@ -9,6 +9,8 @@
 #ifndef traits_h
 #define traits_h
 
+#include <array>
+
 #include "immintrin.h" // XXX don't assume AVX2
 
 // template<class vec_t> struct VecBox {};
@@ -95,7 +97,9 @@ template<int Nbytes, typename ScalarT, typename ContextT> struct Packet {
     // XXX ths is a total hack that assumes AVX2 ints; if we try to use the
     // default constructors, it ends up trapping
     Packet(const Packet& v) { vec = v.vec; }
-    Packet() { vec = _mm256_undefined_si256(); }
+    Packet() { vec = _mm256_setzero_si256(); }
+    void operator=(const Packet& other) { vec = other.vec; }
+    void operator=(vector_t v) { vec = v; }
 
     vector_t vec;
 
