@@ -60,7 +60,7 @@ TEST_CASE("query rowmajor delta rle 8b", "[rowmajor][delta][rle][8b][query][mate
     printf("executing rowmajor delta rle 8b query materialize test\n");
     auto query_func = [](int8_t* src, uint8_t* dest) {
         QueryParams qp;
-        qp.op = NOOP;
+        qp.op = QueryTypes::NOOP;
         qp.materialize = true;
 //        qp.materialize = false; // this should, and does, fail
         return query_rowmajor_delta_rle_8b(src, dest, qp);
@@ -137,7 +137,7 @@ TEST_CASE("query delta noop 8b", "[delta][8b][query]") {
 TEST_CASE("query delta reduce max 8b", "[delta][8b][query]") {
     printf("executing delta reduce max query 8b test\n");
     QueryParams qp;
-    qp.op = REDUCE_MAX;
+    qp.op = QueryTypes::REDUCE_MAX;
     // why the heck does this work in a lambda, but not when passed as a
     // function pointer directly?
     auto f_comp = [](const uint8_t* src, uint32_t len, int8_t* dest, uint16_t ndims) {
@@ -148,7 +148,7 @@ TEST_CASE("query delta reduce max 8b", "[delta][8b][query]") {
 TEST_CASE("query delta reduce sum 16b", "[delta][8b][query]") {
     printf("executing delta reduce sum query 16b test\n");
     QueryParams qp;
-    qp.op = REDUCE_SUM;
+    qp.op = QueryTypes::REDUCE_SUM;
     // why the heck does this work in a lambda, but not when passed as a
     // function pointer directly?
     auto f_comp = [](const uint16_t* src, uint32_t len, int16_t* dest, uint16_t ndims) {
@@ -256,7 +256,7 @@ TEST_CASE("query xff noop 8b", "[xff][8b][query]") {
 TEST_CASE("query xff reduce max 8b", "[xff][8b][query]") {
     printf("executing xff reduce max query 8b test\n");
     QueryParams qp;
-    qp.op = REDUCE_MAX;
+    qp.op = QueryTypes::REDUCE_MAX;
     auto f_comp = [](const uint8_t* src, uint32_t len, int8_t* dest, uint16_t ndims) {
         return compress_rowmajor_xff_rle_8b(src, len, dest, ndims);
     };
@@ -265,7 +265,7 @@ TEST_CASE("query xff reduce max 8b", "[xff][8b][query]") {
 TEST_CASE("query xff reduce sum 8b", "[xff][8b][query]") {
     printf("executing xff reduce sum query 8b test\n");
     QueryParams qp;
-    qp.op = REDUCE_SUM;
+    qp.op = QueryTypes::REDUCE_SUM;
     auto f_comp = [](const uint8_t* src, uint32_t len, int8_t* dest, uint16_t ndims) {
         return compress_rowmajor_xff_rle_8b(src, len, dest, ndims);
     };
@@ -274,7 +274,7 @@ TEST_CASE("query xff reduce sum 8b", "[xff][8b][query]") {
 TEST_CASE("query xff reduce max 16b", "[xff][8b][query]") {
     printf("executing xff reduce max query 16b test\n");
     QueryParams qp;
-    qp.op = REDUCE_MAX;
+    qp.op = QueryTypes::REDUCE_MAX;
     auto f_comp = [](const uint16_t* src, uint32_t len, int16_t* dest, uint16_t ndims) {
         return compress_rowmajor_xff_rle_16b(src, len, dest, ndims);
     };
@@ -286,7 +286,7 @@ TEST_CASE("query xff reduce max 16b", "[xff][8b][query]") {
  TEST_CASE("query xff reduce sum 16b", "[xff][16b][query][sum][dbg]") {
      printf("executing xff reduce sum query 16b test\n");
      QueryParams qp;
-     qp.op = REDUCE_SUM;
+     qp.op = QueryTypes::REDUCE_SUM;
      auto f_comp = [](const uint16_t* src, uint32_t len, int16_t* dest, uint16_t ndims) {
          return compress_rowmajor_xff_rle_16b(src, len, dest, ndims);
      };

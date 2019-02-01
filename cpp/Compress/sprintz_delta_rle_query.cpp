@@ -50,12 +50,12 @@ int64_t dispatch_query(const IntT* src, UintT* dest,
     int64_t ret = -1;
 
     switch (qp.op) {
-    case (REDUCE_MAX):
+    case (QueryTypes::REDUCE_MAX):
         ret = query_rowmajor_delta_rle<Materialize>(src, dest, ndims, ngroups,
             remaining_len, qMax);
         DUMMY_READ_QUERY_RESULT(qMax);
         break;
-    case (REDUCE_SUM):
+    case (QueryTypes::REDUCE_SUM):
         ret = query_rowmajor_delta_rle<Materialize>(src, dest, ndims, ngroups,
             remaining_len, qSum);
         DUMMY_READ_QUERY_RESULT(qSum);

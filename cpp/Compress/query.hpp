@@ -15,12 +15,18 @@
 #include "util.h" // DIV_ROUND_UP
 #include <vector>
 
-enum Operation { NOOP = 0, REDUCE_MAX, REDUCE_SUM };
+// namespace query {
+
+namespace QueryTypes {
+    enum Operation { NOOP = 0, REDUCE_MAX, REDUCE_SUM };
+}
 
 typedef struct QueryParams {
-    Operation op;
+    QueryTypes::Operation op;
     bool materialize; /// whether to materialize the decompressed data
 } QueryParams;
+
+// }
 
 // template<class vec_t> struct VecBox {};
 // template<> struct VecBox<__m256i> {
@@ -188,8 +194,15 @@ public:
     static const int elems_per_vec = vec_sz / scalar_sz;
     static_assert(vec_sz % scalar_sz == 0, "Invalid scalar-vector pairing!");
 
-    explicit MaxQuery(int64_t ndims):
-        state(DIV_ROUND_UP(ndims, elems_per_vec)) {}
+    // explicit MaxQuery(int64_t ndims):
+    //     state(DIV_ROUND_UP(ndims, elems_per_vec)) {}
+    explicit MaxQuery(int64_t ndims) {
+        int needed_elems = DIV_ROUND_UP(ndims, elems_per_vec);
+        printf("MaxQuery: need %d elems\n", needed_elems);
+        printf("MaxQuery: sizeof(packet_t): %lu\n", sizeof(packet_t));
+        printf("MaxQuery: initial state vector size: %lu\n", state.size());
+        state.resize(needed_elems);
+    }
 
     void operator()(uint32_t vstripe, const vec_t& prev_vals,
         const vec_t& vals, uint32_t nrepeats=1)
