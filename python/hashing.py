@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from __future__ import division
+
 import numpy as np
 
 # from .utils import sliding_window as window
@@ -229,7 +229,7 @@ def hash_predict_transform(blocks, hash_name=default_hash,
     if remainder > 0:
         out[-remainder:] = x[-remainder:]
 
-    print "hash table counts:\n", encoder.counts
+    print("hash table counts:\n", encoder.counts)
     # import matplotlib.pyplot as plt
     # # plt.close()
     # plt.figure()

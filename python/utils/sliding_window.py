@@ -96,12 +96,12 @@ def sliding_window(a, ws, ss=None, flatten=True):
     firstdim = (np.product(newshape[:-meat]),) if ws.shape else ()
     dim = firstdim + (newshape[-meat:])
     # remove any dimensions with size 1
-    dim = filter(lambda i: i != 1, dim)
+    dim = [i for i in dim if i != 1]
     return strided.reshape(dim)
 
 
 def sliding_windows_of_elements(a, ss, ws=None, flatten=False):
-    return map(lambda row: sliding_window(row, ss, ws, flatten), list(a))
+    return [sliding_window(row, ss, ws, flatten) for row in list(a)]
 
 
 def sliding_windows_of_rows(a, ss, ws=None, flatten=True):
@@ -110,7 +110,7 @@ def sliding_windows_of_rows(a, ss, ws=None, flatten=True):
 
 
 def _compute_from_seq(allSubseqs, n):
-    seqLens = np.array(map(lambda subseqs: subseqs.shape[0], allSubseqs))
+    seqLens = np.array([subseqs.shape[0] for subseqs in allSubseqs])
     startIdxs = np.r_[0, np.cumsum(seqLens)[:-1]]
     endIdxs = np.r_[startIdxs[1:], n]
     fromSeq = np.zeros(n)
@@ -155,4 +155,4 @@ if __name__ == '__main__':
     print(A)
     ws = 3
     ss = 1
-    print(sliding_windows_of_rows(A, ws, ss))
+    print((sliding_windows_of_rows(A, ws, ss)))

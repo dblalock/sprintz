@@ -56,7 +56,7 @@ def plot_recordings(recordings, interval_len=1000, norm_means=False,
                     mins_zero=False, savedir=None):
 
     for r in recordings:
-        print "recording {} has data of shape {}".format(r.name, r.data.shape)
+        print("recording {} has data of shape {}".format(r.name, r.data.shape))
         fig, axes = plt.subplots(2, 4, figsize=(13, 7))
 
         start_idxs = [0, len(r.data) - interval_len]

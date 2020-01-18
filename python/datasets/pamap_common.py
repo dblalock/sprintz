@@ -67,7 +67,7 @@ NAME_CLEANING = 'cleaning'
 # funcs
 
 def removeNullCols(colNames):
-    return filter(lambda name: 'null' not in name, colNames)
+    return [name for name in colNames if 'null' not in name]
 
 
 # -------------------------------

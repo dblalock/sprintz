@@ -3,9 +3,9 @@
 import os
 from joblib import Memory
 
-import paths
+from . import paths
 from ..utils.files import listFilesInDir, ensure_dir_exists
-from pamap_common import *  # noqa
+from .pamap_common import *  # noqa
 
 memory = Memory('./')
 join = os.path.join
@@ -79,7 +79,7 @@ def getOutdoorFilePaths():
 def all_recordings():
     recs = []
     for p in getIndoorFilePaths() + getOutdoorFilePaths():
-        print "reading pamap file: ", p
+        print("reading pamap file: ", p)
         # yield PamapRecording(p)
         recs.append(PamapRecording(p))
     return recs
@@ -125,7 +125,7 @@ def main():
 
     recs = all_recordings()
 
-    print "recording 0 shape: ", recs[0].data.shape
+    print("recording 0 shape: ", recs[0].data.shape)
 
     # for i, r in enumerate(recs):
     #     print('plotting recording: ' + str(r))

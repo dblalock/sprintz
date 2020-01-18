@@ -9,7 +9,7 @@ from matplotlib.patches import Rectangle
 
 DEFAULT_LABEL = 0
 
-from synthetic import concatWithPadding, ensure2D
+from .synthetic import concatWithPadding, ensure2D
 from ..utils.sequence import splitElementsBy, splitIdxsBy
 
 # ================================================================ Plotting
@@ -230,7 +230,7 @@ def generateVideos(ar, dataName="Data", step=5000, windowLen=300,
 			absoluteEndIdx = epochStartIdx + endIdx
 			data = epochData[startIdx:endIdx]
 
-			print "generating vid for section {0}-{1}".format(absoluteStartIdx, absoluteEndIdx)
+			print("generating vid for section {0}-{1}".format(absoluteStartIdx, absoluteEndIdx))
 
 			# figure out what labeled ranges are present in this video
 			if hasRanges:
@@ -252,7 +252,7 @@ def generateVideos(ar, dataName="Data", step=5000, windowLen=300,
 					labelsInVid = None
 
 			print("labeled ranges in vid:")
-			print np.c_[startIdxsInVid, endIdxsInVid, labelsInVid]
+			print(np.c_[startIdxsInVid, endIdxsInVid, labelsInVid])
 
 			figName = dataName + "_{0}-{1}".format(absoluteStartIdx, absoluteEndIdx-1)
 			figPath = os.path.join(saveDir, figName + '.mp4')
@@ -525,7 +525,7 @@ def dataNearAnnotations(X, rangeStartIdxs, rangeEndIdxs, padLen=0):
 	for i in range(len(combinedRanges)):
 		dataStart = combinedRanges[i, 0] # has padding built in
 		dataEnd = combinedRanges[i, 1]
-		idxsInRange = range(dataStart, dataEnd)
+		idxsInRange = list(range(dataStart, dataEnd))
 		keepIdxs += list(idxsInRange)
 		# print("{}-{}\t".format(dataStart, dataEnd))
 
@@ -713,18 +713,18 @@ def concatedTsList(X, Y, instancesPerTs=10, datasetName="Dataset",
 	# repeating "pattern"
 	numClasses = len(groupedByClass)
 	if enemyInstancesPerTs > numClasses - 1:
-		print("concatedTsList(): WARNING: "
+		print(("concatedTsList(): WARNING: "
 			"enemyInstancesPerTs {} > num digits - 1; will be truncated".format(
-				enemyInstancesPerTs))
+				enemyInstancesPerTs)))
 		enemyInstancesPerTs = numClasses - 1
 
 	tsList = []
-	for clz, instances in groupedByClass.iteritems():
+	for clz, instances in groupedByClass.items():
 		groups = formGroupsOfSize(instances, instancesPerTs)
 
 		for groupNum, group in enumerate(groups):
 
-			otherClasses = groupedByClass.keys()
+			otherClasses = list(groupedByClass.keys())
 			otherClasses.remove(clz)
 			lbls = [clz] * len(group)
 			if enemyInstancesPerTs > 0:

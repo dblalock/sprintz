@@ -269,7 +269,7 @@ def prefix_lut_transform(blocks, prefix_nbits=4):
     mask = (1 << prefix_nbits) - 1
     prefixes = np.bitwise_and(prefixes, mask)
     counts = np.bincount(prefixes)
-    print "prefix counts: ", counts
+    print("prefix counts: ", counts)
 
     # this unpacks into prefixes and low bits, then reconstructs input
     # ret = sign_extend(prefixes << bmin, bmax) # TODO rm
@@ -285,7 +285,7 @@ def prefix_lut_transform(blocks, prefix_nbits=4):
     #     encode_lut[idx] = i
 
     prefixes_enc = encode_lut[prefixes.ravel()]
-    print "encoded prefix counts: ", np.bincount(prefixes_enc)
+    print("encoded prefix counts: ", np.bincount(prefixes_enc))
 
     assert prefix_nbits == 4  # XXX
     convert_to_signed = [0, 15, 1, 14, 2, 13, 3, 12, 4, 11, 5, 10, 6, 9, 7, 8]

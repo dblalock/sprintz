@@ -4,8 +4,8 @@ import os
 import numpy as np
 from joblib import Memory
 
-import paths
-from utils import concatedTsList
+from . import paths
+from .utils import concatedTsList
 
 
 _memory = Memory('./')
@@ -123,7 +123,7 @@ def _ucr_datasets_in_dir(dirpath):
     files = os.listdir(datasetsPath)
     for i in range(len(files)):
         files[i] = os.path.join(datasetsPath, files[i])
-    dirs = filter(os.path.isdir, files)
+    dirs = list(filter(os.path.isdir, files))
     return dirs
 
 
@@ -183,7 +183,7 @@ def main():
 
     dsets = allUCRDatasets()
     for dset in dsets:
-        print "dset name:", dset.name
+        print("dset name:", dset.name)
     return
 
     printTable = False
@@ -191,13 +191,13 @@ def main():
         # print out a table of basic stats for each dataset to verify
         # that everything is working
         nameLen = 22
-        print("%s\tTrain\tTest\tLength\tClasses" % (" " * nameLen))
+        print(("%s\tTrain\tTest\tLength\tClasses" % (" " * nameLen)))
         for i, datasetDir in enumerate(allUCRDatasetDirs()):
             Xtrain, _ = readUCRTrainData(datasetDir)
             Xtest, Ytest = readUCRTestData(datasetDir)
-            print('%22s:\t%d\t%d\t%d\t%d' % (nameFromDir(datasetDir),
+            print(('%22s:\t%d\t%d\t%d\t%d' % (nameFromDir(datasetDir),
                   Xtrain.shape[0], Xtest.shape[0], Xtrain.shape[1],
-                  len(np.unique(Ytest))))
+                  len(np.unique(Ytest)))))
 
     plotTs = True
     if plotTs:
@@ -212,7 +212,7 @@ def main():
                 dataDir, instancesPerTs=howManyPerTs)[:howManyPerDataset]
             saveSubdir = os.path.join(saveDir, nameFromDir(dataDir))
             for ts in tsFromDataset:
-                print ts.name, ts.data.shape
+                print(ts.name, ts.data.shape)
                 ts.plot(saveSubdir, staggerHeights=False)
 
     plotSubseqs = False
@@ -226,7 +226,7 @@ def main():
                 dataDir, instancesPerTs=howManyPerDataset)
             saveSubdir = os.path.join(saveDir, nameFromDir(dataDir))
             for ts in tsFromDataset:
-                print ts.name, ts.data.shape
+                print(ts.name, ts.data.shape)
                 windowLen = int(len(ts.data) / len(ts.labels))
                 vidLen = len(ts.data) + 1
                 ts.plotSubseqs(saveSubdir, windowLen=windowLen, step=vidLen,

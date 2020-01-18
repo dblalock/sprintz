@@ -73,8 +73,8 @@ def sq_dists_to_vectors(X, queries, rowNorms=None, queryNorms=None):
     mat_size = X.shape[0] * Q
     mat_size_bytes = _element_size_bytes(X[0] + queries[0])
     if mat_size_bytes > int(1e9):
-        print "WARNING: sq_dists_to_vectors: attempting to create a matrix" \
-            "of size {} ({}B)".format(mat_size, mat_size_bytes)
+        print("WARNING: sq_dists_to_vectors: attempting to create a matrix" \
+            "of size {} ({}B)".format(mat_size, mat_size_bytes))
 
     if rowNorms is None:
         rowNorms = np.sum(X * X, axis=1, keepdims=True)
@@ -125,8 +125,8 @@ def compute_true_knn(X, Q, k=1000, print_every=5, block_sz=128):
         truth[start:end, :] = compute_true_knn(X, rows, k=k, block_sz=block_sz)
 
         if b % print_every == 0:
-            print "computing top k for query block " \
-                "{} (queries {}-{})...".format(b, start, end)
+            print("computing top k for query block " \
+                "{} (queries {}-{})...".format(b, start, end))
 
     assert np.all(truth != -999)
     return truth

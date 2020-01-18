@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from __future__ import division
+
 
 import itertools
 import numpy as np
@@ -59,9 +59,9 @@ def learn_filters(x, ntaps=4, nfilters=16, niters=8, quantize=False,
             # print "{}: MSE / var(y) = {:.04f}; best err^2 / var(y) = {:.04f}".format(
             #     it, np.mean(errs*errs) / y_var,
             #     np.mean(best_errs*best_errs) / y_var)
-            print "{}: MSE / var(y) = {:.04f}".format(
-                it, np.mean(best_errs*best_errs) / y_var)
-            print "    bincounts: ", np.bincount(assigs) / float(N)
+            print("{}: MSE / var(y) = {:.04f}".format(
+                it, np.mean(best_errs*best_errs) / y_var))
+            print("    bincounts: ", np.bincount(assigs) / float(N))
 
         # for i in range(1, nfilters):  # skip first filter, which is fixed
         min_occurrences = int((N / float(nfilters)) / 4)
@@ -74,7 +74,7 @@ def learn_filters(x, ntaps=4, nfilters=16, niters=8, quantize=False,
                 filters[i] = least_squares(X_filt, y_filt)
 
     if verbose > 1:
-        print "final filters:\n", filters
+        print("final filters:\n", filters)
 
     if verbose > 0:
         initial_predictions = np.dot(X, initial_filters.T)
@@ -83,10 +83,10 @@ def learn_filters(x, ntaps=4, nfilters=16, niters=8, quantize=False,
         predictions = np.dot(X, filters.T)
         errs = predictions - y
         best_errs = np.min(errs * errs, axis=1)
-        print "initial, final MSE / var(y) = {:.04f}, {:.04f}".format(
-            np.mean(initial_best_errs) / y_var, np.mean(best_errs) / y_var)
+        print("initial, final MSE / var(y) = {:.04f}, {:.04f}".format(
+            np.mean(initial_best_errs) / y_var, np.mean(best_errs) / y_var))
 
-        print "    bincounts: ", np.bincount(assigs) / float(N)
+        print("    bincounts: ", np.bincount(assigs) / float(N))
 
     return filters
 
@@ -184,7 +184,25 @@ def compute_loss(errs, loss='l2', axis=-1):
         raise ValueError("Unrecognized loss function '{}'".format(loss))
 
 
-def greedy_brute_filters(x, nfilters=16, ntaps=4, nbits=4, step_sz=.5,
+# def greedy_brute_filters(x, nfilters=16, ntaps=4, nbits=4, step_sz=.5,
+
+# def fixed_four_filts(x, nfilters=5, ntaps=4):
+def fixed_four_filts(blocks_unused, nfilters=4, ntaps=4):
+    filters = np.zeros((nfilters, ntaps))
+    # filters[0, -1] = 1  # delta encoding
+    # filters[1, -1], filters[1, -2] = 2, -1  # delta-delta encoding
+    # filters[2, -1], filters[2, -2], filters[2, -3] = 2, -3, 1  # 3delta
+    # filters[2] = np.array([-.5, -.5, 1, 1])
+    filters[0] = np.array([0, 0, 0, 1])     # delta
+    filters[1] = np.array([0, 0, -1, 2])    # double delta
+    filters[2] = np.array([0, 0, .5, .5])   # avg
+    filters[3] = np.array([0, -.5, .5, 1])  # delta of avgs
+    # filters[4] = (np.max(x) - np.min(x)) / 2  # infer mean instead of prev point
+    # filters[3, -1], filters[3, -2], filters[3, -3] = .5, .5, 0  # lpf
+    return filters
+
+
+def greedy_brute_filters(x, nfilters=4, ntaps=4, nbits=4, step_sz=.5,
                          block_sz=-1, loss='l2', verbose=1):
     """
     Assess every possible filter and greedily take the best
@@ -305,29 +323,29 @@ def greedy_brute_filters(x, nfilters=16, ntaps=4, nbits=4, step_sz=.5,
         losses = min_losses[:, best_filt_idx].reshape(y.shape)  # make col vect
 
         if verbose > 1:
-            print "{}: mean err / var: {}".format(
-                i, losses[best_filt_idx] / div_by)
+            print("{}: mean err / var: {}".format(
+                i, losses[best_filt_idx] / div_by))
 
     if verbose > 0:
         final_mean_err = np.mean(errs)
-        print "-> initial err, final err: {:.5f}, {:.5f}".format(
-                initial_mean_err / div_by, final_mean_err / div_by)
+        print("-> initial err, final err: {:.5f}, {:.5f}".format(
+                initial_mean_err / div_by, final_mean_err / div_by))
 
         y = x[ntaps:].astype(np.float32).reshape((-1, 1))  # col vect
         raw_errs = y - np.dot(X, filters.T)
         losses = raw_errs * raw_errs
         assigs = np.argmin(losses, axis=1)
-        print "    bincounts (ignoring blocks): {}".format(
-            np.bincount(assigs) / float(len(X)))
+        print("    bincounts (ignoring blocks): {}".format(
+            np.bincount(assigs) / float(len(X))))
 
         if block_sz > 1:
             block_losses = windows_as_dim3(losses, block_sz).sum(axis=1)
             assigs = np.argmin(block_losses, axis=1)
-            print "    bincounts (using blocks): {}".format(
-                np.bincount(assigs) / float(len(X)))
+            print("    bincounts (using blocks): {}".format(
+                np.bincount(assigs) / float(len(X))))
 
         if verbose > 1:
-            print "final filters:\n", filters
+            print("final filters:\n", filters)
 
     if len(filters.shape) == 1:
         filters = filters.reshape(1, len(filters))
@@ -344,8 +362,8 @@ def sub_kmeans(blocks, k=16, verbose=1):
     centroids, assigs = dist.kmeans(blocks, k=k)
     centroids = centroids.astype(np.int32)
     assert len(blocks) == len(assigs)
-    print "kmeans avg bin size: {:.3f}".format(len(blocks) / float(k))
-    print "kmeans bincounts: ", np.bincount(assigs)
+    print("kmeans avg bin size: {:.3f}".format(len(blocks) / float(k)))
+    print("kmeans bincounts: ", np.bincount(assigs))
     # all_rows = np.arange(len(assigs))
     # centroids[:] = 0 # TODO rm
     # centroids = np.random.randn(*centroids.shape) * np.var(blocks) # TODO rm
@@ -384,7 +402,7 @@ class KmeansCompressor(object):
         self.counts = np.zeros(k, dtype=np.int32)
         self.optional = optional
 
-        print "KmeansCompressor: k={}, maxpool={}".format(k, maxpool_phase)
+        print("KmeansCompressor: k={}, maxpool={}".format(k, maxpool_phase))
 
     def feed_block(self, block):
         assert len(block) == self.centroids.shape[1]
@@ -397,7 +415,7 @@ class KmeansCompressor(object):
         ncentriods = min(self.it, self.k)
 
         if self.it % 100 == 1:
-            print "----- block num = {}".format(self.it - 1)
+            print("----- block num = {}".format(self.it - 1))
 
         if self.maxpool_phase:
             centroids = _all_rotations_of(self.centroids[:ncentriods, :])
@@ -434,12 +452,12 @@ class KmeansCompressor(object):
         broken = not ((_sum_of_squares(block) > _sum_of_squares(out_block)) or idx == 0)
         broken = broken and used_centroid
         if broken:
-            print "centroids:\n", centroids
-            print "nn idx: ", idx
-            print "block", block
-            print "out_block", out_block
-            print "block shape, out_block shape", block.shape, out_block.shape
-            print "block var, out_block var, ", np.var(block), np.var(out_block)
+            print("centroids:\n", centroids)
+            print("nn idx: ", idx)
+            print("block", block)
+            print("out_block", out_block)
+            print("block shape, out_block shape", block.shape, out_block.shape)
+            print("block var, out_block var, ", np.var(block), np.var(out_block))
             assert False
 
         # print "idx: ", idx
@@ -486,7 +504,7 @@ def sub_online_kmeans(blocks, k=16, verbose=1, **kwargs):
     for i, block in enumerate(blocks):
         out[i], _ = encoder.feed_block(block)
 
-    print "online kmeans centroid counts:\n", encoder.counts
+    print("online kmeans centroid counts:\n", encoder.counts)
     # import matplotlib.pyplot as plt
     # # plt.close()
     # plt.figure()

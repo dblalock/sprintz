@@ -77,8 +77,8 @@ def warpedSines(length, origFracs=.5, newFracs=.33, periods=1, **kwargs):
 		raise IndexError("origFracs length {} != newFracs length {}".format(
 			len(origFracs), len(newFracs)))
 
-	print "origFracs", origFracs
-	print "newFracs", newFracs
+	print("origFracs", origFracs)
+	print("newFracs", newFracs)
 
 	pieces = []
 	numPieces = len(origFracs) - 1
@@ -107,7 +107,7 @@ def warpedSines(length, origFracs=.5, newFracs=.33, periods=1, **kwargs):
 			pieceLen = length - sum([len(piece) for piece in pieces])
 		else:
 			pieceLen = int(deltaNewFrac * length)
-		print "creating piece of len", pieceLen
+		print("creating piece of len", pieceLen)
 		piecePeriods = deltaOrigFrac * periods
 		piecePeriodOffset = origFrac
 		sinewave = sines(pieceLen, periods=piecePeriods,
@@ -246,7 +246,7 @@ def randWarpingPath(seqLength, stepConstraints=True, reallyWarped=False):
 
 def warpedSeq(seq, sameLength=True, useI=True, **kwargs):
 	path = randWarpingPath(len(seq), **kwargs) # list of (i,j) pairs
-	idxs_i, idxs_j = zip(*path) # tuple of i vals, tuple of j vals
+	idxs_i, idxs_j = list(zip(*path)) # tuple of i vals, tuple of j vals
 	idxs = idxs_i if useI else idxs_j # use i idxs or j idxs
 	warped = seq[np.asarray(idxs)]
 	if sameLength:
@@ -546,7 +546,7 @@ def makeSinesDataset(numSines=2, numNoise=10, startIdx=60, warped=False, **kwarg
 	# sines = makeSinesSeqs(numSines, shape=80, noiseStd=0.0, **kwargs)
 	sines = makeSinesSeqs(numSines, shape=80, noiseStd=0.1, **kwargs)
 	if warped:
-		sines = map(lambda s: warpedSeq(s), sines)
+		sines = [warpedSeq(s) for s in sines]
 	background = makeRandWalkSeqs(numNoise, shape=200, std=.5, **kwargs)
 	for i, s in enumerate(sines):
 		embedSubseq(background[i], s, startIdx)

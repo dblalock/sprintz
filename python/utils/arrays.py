@@ -374,15 +374,15 @@ def dictsTo2DArray(dicts):
 	"""
 	allKeys = set()
 	for d in dicts:
-		allKeys.update(d.keys())
+		allKeys.update(list(d.keys()))
 	sortedKeys = sorted(allKeys)
 	numKeys = len(sortedKeys)
 	numDicts = len(dicts)
 	keyIdxs = np.arange(numKeys)
-	key2Idx = dict(zip(sortedKeys, keyIdxs))
+	key2Idx = dict(list(zip(sortedKeys, keyIdxs)))
 	ar = np.zeros((numDicts, numKeys))
 	for i, d in enumerate(dicts):
-		for key, val in d.iteritems():
+		for key, val in d.items():
 			idx = key2Idx[key]
 			ar[i, idx] = val
 	return ar, tuple(sortedKeys)

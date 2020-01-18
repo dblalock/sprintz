@@ -222,9 +222,9 @@ def main():
     anchors, loss = optimal_pla(x, penalty=penalty)
     axes[1].plot(x)
 
-    print "found anchors: ", anchors
-    print "got normalized loss {} using {} anchors".format(
-        loss / (len(x) * np.var(x)), len(anchors))
+    print("found anchors: ", anchors)
+    print("got normalized loss {} using {} anchors".format(
+        loss / (len(x) * np.var(x)), len(anchors)))
 
     # plt.figure()
     # axes[0].plot(x)

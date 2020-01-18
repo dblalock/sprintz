@@ -96,7 +96,7 @@ def create_perm_lut():
 
         return ret
 
-    perms = itertools.permutations(range(4))
+    perms = itertools.permutations(list(range(4)))
     perms = np.array(list(perms))  # since we'll return it
     for i, perm in enumerate(perms):
         lut[perm_number(perm)] = i
@@ -305,8 +305,8 @@ def learn_dict_seq(tsList, max_len=2048):
         # from scipy import polyfit, polyval
         from scipy.stats import linregress
         slope, intercept, corr_r, _, _ = linregress(logx, logy)
-        print "power law slope, intercept, corr = {}, {}, {}".format(
-            slope, intercept, corr_r)
+        print("power law slope, intercept, corr = {}, {}, {}".format(
+            slope, intercept, corr_r))
 
         # yhat = np.exp(-intercept + slope * np.log(xvals))
         yhat = np.exp(intercept + slope * np.log(xvals))
@@ -513,11 +513,11 @@ def nn_encode(blocks, num_neighbors=256, nn_step=1, nn_hash=None,
         N_f = float(N)
         expected_bitsave = saved_bits / N_f
         std_bitsave = saved_bits_sq / N_f - expected_bitsave * expected_bitsave
-        print "nn nonzero {}/{} ({:.1f}%) and saved {:.2f} +/-{:.2f} bits" \
+        print("nn nonzero {}/{} ({:.1f}%) and saved {:.2f} +/-{:.2f} bits" \
             .format(times_nonzero, N, 100 * times_nonzero / N_f,
-                    expected_bitsave, std_bitsave)
+                    expected_bitsave, std_bitsave))
 
-        print "mean, std of nn idxs: ", np.mean(nn_idxs), np.std(nn_idxs)
+        print("mean, std of nn idxs: ", np.mean(nn_idxs), np.std(nn_idxs))
 
         return offsetBlocks.reshape(orig_shape)
 
@@ -550,11 +550,11 @@ def quantize(X, numbits, keep_nrows=-1, mean_norm=False, stitch_ends=False):
     np.random.seed(123)
     X = X - np.min(X)
 
-    print "X shape: ", X.shape
-    print "X min, max: ", X.min(), X.max()
+    print("X shape: ", X.shape)
+    print("X min, max: ", X.min(), X.max())
     dtype = np.int32 if numbits <= 32 else np.int64
     X = (maxval / float(np.max(X)) * X).astype(dtype)
-    print "quantized X min, max: ", X.min(), X.max()
+    print("quantized X min, max: ", X.min(), X.max())
     # print "initial quantized data: "
     # print X.ravel()[:25]
 
@@ -743,7 +743,7 @@ def encode_fir(blocks, filt):
 
 def maybe_delta_encode(blocks):
     ret, counts = take_best_of_each([blocks, delta_encode(blocks)], return_counts=True)
-    print "delta, delta-delta fracs: ", counts / float(counts.sum())
+    print("delta, delta-delta fracs: ", counts / float(counts.sum()))
     return ret
 
 
@@ -795,7 +795,7 @@ def dyn_filt(blocks, filters=None, **learn_kwargs):
         losses = raw_errs * raw_errs
 
         assigs = np.argmin(losses, axis=1)
-        print "    selected counts: ", np.bincount(assigs) / float(len(X))
+        print("    selected counts: ", np.bincount(assigs) / float(len(X)))
 
         ret = np.zeros_like(blocks).ravel()
         all_idxs = np.arange(len(predictions))
@@ -811,7 +811,7 @@ def dyn_filt(blocks, filters=None, **learn_kwargs):
 
     blocks, counts = take_best_of_each(
         blocks_list, loss='linf', return_counts=True)
-    print "  fraction each filter chosen:\n     ", counts / float(np.sum(counts))
+    print("  fraction each filter chosen:\n     ", counts / float(np.sum(counts)))
 
     # print "final blocks shape: ", blocks.shape
 
@@ -873,6 +873,10 @@ def apply_transforms(X, blocks, transform_names, k=-1, side=None,
         elif name == 'dyn_filt':
             offsetBlocks = dyn_filt(offsetBlocks)
 
+        elif name == 'dyn_fixed_filts':
+            filts = learning.fixed_four_filts(offsetBlocks)
+            offsetBlocks = dyn_filt(offsetBlocks, filters=filts)
+
         # elif name == 'split_dyn_filt':
         #     offsetBlocks = split_dyn_filt(blocks)
 
@@ -886,7 +890,7 @@ def apply_transforms(X, blocks, transform_names, k=-1, side=None,
             offsetBlocks = scaled_signs_encode(offsetBlocks)
 
         if name == 'nn':
-            print "actually doing nn encoding"
+            print("actually doing nn encoding")
             offsetBlocks = nn_encode(offsetBlocks, **kwargs)
 
         if name == 'avg':
@@ -933,7 +937,7 @@ def apply_transforms(X, blocks, transform_names, k=-1, side=None,
             # print "offsetBlocks shape, size: ", offsetBlocks.shape, offsetBlocks.size
             # print "<autocoracle> X shape, size: ", X.shape, X.size
             corr_mat = np.corrcoef(x[lag:], x[:-lag])
-            print "autocorr at true lag: ", corr_mat[0, 1]  # off diag
+            print("autocorr at true lag: ", corr_mat[0, 1])  # off diag
             x[lag:] = x[lag:] - x[:-lag]
             offsetBlocks = x.reshape(offsetBlocks.shape)
 
@@ -1107,11 +1111,11 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     axes[-4].set_title("(Clipped) distribution of residuals")
 
     clip_min, clip_max = -129, 128
-    nbins = (clip_max - clip_min) / 2
+    nbins = (clip_max - clip_min) // 2
     clipped_resids = np.clip(errs_right, clip_min, clip_max).astype(np.int32).ravel()
     # clipped_resids = np.log(clipped_resids) # TODO rm
     sb.distplot(clipped_resids, ax=axes[-4], kde=False, bins=nbins, hist_kws={
-                'normed': True, 'range': [clip_min, clip_max]})
+                'density': True, 'range': [clip_min, clip_max]})
     if plot_sort:
         # using prefix_nbits < 10 makes it way worse for 12b stuff cuz vals
         # with the same prefix don't get sorted like they should
@@ -1122,14 +1126,14 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
         positions = sort_transform(errs_right, nbits=numbits, prefix_nbits=prefix_nbits)
         clipped_positions = np.minimum(positions, clip_max).ravel()
         sb.distplot(clipped_positions, ax=axes[-4], kde=False, bins=nbins, hist_kws={
-            'normed': True, 'range': [0, clip_max], 'color': 'g'})
+            'density': True, 'range': [0, clip_max], 'color': 'g'})
 
     # TODO uncomment
     # if plot_mixfix:
     #     codes = mixfix_encode(errs_right, nbits=numbits)
     #     clipped_codes = np.minimum(codes, clip_max).ravel()
     #     sb.distplot(clipped_codes, ax=axes[-4], kde=False, bins=nbins, hist_kws={
-    #         'normed': True, 'range': [0, clip_max], 'color': 'g'})
+    #         'density': True, 'range': [0, clip_max], 'color': 'g'})
 
     # if plot_sub_minbits:
     #     use_blocks = zigzag_encode(offsetBlocksRight)
@@ -1140,7 +1144,7 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     #     offset_vals /= 2  # wrong, but allows apples-to-apples viz comparison
     #     clipped_vals = np.clip(offset_vals, 0, clip_max).astype(np.int32).ravel()
     #     sb.distplot(clipped_vals, ax=axes[-4], kde=False, bins=nbins,
-    #                 hist_kws={'normed': True, 'range': [0, clip_max],
+    #                 hist_kws={'density': True, 'range': [0, clip_max],
     #                           'color': 'grey'})
 
     # # plot best fit laplace distro
@@ -1195,22 +1199,22 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
         block_maxes = np.max(resid_blocks, axis=1)
 
         sb.distplot(resids, ax=ax, kde=False, bins=bins, hist_kws={
-            'normed': True, 'range': [0, max_nbits]})
+            'density': True, 'range': [0, max_nbits]})
 
         sb.distplot(block_maxes, ax=ax, kde=False, bins=bins, hist_kws={
-            'normed': True, 'range': [0, max_nbits], 'color': (.8, 0, 0, .05)})
+            'density': True, 'range': [0, max_nbits], 'color': (.8, 0, 0, .05)})
 
         if plot_sort:
             positions = sort_transform(raw_resids, nbits=numbits, prefix_nbits=8).ravel()
             position_costs = compress.nbits_cost(positions, signed=False)
             sb.distplot(position_costs, ax=ax, kde=False, bins=bins, hist_kws={
-                'normed': True, 'range': [0, max_nbits], 'color': 'g'})
+                'density': True, 'range': [0, max_nbits], 'color': 'g'})
 
         if plot_mixfix:
             # print "raw resids[2, :20]: ", raw_resid_blocks[:2]
             costs_mixfix = mixfix_cost(raw_resid_blocks, nbits=numbits).ravel()
             sb.distplot(costs_mixfix, ax=ax, kde=False, bins=bins, hist_kws={
-                'normed': True, 'range': [0, max_nbits], 'color': 'g'})
+                'density': True, 'range': [0, max_nbits], 'color': 'g'})
 
         if plot_sub_minbits:
             use_blocks = zigzag_encode(raw_resid_blocks)
@@ -1222,7 +1226,7 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
             # largest value -> 0; smaller values -> -4; then add 4
             costs_sub_minbits = 4 + np.maximum(-4, cost_diffs).ravel()
             sb.distplot(costs_sub_minbits, ax=ax, kde=False, bins=bins, hist_kws={
-                'normed': True, 'range': [0, max_nbits], 'color': 'gray'})
+                'density': True, 'range': [0, max_nbits], 'color': 'gray'})
 
             # positions = sort_transform(raw_resids, nbits=numbits, prefix_nbits=8).ravel()
             # position_costs = compress.nbits_cost(positions, signed=False)
@@ -1252,7 +1256,7 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
         if plot_sub_minbits:
             costs.append(np.mean(costs_sub_minbits))
             styles.append('gray')
-        zipped = zip(costs, styles)
+        zipped = list(zip(costs, styles))
         for i, (cost, style) in enumerate(zipped):
             # cost = costs[i]
             # style = styles[i]
@@ -1331,10 +1335,11 @@ def main():
     # left_transforms = None
     # left_transforms = 'sub_mean'
     # left_transforms = 'dyn_filt'
-    left_transforms = 'delta'
+    # left_transforms = 'delta'
+    left_transforms = 'double_delta'
+    # left_transforms = 'OnlineGradDescent'
     # left_transforms = ['smooth', 'delta']
     # left_transforms = ['smooth', 'smooth', 'delta']
-    # left_transforms = 'double_delta'
     # left_transforms = 'online_regress'
     # left_transforms = 'global_regress'
     # left_transforms = 'VAR'
@@ -1351,12 +1356,13 @@ def main():
     # right_transforms = 'nn'
     # right_transforms = 'nn7'
     # right_transforms = 'double_delta'  # delta encode deltas
+    right_transforms = 'dyn_fixed_filts'  # delta encode deltas
     # right_transforms = '1.5_delta'  # sub half of prev delta from each delta
     # right_transforms = 'dyn_delta'  # pick single or double delta for each block
     # right_transforms = 'dyn_filt'
     # right_transforms = 'online_regress'
     # right_transforms = 'global_regress'
-    right_transforms = 'OnlineGradDescent'
+    # right_transforms = 'OnlineGradDescent'
     # right_transforms = ['smooth', 'OnlineGradDescent']
     # right_transforms = ['smooth', 'smooth', 'OnlineGradDescent']
     # right_transforms = ['downsample2', 'blocklen=8', 'OnlineGradDescent']
@@ -1518,8 +1524,8 @@ def main():
         ds.X = flat_data.reshape(-1, subseq_len)
         ds.X -= np.mean(ds.X, axis=1, keepdims=True)  # mean norm for better plotting
         # ds.X = compress_bench.concat_and_interpolate(ds.X)
-        print "{} raveled data shape: {}".format(ds.name, ds.X.shape)
-        print np.max(ds.X)
+        print("{} raveled data shape: {}".format(ds.name, ds.X.shape))
+        print(np.max(ds.X))
 
     # dsets = ucr.smallUCRDatasets() if small else ucr.origUCRDatasets()
     dsets = ucr.smallUCRDatasets() if small else ucr.allUCRDatasets()
@@ -1563,7 +1569,7 @@ def main():
                                        name_transforms(right_transforms))
     subdir = '{}{}b_{}{}'.format(prefix, numbits, transforms_str, suffix)
     subdir = os.path.join(base_save_dir, subdir)
-    print "saving to subdir: {}".format(subdir)
+    print("saving to subdir: {}".format(subdir))
 
     # ------------------------ main loop
 
@@ -1599,7 +1605,7 @@ def main():
             names = ('raw', 'dyn deltas (zoomed)')
             fig, all_axes = plt.subplots(3, 2, figsize=(11, 8))
 
-            print "---- ", d.name
+            print("---- ", d.name)
 
             for i, X in enumerate(mats):
                 name = names[i]
@@ -1667,7 +1673,7 @@ def main():
     # for d in dslist[:31]:
     # for d in dslist[1:2]:  # adiac
     for d in dslist:
-        print "------------------------ {}".format(d.name)
+        print("------------------------ {}".format(d.name))
         # continue # TODO rm
         plot_dset(d, numbits=numbits, n=n,
                   left_transforms=left_transforms,

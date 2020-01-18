@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from __future__ import division
+
 
 import os
 import numpy as np
@@ -123,14 +123,14 @@ def write_dataset(mat, name, dtype, store_as_dtype=None, order='f',
     # out_paths.append(path)
 
     if verbose > 0:
-        print "saved mat {} ({}) as {}".format(name, store_mat.shape, path)
+        print("saved mat {} ({}) as {}".format(name, store_mat.shape, path))
 
     load_mat = np.fromfile(path, dtype=store_as_dtype)
 
     if verbose > 1:
-        print "stored mat shape: ", load_mat.shape
-        print "stored mat[:10]: ", store_mat[:10]
-        print "loaded mat[:10]: ", load_mat[:10]
+        print("stored mat shape: ", load_mat.shape)
+        print("stored mat[:10]: ", store_mat[:10])
+        print("loaded mat[:10]: ", load_mat[:10])
 
     assert np.array_equal(store_mat.ravel(), load_mat.ravel())
 
@@ -159,7 +159,7 @@ def write_dataset(mat, name, dtype, store_as_dtype=None, order='f',
 def concat_and_interpolate(mats, interp_npoints=5):
     # assumes each row of each mat is one time step and mats is a list
 
-    print "mats: ", mats
+    print("mats: ", mats)
 
     dtype = mats[0].dtype
 
@@ -190,8 +190,8 @@ def concat_and_interpolate(mats, interp_npoints=5):
     out_mats = [mats[0]]
     for i in range(1, len(mats)):
         if i == 1:
-            print "interpolated samples shape: ", interp_samples[i - 1].T.shape
-            print "data matrix shape: ", mats[i].shape
+            print("interpolated samples shape: ", interp_samples[i - 1].T.shape)
+            print("data matrix shape: ", mats[i].shape)
         out_mats.append(interp_samples[i - 1].T)
         out_mats.append(mats[i])
 
@@ -257,7 +257,7 @@ def main():
 
         for func, name in funcs_and_names:
             recordings = func()
-            print "data shapes: ", [r.data.shape for r in recordings]
+            print("data shapes: ", [r.data.shape for r in recordings])
             mat = mat_from_recordings(recordings)
             for dtype in dtypes:
                 write_dataset(mat, name, order=STORAGE_ORDER, subdir=name,

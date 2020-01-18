@@ -4,12 +4,12 @@ import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 from joblib import Memory
 
-import dishwasher as dw
-import msrc
-import synthetic as synth
-import tidigits as ti
-import ucr
-from utils import LabeledTimeSeries
+from . import dishwasher as dw
+from . import msrc
+from . import synthetic as synth
+from . import tidigits as ti
+from . import ucr
+from .utils import LabeledTimeSeries
 
 _memory = Memory('.', verbose=1)
 
@@ -43,12 +43,12 @@ def origUCRDatasets():
 
 @_memory.cache
 def smallUCRDatasets():
-    return filter(lambda d: d.Xtrain.size < 50e3, allUCRDatasets())
+    return [d for d in allUCRDatasets() if d.Xtrain.size < 50e3]
 
 
 @_memory.cache
 def tinyUCRDatasets():
-    return filter(lambda d: d.Xtrain.size < 10e3, smallUCRDatasets())
+    return [d for d in smallUCRDatasets() if d.Xtrain.size < 10e3]
 
 
 # ================================ DataLoader
@@ -57,7 +57,7 @@ def tinyUCRDatasets():
 def loadDataset(datasetName, seed=None, whichExamples=None, instancesPerTs=5,
                 minNumInstances=2, maxNumInstances=None, cropDataLength=None):
     if seed:
-        print("loadDataset(): seeding RNG with value {}".format(seed))
+        print(("loadDataset(): seeding RNG with value {}".format(seed)))
         synth.seedRng(seed)
 
     hasWhichExamples = whichExamples is not None and len(whichExamples)
@@ -213,8 +213,7 @@ def loadDataset(datasetName, seed=None, whichExamples=None, instancesPerTs=5,
                 if hasWhichExamples:
                     tsFromDataset = [tsFromDataset[i] for i in whichExamples
                                      if i < len(tsFromDataset)]
-                tsFromDataset = filter(
-                    lambda ts: len(ts.labels) >= instancesPerTs, tsFromDataset)
+                tsFromDataset = [ts for ts in tsFromDataset if len(ts.labels) >= instancesPerTs]
                 tsList += tsFromDataset
         else:
             tsList = ucr.labeledTsListFromDataset(datasetName, instancesPerTs=instancesPerTs)

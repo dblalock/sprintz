@@ -235,10 +235,10 @@ def quantize_dfs(dfs, how=None):
     unmodified_cols = [col for col in df.columns if col not in quantize_infos]
 
     # print "quantize infos: ", quantize_infos
-    for col, info in quantize_infos.items():
+    for col, info in list(quantize_infos.items()):
         if col == 'yaw':  # or True:
-            print "------ {}".format(col)
-            print "info: ", info
+            print("------ {}".format(col))
+            print("info: ", info)
     # print ">>>>>>> unmodified_cols:", unmodified_cols
 
     ret = []
@@ -255,7 +255,7 @@ def quantize_dfs(dfs, how=None):
         # print "new df initial types:", new_df.dtypes
 
         quant_losses = {}
-        for col, info in quantize_infos.items():
+        for col, info in list(quantize_infos.items()):
             if info.zero:
                 # df[col] = 0
                 new_df[col] = np.zeros(df.shape[0], dtype=new_dtype)
@@ -286,11 +286,11 @@ def quantize_dfs(dfs, how=None):
             #     # print reconstructed[-20:]
 
         # # compute quantization loss
-        print " ================================ quantization losses:"
+        print(" ================================ quantization losses:")
         for col in sorted(quant_losses):
             # if col != 'yaw': continue
             # print "{}:\n\t{}".format(col, quant_losses[col])
-            print "{}, {}".format(col, quant_losses[col])
+            print("{}, {}".format(col, quant_losses[col]))
 
         # print "new df types: ", new_df.dtypes
         ret.append(new_df)
@@ -348,8 +348,8 @@ def create_dataset(quantize=None, actually_write=True):
         if actually_write:
             nrows, nbytes_per_row = dump_raw_data(df, save_path)
 
-            print "{} -> {}".format(read_path, save_path)
-            print "shape in bytes: {}, {}".format(nrows, nbytes_per_row)
+            print("{} -> {}".format(read_path, save_path))
+            print("shape in bytes: {}, {}".format(nrows, nbytes_per_row))
 
 
 def main():

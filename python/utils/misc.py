@@ -18,7 +18,7 @@ import uuid
 # ------------------------------- Debug output
 
 def printVar(name, val):
-    print(name + "=")
+    print((name + "="))
     print(val)
 
 

@@ -4,9 +4,9 @@ import os
 import numpy as np
 import pandas as pd
 
-import paths
-from utils import saveAnimation, animateSubseqs, dataNearAnnotations
-from utils import generateVideos, sectionsOfDataNearAnnotationsImpure
+from . import paths
+from .utils import saveAnimation, animateSubseqs, dataNearAnnotations
+from .utils import generateVideos, sectionsOfDataNearAnnotationsImpure
 
 VIDS_DIR = 'vids'
 
@@ -74,7 +74,7 @@ def generateVids():
     path = appliance + '_nohead.csv'
     ar = readFile(path)
     # ar = ar[:(20*1000)]
-    print("{0} -> {1} array".format(path, ar.shape))
+    print(("{0} -> {1} array".format(path, ar.shape)))
 
     # # find rising edges and save where they are to help us annotate
     # realPower = ar[:, 6]
@@ -228,7 +228,7 @@ class Recording(object):
             self.rangeStartIdxs, self.rangeEndIdxs, self.labels = addZC(
                 self.rangeStartIdxs, self.rangeEndIdxs, self.labels)
 
-        print "Dishwasher recording: data shape = ", self.data.shape
+        print("Dishwasher recording: data shape = ", self.data.shape)
         # print "Dishwasher annotations:"
         # annotations = np.c_[self.rangeStartIdxs, self.rangeEndIdxs, self.labels]
         # for anno in annotations:

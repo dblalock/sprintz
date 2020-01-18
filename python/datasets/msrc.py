@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from joblib import Memory
 
-import paths
+from . import paths
 from ..utils.files import ensure_dir_exists
 from . import viz
 
@@ -132,14 +132,14 @@ def all_recordings(idxs=None):
     dataFiles, tagFiles = all_file_names()
     recs = []
     if idxs is None:
-        idxs = range(len(dataFiles))
+        idxs = list(range(len(dataFiles)))
     for i in idxs:
         try:
             # r = Recording(dataFiles[i], tagFiles[i], recID=i)
             r = _create_recording(dataFiles[i], tagFiles[i], recID=i)
             recs.append(r)
         except IndexError:  # empty or all 0s file -> IndexError
-            print("skipping broken recording #{}".format(i))
+            print(("skipping broken recording #{}".format(i)))
             continue
     return recs
 
@@ -167,7 +167,7 @@ def _compute_label_idxs(labelTimes, sampleTimes):
 class Recording:
 
     def __init__(self, dataFile, tagFile, recID=-1):
-        print("creating recording #{}".format(recID))
+        print(("creating recording #{}".format(recID)))
         self.id = recID
         self.fileName = dataFile.split('.')[0]
         self.instruction, self.gestureId, self.subjId, self.twoModalities = \
@@ -223,7 +223,7 @@ def main():
     # recs = all_recordings(idxs=np.arange(5, 15, 2))
     recs = all_recordings(idxs=np.arange(11, 550, 40))
     # recs = all_recordings(idxs=np.arange(2))
-    print "recording 0 shape: ", recs[0].data.shape
+    print("recording 0 shape: ", recs[0].data.shape)
     # viz.plot_recordings(recs, interval_len=600, savedir=SAVE_DIR_DELTA)
 
 

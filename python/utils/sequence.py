@@ -18,7 +18,7 @@ def asListOrTuple(x):
 	return x if isListOrTuple(x) else [x]
 
 def isString(x):
-	return isinstance(x, types.StringTypes)
+	return isinstance(x, (str,))
 
 def flattenListOfLists(l):
 	return list(itertools.chain.from_iterable(l))
@@ -72,7 +72,7 @@ def elementsAtIdxs(seq, idxs):
 	return elements
 
 def applyToDict(func, dictionary):
-	for key, val in dictionary.iteritems():
+	for key, val in dictionary.items():
 		dictionary[key] = func(key, val)
 	return dictionary
 
@@ -187,13 +187,13 @@ def rangesOfConstantValue(seq):
 
 	starts = [0]
 	ends = []
-	for i in xrange(1, len(seq)):
+	for i in range(1, len(seq)):
 		if seq[i] != seq[i-1]:
 			starts.append(i)
 			ends.append(i)
 	ends.append(len(seq))
 
-	return np.array(zip(starts, ends))
+	return np.array(list(zip(starts, ends)))
 
 
 def splitIdxsBy(conditionFunc, seq):
@@ -304,12 +304,11 @@ def calcSurroundingIdxs(idxs, before, after, idxLimit=None):
 	([0, 2], [2, 4])
 	"""
 	if idxLimit is None:
-		idxs = filter(lambda idx: (idx - before >= 0), idxs)
+		idxs = [idx for idx in idxs if (idx - before >= 0)]
 	else:
-		idxs = filter(lambda idx: (idx - before >= 0) and (idx + after <= idxLimit),
-			idxs)
-	beforeIdxs = map(lambda x: x - before, idxs)
-	afterIdxs = map(lambda x: x + after, idxs)
+		idxs = [idx for idx in idxs if (idx - before >= 0) and (idx + after <= idxLimit)]
+	beforeIdxs = [x - before for x in idxs]
+	afterIdxs = [x + after for x in idxs]
 	return beforeIdxs, afterIdxs
 
 def findSurroundingIdxs(subSeq, fullSeq, before, after,
@@ -324,7 +323,7 @@ def findSurroundingIdxs(subSeq, fullSeq, before, after,
 	return calcSurroundingIdxs(idxs, before, after, len(fullSeq))
 
 def extractSubseqs(seq, startIdxs, stopIdxs):
-	return map(lambda x, y: seq[x:y], startIdxs, stopIdxs)
+	return list(map(lambda x, y: seq[x:y], startIdxs, stopIdxs))
 
 def extractSurroundingSubseqs(subSeq, fullSeq, before, after,
 	overlap=False):
@@ -349,7 +348,7 @@ def extractSuccessorsWithLength(subSeq, fullSeq, length,
 def extractSubseqsWhere(conditionFunc, seq, subSeqLength,
 	overlap=False):
 	startIdxs = whereSubseq(conditionFunc, seq, subSeqLength, overlap)
-	stopIdxs = map(lambda x: x + subSeqLength, startIdxs)
+	stopIdxs = [x + subSeqLength for x in startIdxs]
 	return extractSubseqs(seq, startIdxs, stopIdxs)
 
 def numMatches(query, collection):
@@ -407,7 +406,7 @@ def uniqueElementCounts(iterable):
 	Returns a Counter (dict subclass) mapping unique elements to
 	how many times they occur within the iterable
 	"""
-	iterable = map(makeImmutable, iterable)
+	iterable = list(map(makeImmutable, iterable))
 	return Counter(iterable)
 
 def uniqueSubseqsPositions(seq, length):
@@ -425,7 +424,7 @@ def uniqueSubseqsCounts(seq, length):
 	return uniqueElementCounts(allSubseqsOfLength(seq, length))
 
 def uniqueElements(seq):
-	return uniqueElementCounts(seq).keys()
+	return list(uniqueElementCounts(seq).keys())
 
 def uniqueSubseqsPreceding(subSeq, fullSeq, length, overlap=False):
 	"""
@@ -465,7 +464,7 @@ def predecessorCounts(subSeq, fullSeq, length, overlap=False):
 	allSeqCounts = uniqueSubseqsCounts(fullSeq, length)
 
 	seqs2counts = {}
-	for key, countPrecede in precedingCounts.iteritems():
+	for key, countPrecede in precedingCounts.items():
 		countTotal = allSeqCounts[key]
 		seqs2counts[key] = np.array((countPrecede, countTotal))
 
@@ -477,7 +476,7 @@ if __name__ == '__main__':
 
 	s = 'abcabdabcefc'
 	seqs2counts = predecessorCounts('c', s, 2)
-	assert(len(seqs2counts.keys()) == 2)
+	assert(len(list(seqs2counts.keys())) == 2)
 	assert(np.array_equal( seqs2counts['ab'], np.array([2, 3]) ))
 	assert(np.array_equal( seqs2counts['ef'], np.array([1, 1]) ))
 

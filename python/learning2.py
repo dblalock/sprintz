@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from __future__ import division
+
 
 import collections
 # import itertools
@@ -85,7 +85,7 @@ def all_shifts(max_shift=-1, omit_duplicates=True):
                 continue
             vals[(a, b)] = (x >> a) - (x >> b)
 
-    keys, coeffs = zip(*vals.items())
+    keys, coeffs = list(zip(*list(vals.items())))
     keys = np.array(keys)
     coeffs = np.array(coeffs)
     order = np.argsort(coeffs)
@@ -619,24 +619,24 @@ def sub_online_regress(blocks, verbose=2, group_sz_blocks=8, max_shift=4,
             else:
                 coef_idx = np.argmax(encoder.best_idx_counts)
                 coef = encoder.shift_coeffs[coef_idx]
-                print "global linreg coeff: ", coef
+                print("global linreg coeff: ", coef)
         else:
             coeffs_counts = np.array(encoder.best_coef_counts.most_common())
-            print "min, max coeff: {}, {}".format(
-                coeffs_counts[:, 0].min(), coeffs_counts[:, 0].max())
-            print "most common (coeff, counts):\n", coeffs_counts[:16]
+            print("min, max coeff: {}, {}".format(
+                coeffs_counts[:, 0].min(), coeffs_counts[:, 0].max()))
+            print("most common (coeff, counts):\n", coeffs_counts[:16])
             # bias_counts = np.array(encoder.best_offset_counts.most_common())
             # print "most common (bias, counts):\n", bias_counts[:16]
 
             errs = np.array(encoder.errs)
-            print "raw err mean, median, std, >0 frac: {}, {}, {}, {}".format(
-                errs.mean(), np.median(errs), errs.std(), np.mean(errs > 0))
+            print("raw err mean, median, std, >0 frac: {}, {}, {}, {}".format(
+                errs.mean(), np.median(errs), errs.std(), np.mean(errs > 0)))
 
     if drop_first_half and method == 'gradient':
         keep_idx = len(out) // 2
         out[:keep_idx] = out[keep_idx:(2*keep_idx)]
-        print "NOTE: duplicating second half of data into first half!!" \
-            " (blocks {}:)".format(keep_idx)
+        print("NOTE: duplicating second half of data into first half!!" \
+            " (blocks {}:)".format(keep_idx))
 
     return out
 
@@ -652,8 +652,8 @@ def _test_moving_avg(x0=0):
         xhats.append(xhat)
         counter += (v - xhat)
 
-    print "vals:  ", vals
-    print "xhats: ", xhats
+    print("vals:  ", vals)
+    print("xhats: ", xhats)
 
 
 # ================================================================ main

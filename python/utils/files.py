@@ -18,16 +18,16 @@ def isVisible(path):
 
 
 def joinPaths(dir, contents):
-    return map(lambda f: os.path.join(dir, f), contents)
+    return [os.path.join(dir, f) for f in contents]
 
 
 def filesInDirMatching(dir, prefix=None, suffix=None, absPaths=False,
                        onlyFiles=False, onlyDirs=False):
     files = os.listdir(dir)
     if prefix:
-        files = filter(lambda f: f.startswith(prefix), files)
+        files = [f for f in files if f.startswith(prefix)]
     if suffix:
-        files = filter(lambda f: f.endswith(suffix), files)
+        files = [f for f in files if f.endswith(suffix)]
     if onlyFiles or onlyDirs:
         paths = joinPaths(dir, files)
         if onlyFiles:
@@ -60,13 +60,13 @@ def listFilesInDir(dir, startswith=None, endswith=None, absPaths=False):
 def listHiddenFilesInDir(dir, startswith=None, endswith=None, absPaths=False):
     contents = filesInDirMatching(dir, startswith, endswith, absPaths,
                                   onlyFiles=True)
-    return filter(isHidden, contents)
+    return list(filter(isHidden, contents))
 
 
 def listVisibleFilesInDir(dir, startswith=None, endswith=None, absPaths=False):
     contents = filesInDirMatching(dir, startswith, endswith, absPaths,
                                   onlyFiles=True)
-    return filter(isVisible, contents)
+    return list(filter(isVisible, contents))
 
 
 def ensure_dir_exists(dir):

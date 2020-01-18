@@ -4,9 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from joblib import Memory
 
-import paths
+from . import paths
 from ..utils.files import listFilesInDir, ensure_dir_exists
-from pamap_common import *  # noqa
+from .pamap_common import *  # noqa
 
 memory = Memory('./')
 join = os.path.join
@@ -110,7 +110,7 @@ if __name__ == '__main__':
 
     recs = getAllPamap2Recordings()
     for r in recs:
-        print('plotting recording: ' + str(r))
+        print(('plotting recording: ' + str(r)))
 
         # plt.figure(figsize=(WIDTH_LINE_GRAPH, HEIGHT_LINE_GRAPH))
         # r.plot()

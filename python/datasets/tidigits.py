@@ -14,7 +14,7 @@ import librosa # https://bmcfee.github.io/librosa/index.html
 from joblib import Memory
 memory = Memory('./', verbose=2)
 
-import paths as pth
+from . import paths as pth
 from ..utils import sequence as seq
 
 SAMPLE_RATE_HZ = 20 * 1000 # actual sampling rate of data
@@ -29,13 +29,13 @@ def getDataFilePaths():
 
 def getAllRecordings():
 	allPaths = getDataFilePaths()
-	return map(lambda path: Recording(path), allPaths)
+	return [Recording(path) for path in allPaths]
 
 
 def getPureRecordings():
 	# filter out recordings with more than one pattern
 	recordings = getAllRecordings()
-	return filter(lambda r: len(np.unique(r.digits)) == 1, recordings)
+	return [r for r in recordings if len(np.unique(r.digits)) == 1]
 
 
 @memory.cache
@@ -56,16 +56,16 @@ def getConcatenatedRecordingsForDigits(instancesPerTs=10, singleDigitsOnly=False
 	# repeating "pattern"
 	numDigitClasses = len(digit2recordings)
 	if enemyInstancesPerTs > numDigitClasses - 1:
-		print("getConcatenatedRecordingsForDigits(): WARNING: "
+		print(("getConcatenatedRecordingsForDigits(): WARNING: "
 			"enemyInstancesPerTs {} > num digits - 1; will be truncated".format(
-				enemyInstancesPerTs))
+				enemyInstancesPerTs)))
 		enemyInstancesPerTs = numDigitClasses
 
 	combinedRecordings = []
-	for digit, recordings in digit2recordings.iteritems():
+	for digit, recordings in digit2recordings.items():
 		np.random.shuffle(recordings) # in-place shuffle
 		if singleDigitsOnly:
-			recordings = filter(lambda r: len(r.digits) == 1, recordings)
+			recordings = [r for r in recordings if len(r.digits) == 1]
 		numRecordings = len(recordings)
 
 		groupNum = -1 # -1 so first group will be 0, to match indices
@@ -83,10 +83,10 @@ def getConcatenatedRecordingsForDigits(instancesPerTs=10, singleDigitsOnly=False
 				groupNum += 1
 
 				if groupNum % 10 == 0:
-					print("creating recording for digit, group = {}, {}".format(
-						digit, groupNum))
+					print(("creating recording for digit, group = {}, {}".format(
+						digit, groupNum)))
 
-				otherDigits = digit2recordings.keys()
+				otherDigits = list(digit2recordings.keys())
 				otherDigits.remove(digit)
 				if enemyInstancesPerTs > 0:
 					whichOtherDigits = np.random.choice(otherDigits, enemyInstancesPerTs)
@@ -114,7 +114,7 @@ def getConcatenatedRecordingsForDigits(instancesPerTs=10, singleDigitsOnly=False
 					# within each recording
 					allUtteranceStartEnds = [r.utteranceStartEnd(whichRepresentation='raw')
 						for r in group]
-					allUtteranceStarts, allUtteranceEnds = zip(*allUtteranceStartEnds)
+					allUtteranceStarts, allUtteranceEnds = list(zip(*allUtteranceStartEnds))
 
 					startIdxs = recordingStartIdxs + np.array(allUtteranceStarts)
 					endIdxs = recordingStartIdxs + np.array(allUtteranceEnds)
@@ -185,7 +185,7 @@ def _getOrigDataFilePaths():
 
 
 def _replaceExtensions(paths, ext):
-	return map(lambda p: p[:-3] + ext, paths) # clearly not robust at all
+	return [p[:-3] + ext for p in paths] # clearly not robust at all
 
 
 def _createDataFiles():
@@ -452,14 +452,14 @@ def main():
 	# return
 
 	np.random.seed(12345)
-	import datasets
+	from . import datasets
 	# saveDir = 'figs/tidigits/concat3/'
 	saveDir = 'figs/tidigits/concat4/'
-	tsList = datasets.loadDataset('tidigits_grouped_mfcc', whichExamples=range(10))
-	print '------------------------'
+	tsList = datasets.loadDataset('tidigits_grouped_mfcc', whichExamples=list(range(10)))
+	print('------------------------')
 	for ts in tsList:
 		ts.plot(saveDir)
-		print ts.name, ts.labels
+		print(ts.name, ts.labels)
 	return
 
 	# saveDir = 'figs/tidigits/'
@@ -469,15 +469,15 @@ def main():
 	# for r in getAllRecordings():
 	# for r in getConcatenatedRecordingsForDigits():
 	for r in getConcatenatedRecordingsForDigits(examplesPerDigit=1):
-		print("plotting recording: {}".format(r.name))
+		print(("plotting recording: {}".format(r.name)))
 
 		data = r.data
-		print len(data)
-		print len(r.mfccs)
+		print(len(data))
+		print(len(r.mfccs))
 
 		r._data = np.vstack((data, data))
-		print len(r._data)
-		print len(r.mfccs(dummyKwarg=True)) # refresh mfccs
+		print(len(r._data))
+		print(len(r.mfccs(dummyKwarg=True))) # refresh mfccs
 
 		# print "digits: ", r.digits[:10]
 		# r.plot(True, True, True, True, saveDir=saveDir)
@@ -492,7 +492,7 @@ def main():
 	paths = paths[:3]
 	for path in paths:
 		data, samplerate = sf.read(path)
-		print data.shape, samplerate
+		print(data.shape, samplerate)
 
 		# plt.plot(data)
 
@@ -521,7 +521,7 @@ def main():
 
 		stft = librosa.core.stft(data.flatten(), n_fft=512,
 			win_length=(.01*samplerate))
-		print stft.shape
+		print(stft.shape)
 
 		plt.figure()
 		librosa.display.specshow(stft, x_axis='time')

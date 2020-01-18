@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from joblib import Memory
 
-import paths
+from . import paths
 from ..utils import files
 from . import viz
 
