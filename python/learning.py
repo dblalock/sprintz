@@ -180,6 +180,8 @@ def compute_loss(errs, loss='l2', axis=-1):
         return np.abs(errs).sum(axis=axis)
     elif loss == 'linf':
         return np.max(np.abs(errs), axis=axis)
+    elif loss == 'logabs':
+        return np.log(1 + np.abs(errs)).sum(axis=axis)
     else:
         raise ValueError("Unrecognized loss function '{}'".format(loss))
 
@@ -187,16 +189,52 @@ def compute_loss(errs, loss='l2', axis=-1):
 # def greedy_brute_filters(x, nfilters=16, ntaps=4, nbits=4, step_sz=.5,
 
 # def fixed_four_filts(x, nfilters=5, ntaps=4):
-def fixed_four_filts(blocks_unused, nfilters=4, ntaps=4):
+# def fixed_four_filts(blocks_unused, nfilters=4, ntaps=4):
+def fixed_filts(blocks_unused, filtset='deltas123'):
+    nfilters = 5
+    ntaps = 4
     filters = np.zeros((nfilters, ntaps))
     # filters[0, -1] = 1  # delta encoding
     # filters[1, -1], filters[1, -2] = 2, -1  # delta-delta encoding
     # filters[2, -1], filters[2, -2], filters[2, -3] = 2, -3, 1  # 3delta
     # filters[2] = np.array([-.5, -.5, 1, 1])
-    filters[0] = np.array([0, 0, 0, 1])     # delta
-    filters[1] = np.array([0, 0, -1, 2])    # double delta
-    filters[2] = np.array([0, 0, .5, .5])   # avg
-    filters[3] = np.array([0, -.5, .5, 1])  # delta of avgs
+    # filters[0] = np.array([0, 0, 0, 1])     # delta
+    # filters[1] = np.array([0, 0, -1, 2])    # double delta
+    # # filters[2] = np.array([0, -1, .5, 1.5])    # weak triple delta
+    # filters[2] = np.array([0, 0, .5, .5])   # avg
+    # filters[3] = np.array([0, -.5, .5, 1])  # delta of avgs
+    # filters[4] = np.array([0, 0, -.5, 1.5])    # 1.5 delta
+
+    if filtset == 'deltas123':
+        filters[0] = np.array([0, 0, 0, 1])         # delta
+        filters[1] = np.array([0, 0, -1, 2])        # double delta
+        filters[2] = np.array([0, 1, -3, 3])        # triple delta
+        return filters[:3]
+    elif filtset == 'deltas12':
+        filters[0] = np.array([0, 0, 0, 1])         # delta
+        filters[1] = np.array([0, 0, -1, 2])        # double delta
+        return filters[:2]
+    elif filtset == 'deltas123+davg':
+        filters[0] = np.array([0, 0, 0, 1])         # delta
+        filters[1] = np.array([0, 0, -1, 2])        # double delta
+        filters[2] = np.array([0, 1, -3, 3])        # triple delta
+        filters[2] = np.array([0, 1, -3, 3])        # triple delta
+        filters[3] = np.array([0, -.5, .5, 1])      # avg delta
+        return filters[:4]
+    else:
+        raise ValueError(f"Unrecognized filtset: '{filtset}'")
+
+    # filters[0] = np.array([0, -.5, .5, 1])     # avg delta
+    # filters[2] = np.array([0, 0, -.5, 1.5])     # 1.5 delta
+    # filters[4] = np.array([0, 1, -2, 1])        # weak triple delta
+    # current slope:    0 0 -1 1
+    # prev slope:       0 -1 1 0
+    # change in slope:  0  1 -2 1
+    # double delta:     0 0 -1 2
+    # total:            0 1 -3 3
+    # filters[4] = np.array([0, 1, -1, 1])        # weak triple delta
+    # filters[5] = np.array([0, 1, -3, 3])        # triple delta
+
     # filters[4] = (np.max(x) - np.min(x)) / 2  # infer mean instead of prev point
     # filters[3, -1], filters[3, -2], filters[3, -3] = .5, .5, 0  # lpf
     return filters

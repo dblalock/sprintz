@@ -71,6 +71,302 @@ def filter_rows(X, filt_len, kind='hamming', scale_filter_how='sum1'):
     return filters.convolve1d(X, weights=filt, axis=1, mode='constant')
 
 
+# def bilateral_filter_rows(X, intensity_kind='rbf_diffstd'):
+# def bilateral_filter_rows(X, intensity_kind='minmax'):
+# def bilateral_filter_rows(X, intensity_kind='rbf_std'):
+# def bilateral_filter_rows(X, intensity_kind='std', const=1.):
+# def bilateral_filter_rows(X, intensity_kind='minmax', const=.25):
+# def bilateral_filter_rows(X, intensity_kind='rbf_std', const=.1):
+def bilateral_filter_rows(X, intensity_kind='minmax', const=.1):
+    # print("running bilateral_filter_rows!")
+
+    # const could also just be a direct constant; forcing it to be a multiplier
+    # for now so that this func will work with different bitwidths of X and
+    # different dsets before quantization
+
+    X = X.T  # apparently X is one row per UCR ts
+
+    filt_sz = 3  # hardcoded below; apply multiple times to get more
+
+    diffs = X[1:] - X[:-1]
+    absdiffs = np.abs(diffs)
+
+    if intensity_kind == 'minmax':
+        mins, maxs = X.min(axis=0), X.max(axis=0)
+        gaps = (maxs - mins) * const + 1e-10
+        normalized_abs_diffs = absdiffs / gaps
+        intensity_weights = 1. - np.clip(normalized_abs_diffs, 0, 1)
+    elif intensity_kind == 'minmax_diff':
+        mins, maxs = absdiffs.min(axis=0), absdiffs.max(axis=0)
+        gaps = (maxs - mins) * const + 1e-10
+        normalized_abs_diffs = absdiffs / gaps
+        intensity_weights = 1. - np.clip(normalized_abs_diffs, 0, 1)
+    elif intensity_kind == 'std':  # this one is pretty bad
+        normalized_abs_diffs = absdiffs / ((X.std(axis=0) + 1e-10) * const)
+        intensity_weights = 1. - np.clip(normalized_abs_diffs, 0, 1)
+    elif intensity_kind == 'rbf_std':
+        stds = (X.std(axis=0) + 1e-10) * const
+        intensity_weights = np.exp(-absdiffs / stds)
+    elif intensity_kind == 'rbf_diffstd':
+        stds = (diffs.std(axis=0) + 1e-10) * const
+        intensity_weights = np.exp(-absdiffs / stds)
+    else:
+        raise ValueError(f"Unrecognized intensity_kind: '{intensity_kind}'")
+
+    # print("mean of abs diffs / gap: ", normalized_abs_diffs.mean())
+    # print("min, max intensity_weights: ", intensity_weights.min(), intensity_weights.max())
+    # print("mean intensity_weights: ", intensity_weights.mean())
+
+    spatial_weight_one_away = .25
+    spatial_weight_same = 1 - (2 * spatial_weight_one_away)
+    weights_one_away = spatial_weight_one_away * intensity_weights
+    weights_same = spatial_weight_same
+
+    # ret = X * spatial_weight_same
+    # ret[:-1] += X[1:] * weights_one_away
+    # ret[1:] += X[:-1] * weights_one_away
+    # ret[0] = X[0]
+    # ret[-1] = X[-1]
+
+    # return ret.T
+
+    X_conv = np.zeros((X.shape[0], X.shape[1], filt_sz), dtype=X.dtype)
+    X_conv[1:, :, 0] = X[:-1, :]
+    X_conv[:, :, 1] = X
+    X_conv[:-1, :, 2] = X[1:]
+
+    coeffs = np.zeros((X.shape[0], X.shape[1], filt_sz), dtype=np.float32)
+    coeffs[1:, :, 0] = weights_one_away
+    coeffs[:, :, 1] = weights_same
+    coeffs[:-1, :, 2] = weights_one_away
+    coeffs *= 1. / coeffs.sum(axis=-1, keepdims=True)
+    # print("coeff means across all channels and positions: ", coeffs.mean(axis=(0, 1)))
+
+    return (X_conv * coeffs).sum(axis=-1).T
+
+    # X_conv = np.zeros((X.shape[0], X.shape[1], filt_sz), dtype=np.float32)
+    # ret = (X[:, :, np.newaxis] * coeffs).sum(axis=-1).T
+    # changes = ret - X.T
+    # print("mean abs change / mean abs diff: ", np.abs(changes).mean() / normalized_abs_diffs.mean())
+    # return ret
+
+
+def clamp_abs_change(X_orig, X, const=.005, interval='minmax'):
+    gaps = X_orig.max(axis=1) - X_orig.min(axis=1) + 1e-10
+    maxdiffs = const * gaps.reshape(-1, 1)
+    diffs = X - X_orig
+
+    print("using const: ", const)
+
+    # absdiffs = np.abs(diffs)
+    # print("maxdiff: max observed diff, min observed diff: ", maxdiff.ravel(), diffs.min(), diffs.max())
+    # print("max observed diff, min observed diff: ", diffs.min(), diffs.max())
+    assert np.any(diffs != 0) > 0
+    new_diffs = np.clip(diffs, -maxdiffs, maxdiffs)
+    # new_diffs = np.minimum(absdiffs, maxdiff) * np.sign(diffs)
+    # return X_orig + new_diffs
+    ret = X_orig + new_diffs
+    # new_abs_diffs = np.abs(ret - X_orig)
+    # new_abs_diffs.max(axis=1)
+
+    new_abs_diffs = np.abs(new_diffs)
+
+    is_small_enough = new_abs_diffs.max(axis=1, keepdims=True) <= (maxdiffs + 1e-10)
+    # print("maxdiffs shape: ", maxdiffs.shape)
+    # print("new_diffs shape: ", new_diffs.shape)
+    # print("is_small_enough shape: ", is_small_enough.shape)
+    # print("maxdiffs: ", maxdiffs[:5])
+    # print("new diffs:", new_diffs[:5, :10])
+    # print("is_small_enough:", is_small_enough[:5, :10])
+    assert np.all(is_small_enough)
+    return ret
+
+
+# def linearize(X_orig, X_smooth, clamp_const=.002, filtset='deltas123'):
+
+# having triple delta never helps by more than .2, except on starlightcurves,
+# where it makes encoding <1b on avg instead of like 1.7
+def linearize(X_orig, X_smooth, clamp_const=.002, filtset='deltas12'):
+    """make X more amenable to delta and double delta coding while keeping
+    change in values bounded by a small fraction of peak-to-peak gap"""
+
+    # X_orig = X_orig.T
+    # X_smooth = X_smooth.T
+
+    gaps = X_orig.max(axis=1) - X_orig.min(axis=1) + 1e-10
+    maxdiffs = clamp_const * gaps.reshape(-1, 1)
+    Xmin = X_orig - maxdiffs
+    Xmax = X_orig + maxdiffs
+
+    origblocks = convert_to_blocks(X_orig).copy()
+    minblocks = convert_to_blocks(Xmin)
+    maxblocks = convert_to_blocks(Xmax)
+    blocks = origblocks.copy()
+
+    nblocks, blocklen = blocks.shape
+
+    # INF = 999999
+    # INF = np.inf
+    # any constant will actually compress pretty well, so have it alternate
+    INF = (np.arange(blocklen) % 3) * 2 - 1
+    INF *= 999999
+
+    initial_val = 0
+    prev_vals = np.hstack([np.array([initial_val]), blocks[:-1, -1]])
+    prevprev_vals = np.hstack([np.array([initial_val]), blocks[:-1, -2]])
+
+    def good_enough_mask(blocks_hat):
+        indicators = (blocks_hat >= minblocks) & (blocks_hat <= maxblocks)
+        return indicators.min(axis=1) > 0
+
+    # def delta_code_blocks(use_blocks, mask=None):
+    #     for col in range(blocklen):
+    #         use_prev_vals = prev_vals if col == 0 else use_blocks[:, col - 1]
+    #         if mask:
+    #             use_blocks[mask, col] -= use_prev_vals[mask]
+    #         else:
+    #             use_blocks[:, col] -= use_prev_vals
+    #     return use_blocks
+
+    # def double_delta_code_blocks(use_blocks, mask=None):
+        for col in range(blocklen):
+            use_prev_vals = prev_vals if col == 0 else use_blocks[:, col - 1]
+            if col == 0:
+                use_prevprev_vals = prevprev_vals
+            elif col == 1:
+                use_prevprev_vals = prev_vals
+            else:
+                use_prevprev_vals = use_blocks[:, col - 2]
+
+            prev_deltas = use_prev_vals - use_prevprev_vals
+            predicted_vals = use_prev_vals + prev_deltas
+
+            if mask:
+                use_blocks[mask, col] -= predicted_vals[mask]
+
+    # ------------------------ option 1: piecewise linear approximation
+    # note that we set the slope heuristically
+    # to avoid linear programming problem (l_inf constrained linear regression)
+    # slopes = np.zeros(nblocks)
+    # slopes[0] = (blocks[0, -1] - 0) / float(blocklen)
+    # slopes[1:] = (blocks[1:, -1] - prev_vals) / float(blocklen)
+    slopes = (blocks[:, -1] - prev_vals) // blocklen
+    # slopes = slopes.astype(np.int)
+    # offsets = np.arange(1, blocklen + 1).reshape(1, -1)
+    # linterp_blocks = np.zeros_like(blocks)
+    # linterp_blocks[:] = np.arange(1, blocklen + 1)
+    # linterp_blocks *= slopes.reshape(-1, 1)
+    linterp_blocks = np.arange(1, blocklen + 1) * slopes.reshape(-1, 1)
+    linterp_blocks += prev_vals.reshape(-1, 1)
+    # print("linterp block last elems, orig blocks last elems:")
+    # print(linterp_blocks[:10, -1])
+    # print(blocks[:10, -1])
+
+    # print("prev_vals")
+    # print(prev_vals[:10])
+    # print("slopes")
+    # print(slopes[:10])
+
+    # import sys; sys.exit()
+    # assert np.allclose(linterp_blocks[:, -1], blocks[:, -1])
+    diffs = linterp_blocks - origblocks
+    mindiffs = diffs.min(axis=1, keepdims=True)
+    maxdiffs = diffs.max(axis=1, keepdims=True)
+    linterp_blocks -= (maxdiffs - mindiffs) // 2  # offset to reduce violations
+    linterp_mask = good_enough_mask(linterp_blocks)
+    linterp_blocks[~linterp_mask] = INF
+
+    linterp_blocks = delta_encode(delta_encode(linterp_blocks))
+    print("number of almost linear blocks: ", np.sum(linterp_mask))
+    # print("min, mean, max linterp slope: ", slopes.min(), slopes.mean(), slopes.max())
+
+    # double_delta_code_blocks(linterp_blocks)
+
+    # ------------------------ option 2: set all points to be the same value
+    # blocks_elems_almost_const = (blocks >= minblocks) & (blocks <= maxblocks)
+    # almost_const_mask = blocks_elems_almost_const.min(axis=1) > 0  # all good
+    lower_bounds = minblocks.max(axis=1)
+    upper_bounds = maxblocks.min(axis=1)
+    intervals = upper_bounds - lower_bounds
+    almost_const_mask = intervals >= 0
+    const_vals = np.zeros((nblocks, 1))
+    const_vals[almost_const_mask] = np.clip(
+        prev_vals[almost_const_mask],
+        lower_bounds[almost_const_mask],
+        upper_bounds[almost_const_mask]).reshape(-1, 1)
+    almost_const_blocks = np.zeros_like(blocks) + INF
+    almost_const_blocks[almost_const_mask] = const_vals[almost_const_mask]
+
+    almost_const_blocks = delta_encode(almost_const_blocks)
+    print("number of almost const blocks: ", np.sum(almost_const_mask))
+
+    # ------------------------ option 3: greedy delta coding
+
+    deltablocks = np.asfarray(blocks.copy())
+    for col in range(blocklen):
+        use_prev_vals = prev_vals if col == 0 else deltablocks[:, col - 1]
+        target_vals = use_prev_vals  # by defn of delta coding
+        valid_mask = (minblocks[:, col] <= target_vals) & (
+            maxblocks[:, col] >= target_vals)
+        deltablocks[valid_mask, col] = target_vals[valid_mask]
+
+    # return delta_encode(blocks)
+    # return delta_encode(deltablocks)
+    deltablocks = delta_encode(deltablocks)
+
+    # deltablocks = delta_code_blocks(deltablocks)
+    # deltablocks = np.ascontiguousarray(deltablocks)
+
+    # ------------------------ option 4: greedy double delta coding
+    deltadeltablocks = np.asfarray(blocks.copy())
+    for col in range(blocklen):
+        use_prev_vals = prev_vals if col == 0 else deltadeltablocks[:, col - 1]
+        if col == 0:
+            use_prevprev_vals = prevprev_vals
+        elif col == 1:
+            use_prevprev_vals = prev_vals
+        else:
+            use_prevprev_vals = deltadeltablocks[:, col - 2]
+
+        prev_deltas = use_prev_vals - use_prevprev_vals
+        target_vals = use_prev_vals + prev_deltas
+
+        valid_mask = (minblocks[:, col] <= target_vals) & (
+            maxblocks[:, col] >= target_vals)
+        deltadeltablocks[valid_mask, col] = target_vals[valid_mask]
+
+    deltadeltablocks = delta_encode(delta_encode(deltadeltablocks))
+
+    # double_delta_code_blocks(deltadeltablocks)
+
+    # ------------------------ option 5: smooth version
+    X_smooth = clamp_abs_change(X_orig, X_smooth, const=clamp_const)
+    # X_smooth = clamp_abs_change(X_orig, X_smooth, const=0) # TODO rm
+    # X_smooth = clamp_abs_change(X_orig, X_smooth, const=.01) # TODO rm
+    # print("clamp const: ", clamp_const)
+    # X_smooth = clamp_abs_change(X_orig, X_smooth, const=.005) # TODO rm
+    smoothblocks = convert_to_blocks(X_smooth)
+
+    filts = learning.fixed_filts(smoothblocks, filtset=filtset)
+    smoothblocks = dyn_filt(smoothblocks, filters=filts, loss='logabs')
+    # origblocks = dyn_filt(origblocks, filters=filts, loss='logabs')
+
+    ret, counts = take_best_of_each([
+        # linterp_blocks, almost_const_blocks, deltablocks, deltadeltablocks,
+        # linterp_blocks, deltablocks, deltadeltablocks,  # adding linterp doesn't seem to help
+        # deltablocks, deltadeltablocks,
+        deltablocks, deltadeltablocks, smoothblocks,
+        # linterp_blocks,
+        # almost_const_blocks,
+        # deltablocks,
+        # deltadeltablocks,
+        # origblocks,
+        # smoothblocks,  # yes, this alone is same as dyn_fixed_filt
+        ], loss='logabs', return_counts=True)
+    print("selected block counts: ", counts)
+    return ret
+
+
 def create_perm_lut():
     lut = np.zeros(64, dtype=np.uint8) + 255
 
@@ -550,11 +846,11 @@ def quantize(X, numbits, keep_nrows=-1, mean_norm=False, stitch_ends=False):
     np.random.seed(123)
     X = X - np.min(X)
 
-    print("X shape: ", X.shape)
-    print("X min, max: ", X.min(), X.max())
+    # print("X shape: ", X.shape)
+    # print("X min, max: ", X.min(), X.max())
     dtype = np.int32 if numbits <= 32 else np.int64
     X = (maxval / float(np.max(X)) * X).astype(dtype)
-    print("quantized X min, max: ", X.min(), X.max())
+    # print("quantized X min, max: ", X.min(), X.max())
     # print "initial quantized data: "
     # print X.ravel()[:25]
 
@@ -671,7 +967,7 @@ def inflection_encode(blocks):
 #     return blocks_out.reshape(shape)
 
 
-def take_best_of_each(blocks_list, loss='linf', axis=-1, return_counts=False):
+def take_best_of_each(blocks_list, loss='logabs', axis=-1, return_counts=False):
     """for each row idx, takes the row from any matrix in blocks_list that has
     the smallest loss (max abs value by default)"""
     best_blocks = np.copy(blocks_list[0])
@@ -747,7 +1043,7 @@ def maybe_delta_encode(blocks):
     return ret
 
 
-def dyn_filt(blocks, filters=None, **learn_kwargs):
+def dyn_filt(blocks, filters=None, loss='logabs', **learn_kwargs):
     # filters = ([], [1])  # only delta and delta-delta; should match dyn_delta
     # filters = ([], [1], [2, -1], [.5, .5], [.5, 0, -.5])
     # filters = ([1], [2, -1])  # only delta and delta-delta; should match dyn_delta
@@ -810,7 +1106,7 @@ def dyn_filt(blocks, filters=None, **learn_kwargs):
     # return take_best_of_each(blocks_list, loss='linf').astype(np.int32)
 
     blocks, counts = take_best_of_each(
-        blocks_list, loss='linf', return_counts=True)
+        blocks_list, loss=loss, return_counts=True)
     print("  fraction each filter chosen:\n     ", counts / float(np.sum(counts)))
 
     # print "final blocks shape: ", blocks.shape
@@ -821,6 +1117,15 @@ def dyn_filt(blocks, filters=None, **learn_kwargs):
 def name_transforms(transforms):
     if not isinstance(transforms, (list, tuple)):
         transforms = [transforms]
+    transforms = transforms[:]  # make a copy for safety
+
+    count = 1
+    while len(transforms) >= 2 and (transforms[0] == transforms[1]):
+        count += 1
+        transforms = transforms[1:]
+    if count > 1:
+        transforms[0] = str(transforms[0]) + 'x{}'.format(count)
+
     return '|'.join([str(s) for s in transforms])
 
 
@@ -873,9 +1178,10 @@ def apply_transforms(X, blocks, transform_names, k=-1, side=None,
         elif name == 'dyn_filt':
             offsetBlocks = dyn_filt(offsetBlocks)
 
-        elif name == 'dyn_fixed_filts':
-            filts = learning.fixed_four_filts(offsetBlocks)
-            offsetBlocks = dyn_filt(offsetBlocks, filters=filts)
+        elif name.startswith('dyn_fixed_filts'):
+            suffix = name[len('dyn_fixed_filts_'):]
+            filts = learning.fixed_filts(offsetBlocks, filtset=suffix)
+            offsetBlocks = dyn_filt(offsetBlocks, filters=filts, loss='logabs')
 
         # elif name == 'split_dyn_filt':
         #     offsetBlocks = split_dyn_filt(blocks)
@@ -1006,20 +1312,51 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
 
     # ------------------------ data munging
 
-    # NOTE: blocks used to be blocks of diffs
-    # X, diffs, blocks = quantize(d.X, numbits, keep_nrows=n)
     X = quantize(d.X, numbits, keep_nrows=n)
-    X_left = X
-    X_right = X
+    X_left = X.copy()
+    X_right = X.copy()
+
+    # plot_X_left = False
+    plot_X_right = False
     while left_transforms[0] == 'smooth':
         X_left = filter_rows(X_left, 8)
+        left_transforms = left_transforms[1:]
+    while left_transforms[0] == 'bilateral_smooth':
+        X_left = bilateral_filter_rows(X_left)
         left_transforms = left_transforms[1:]
     while right_transforms[0] == 'smooth':
         X_right = filter_rows(X_right, 8)
         right_transforms = right_transforms[1:]
+        plot_X_right = True
+    while right_transforms[0] == 'bilateral_smooth':
+        X_right = bilateral_filter_rows(X_right)
+        right_transforms = right_transforms[1:]
+        plot_X_right = True
 
-    blocks_left = convert_to_blocks(X_left)
-    blocks_right = convert_to_blocks(X_right)
+    while left_transforms[0].startswith('clamp_abs_change'):
+        const = float(left_transforms[0][len('clamp_abs_change='):])
+        X_left = clamp_abs_change(X, X_left, const=const)
+        left_transforms = left_transforms[1:]
+    while right_transforms[0].startswith('clamp_abs_change'):
+        const = float(right_transforms[0][len('clamp_abs_change='):])
+        X_right = clamp_abs_change(X, X_right, const=const)
+        right_transforms = right_transforms[1:]
+
+    blocks_left = None
+    blocks_right = None
+    while len(left_transforms) and left_transforms[0].startswith('linearize'):
+        const = float(left_transforms[0][len('linearize='):])
+        blocks_left = linearize(X, X_left, clamp_const=const)
+        left_transforms = left_transforms[1:]
+    while len(right_transforms) and right_transforms[0].startswith('linearize'):
+        const = float(right_transforms[0][len('linearize='):])
+        blocks_right = linearize(X, X_right, clamp_const=const)
+        right_transforms = right_transforms[1:]
+
+    if blocks_left is None:
+        blocks_left = convert_to_blocks(X_left)
+    if blocks_right is None:
+        blocks_right = convert_to_blocks(X_right)
 
     transform_kwargs.update({'numbits': numbits})
     offsetBlocksLeft, errs_left = apply_transforms(
@@ -1081,6 +1418,13 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     axes[-2].set_ylim((-cutoff - 1, cutoff))
 
     # plot raw data
+    # if plot_which_X == 'raw':
+    #     plot_examples(X, ax=axes[0])
+    # elif plot_which_X == 'left':
+    #     plot_examples(X_left, ax=axes[0])
+    # elif plot_which_X == 'right':
+    #     plot_examples(X_right, ax=axes[0])
+    # plot_examples(X_left, ax=axes[0])
     plot_examples(X, ax=axes[0])
 
     # plot transformed deltas
@@ -1108,25 +1452,32 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     # img = imshow_better(resids_nbits, ax=axes[-4], cmap='gnuplot2')
     # plt.colorbar(img, ax=axes[-4])
 
-    axes[-4].set_title("(Clipped) distribution of residuals")
+    if plot_X_right:
+        axes[-4].set_title("Data after right method's preprocessing")
+        plot_examples(X_right, ax=axes[-4])
+        axes[-4].set_ylim(axes[0].get_ylim())
+    else:
+        axes[-4].set_title("(Clipped) distribution of residuals")
 
-    clip_min, clip_max = -129, 128
-    nbins = (clip_max - clip_min) // 2
-    clipped_resids = np.clip(errs_right, clip_min, clip_max).astype(np.int32).ravel()
-    # clipped_resids = np.log(clipped_resids) # TODO rm
-    sb.distplot(clipped_resids, ax=axes[-4], kde=False, bins=nbins, hist_kws={
-                'density': True, 'range': [clip_min, clip_max]})
-    if plot_sort:
-        # using prefix_nbits < 10 makes it way worse for 12b stuff cuz vals
-        # with the same prefix don't get sorted like they should
-        #   -could prolly fix this by pre-sorting assuming decay in prob as
-        #   we move away from 0; gets tricky though cuz we offset everything
-        #
-        # positions = sort_transform(errs_right, nbits=numbits, prefix_nbits=8)
-        positions = sort_transform(errs_right, nbits=numbits, prefix_nbits=prefix_nbits)
-        clipped_positions = np.minimum(positions, clip_max).ravel()
-        sb.distplot(clipped_positions, ax=axes[-4], kde=False, bins=nbins, hist_kws={
-            'density': True, 'range': [0, clip_max], 'color': 'g'})
+        clip_min, clip_max = -129, 128
+        nbins = (clip_max - clip_min) // 2
+        clipped_resids = np.clip(errs_right, clip_min, clip_max).astype(np.int32).ravel()
+        # clipped_resids = np.log(clipped_resids) # TODO rm
+        sb.distplot(clipped_resids, ax=axes[-4], kde=False, bins=nbins, hist_kws={
+                    'density': True, 'range': [clip_min, clip_max]})
+        if plot_sort:
+            # using prefix_nbits < 10 makes it way worse for 12b stuff cuz vals
+            # with the same prefix don't get sorted like they should
+            #   -could prolly fix this by pre-sorting assuming decay in prob as
+            #   we move away from 0; gets tricky though cuz we offset everything
+            #
+            # positions = sort_transform(errs_right, nbits=numbits, prefix_nbits=8)
+            positions = sort_transform(errs_right, nbits=numbits, prefix_nbits=prefix_nbits)
+            clipped_positions = np.minimum(positions, clip_max).ravel()
+            sb.distplot(clipped_positions, ax=axes[-4], kde=False, bins=nbins, hist_kws={
+                'density': True, 'range': [0, clip_max], 'color': 'g'})
+
+        axes[-4].set_yscale('log')
 
     # TODO uncomment
     # if plot_mixfix:
@@ -1165,8 +1516,6 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     # # fit lomax
     # yhat_lomax = fit_lomax(xvals, counts)
     # axes[-4].plot(xvals, yhat_lomax, 'r--', lw=1.5)
-
-    axes[-4].set_yscale('log')
 
     # # now compute xent in bits between true distro and approx distros
     # probs = counts / np.sum(counts).astype(np.float32)
@@ -1330,13 +1679,16 @@ def main():
 
     # mpl.rcParams.update({'figure.autolayout': True})  # make twinx() not suck
 
+    # plot_which_X = 'right'
+
     # ------------------------ experimental params
 
     # left_transforms = None
     # left_transforms = 'sub_mean'
-    # left_transforms = 'dyn_filt'
+    # left_transforms = 'dyn_filt
     # left_transforms = 'delta'
-    left_transforms = 'double_delta'
+    # left_transforms = 'double_delta'
+    # left_transforms = 'dyn_delta'
     # left_transforms = 'OnlineGradDescent'
     # left_transforms = ['smooth', 'delta']
     # left_transforms = ['smooth', 'smooth', 'delta']
@@ -1350,13 +1702,40 @@ def main():
     # left_transforms = ['blocklen=4', 'dyn_delta', 'blocklen=8']
     # left_transforms = 'double_delta'  # delta encode deltas
     # left_transforms = ['dyn_delta', 'kmeans']
+    # left_transforms = 'dyn_fixed_filts_deltas12'
+    # left_transforms = 'dyn_fixed_filts_deltas123'
+    # left_transforms = (['bilateral_smooth'] * 2) + ['double_delta']
+    # left_transforms = (['bilateral_smooth'] * 2) + ['dyn_fixed_filts_deltas123']
+    left_transforms = (['bilateral_smooth'] * 2) + ['clamp_abs_change=.005', 'dyn_fixed_filts_deltas123']
+    # left_transforms = (['bilateral_smooth'] * 10) + ['dyn_fixed_filts_deltas123']
+    # left_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.01', 'dyn_fixed_filts_deltas123']
+    # left_transforms = (['bilateral_smooth'] * 8) + ['clamp_abs_change=.002', 'dyn_fixed_filts_deltas12']
+    # left_transforms = (['bilateral_smooth'] * 16) + ['clamp_abs_change=.002', 'dyn_fixed_filts_deltas12']
 
+    # right_transforms = ['bilateral_smooth', 'dyn_fixed_filts_deltas123']
+    # right_transforms = ['bilateral_smooth', 'bilateral_smooth', 'bilateral_smooth', 'bilateral_smooth', 'dyn_fixed_filts_deltas123']
+    # right_transforms = (['bilateral_smooth'] * 1) + ['dyn_fixed_filts_deltas123']
+    # right_transforms = (['bilateral_smooth'] * 2) + ['clamp_abs_change=0', 'dyn_fixed_filts_deltas123']
+    # right_transforms = (['bilateral_smooth'] * 2) + ['linearize=.005', 'dyn_fixed_filts_deltas123']
+    right_transforms = (['bilateral_smooth'] * 2) + ['linearize=.005']
+    # right_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.005', 'dyn_fixed_filts_deltas123']
+    # right_transforms = (['bilateral_smooth'] * 8) + ['clamp_abs_change=.005', 'dyn_fixed_filts_deltas123']
+    # right_transforms = (['bilateral_smooth'] * 8) + ['clamp_abs_change=.002', 'dyn_fixed_filts_deltas123']
+    # right_transforms = (['bilateral_smooth'] * 16) + ['clamp_abs_change=.002', 'dyn_fixed_filts_deltas123']
+    # right_transforms = (['bilateral_smooth'] * 16) + ['clamp_abs_change=.002', 'dyn_fixed_filts_deltas123']
+    # right_transforms = (['bilateral_smooth'] * 16) + ['clamp_abs_change=.003', 'dyn_fixed_filts_deltas123']
+    # right_transforms = (['bilateral_smooth'] * 10) + ['clamp_abs_change=.005', 'dyn_fixed_filts_deltas123']
+    # right_transforms = (['bilateral_smooth'] * 8) + ['clamp_abs_change=.01', 'dyn_fixed_filts_deltas123']
+    # right_transforms += ['clamp_abs_change=.005']
+    # right_transforms += ['clamp_abs_change=.001']
+    # right_transforms = (['bilateral_smooth'] * 10) + ['dyn_fixed_filts_deltas123']
+    # right_transforms = ['smooth', 'smooth', 'smooth', 'smooth', 'dyn_fixed_filts_deltas123']
     # right_transforms = None
     # right_transforms = 'delta'
     # right_transforms = 'nn'
     # right_transforms = 'nn7'
     # right_transforms = 'double_delta'  # delta encode deltas
-    right_transforms = 'dyn_fixed_filts'  # delta encode deltas
+    # right_transforms = 'dyn_fixed_filts_deltas123'
     # right_transforms = '1.5_delta'  # sub half of prev delta from each delta
     # right_transforms = 'dyn_delta'  # pick single or double delta for each block
     # right_transforms = 'dyn_filt'
@@ -1469,8 +1848,8 @@ def main():
     # k_right = 32
 
     # n = 2
-    n = 8
-    # n = 32
+    # n = 8
+    n = 32
     # n = 100
     # n = 200
     # n = 500
@@ -1688,6 +2067,7 @@ def main():
                   prefix_nbits=prefix_nbits,
                   k=k, k_left=k_left, k_right=k_right,
                   chunk_sz=chunk_sz)
+                  # plot_which_X=plot_which_X)
         if save:
             save_current_plot(d.name, subdir=subdir)
 
