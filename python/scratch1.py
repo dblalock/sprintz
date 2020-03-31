@@ -77,6 +77,8 @@ def filter_rows(X, filt_len, kind='hamming', scale_filter_how='sum1'):
 # def bilateral_filter_rows(X, intensity_kind='std', const=1.):
 # def bilateral_filter_rows(X, intensity_kind='minmax', const=.25):
 # def bilateral_filter_rows(X, intensity_kind='rbf_std', const=.1):
+# def bilateral_filter_rows(X, intensity_kind='rbf_minmax', const=.1):
+# def bilateral_filter_rows(X, intensity_kind='rbf_minmax_diff', const=.1):
 def bilateral_filter_rows(X, intensity_kind='minmax', const=.1):
     # print("running bilateral_filter_rows!")
 
@@ -104,6 +106,14 @@ def bilateral_filter_rows(X, intensity_kind='minmax', const=.1):
     elif intensity_kind == 'std':  # this one is pretty bad
         normalized_abs_diffs = absdiffs / ((X.std(axis=0) + 1e-10) * const)
         intensity_weights = 1. - np.clip(normalized_abs_diffs, 0, 1)
+    elif intensity_kind == 'rbf_minmax':
+        mins, maxs = X.min(axis=0), X.max(axis=0)
+        gaps = (maxs - mins) * const + 1e-10
+        intensity_weights = np.exp(-absdiffs / gaps)
+    elif intensity_kind == 'rbf_minmax_diff':
+        mins, maxs = absdiffs.min(axis=0), absdiffs.max(axis=0)
+        gaps = (maxs - mins) * const + 1e-10
+        intensity_weights = np.exp(-absdiffs / gaps)
     elif intensity_kind == 'rbf_std':
         stds = (X.std(axis=0) + 1e-10) * const
         intensity_weights = np.exp(-absdiffs / stds)
@@ -152,16 +162,18 @@ def bilateral_filter_rows(X, intensity_kind='minmax', const=.1):
 
 
 def clamp_abs_change(X_orig, X, const=.005, interval='minmax'):
+    # X = X.astype(np.float64)
     gaps = X_orig.max(axis=1) - X_orig.min(axis=1) + 1e-10
     maxdiffs = const * gaps.reshape(-1, 1)
     diffs = X - X_orig
+    # diffs = X.astype(np.float64) - X_orig.astype(np.float64)
 
-    print("using const: ", const)
+    # print("using const: ", const)
 
     # absdiffs = np.abs(diffs)
     # print("maxdiff: max observed diff, min observed diff: ", maxdiff.ravel(), diffs.min(), diffs.max())
     # print("max observed diff, min observed diff: ", diffs.min(), diffs.max())
-    assert np.any(diffs != 0) > 0
+    # assert np.any(diffs != 0) > 0
     new_diffs = np.clip(diffs, -maxdiffs, maxdiffs)
     # new_diffs = np.minimum(absdiffs, maxdiff) * np.sign(diffs)
     # return X_orig + new_diffs
@@ -186,9 +198,14 @@ def clamp_abs_change(X_orig, X, const=.005, interval='minmax'):
 
 # having triple delta never helps by more than .2, except on starlightcurves,
 # where it makes encoding <1b on avg instead of like 1.7
-def linearize(X_orig, X_smooth, clamp_const=.002, filtset='deltas12'):
+# def linearize(X_orig, X_smooth, clamp_const=.002, filtset='deltas12'):
+def linearize(X_orig, X_smooth, clamp_const=.002, filtset='deltas123',
+              use_smoothed=False):
     """make X more amenable to delta and double delta coding while keeping
     change in values bounded by a small fraction of peak-to-peak gap"""
+
+    if use_smoothed:  # for when X_smooth doesn't count towards clamped err
+        X_orig = X_smooth
 
     # X_orig = X_orig.T
     # X_smooth = X_smooth.T
@@ -197,6 +214,11 @@ def linearize(X_orig, X_smooth, clamp_const=.002, filtset='deltas12'):
     maxdiffs = clamp_const * gaps.reshape(-1, 1)
     Xmin = X_orig - maxdiffs
     Xmax = X_orig + maxdiffs
+
+    # # compute constants for rounding
+    # safe_nbits = np.floor(np.log2(1 + maxdiffs)).astype(np.int)
+    # round_to_nearest = np.minimum(1 << safe_nbits, safe_nbits)  # 0 -> 0
+    # safe_round
 
     origblocks = convert_to_blocks(X_orig).copy()
     minblocks = convert_to_blocks(Xmin)
@@ -229,20 +251,20 @@ def linearize(X_orig, X_smooth, clamp_const=.002, filtset='deltas12'):
     #     return use_blocks
 
     # def double_delta_code_blocks(use_blocks, mask=None):
-        for col in range(blocklen):
-            use_prev_vals = prev_vals if col == 0 else use_blocks[:, col - 1]
-            if col == 0:
-                use_prevprev_vals = prevprev_vals
-            elif col == 1:
-                use_prevprev_vals = prev_vals
-            else:
-                use_prevprev_vals = use_blocks[:, col - 2]
+    #     for col in range(blocklen):
+    #         use_prev_vals = prev_vals if col == 0 else use_blocks[:, col - 1]
+    #         if col == 0:
+    #             use_prevprev_vals = prevprev_vals
+    #         elif col == 1:
+    #             use_prevprev_vals = prev_vals
+    #         else:
+    #             use_prevprev_vals = use_blocks[:, col - 2]
 
-            prev_deltas = use_prev_vals - use_prevprev_vals
-            predicted_vals = use_prev_vals + prev_deltas
+    #         prev_deltas = use_prev_vals - use_prevprev_vals
+    #         predicted_vals = use_prev_vals + prev_deltas
 
-            if mask:
-                use_blocks[mask, col] -= predicted_vals[mask]
+    #         if mask:
+    #             use_blocks[mask, col] -= predicted_vals[mask]
 
     # ------------------------ option 1: piecewise linear approximation
     # note that we set the slope heuristically
@@ -355,11 +377,11 @@ def linearize(X_orig, X_smooth, clamp_const=.002, filtset='deltas12'):
         # linterp_blocks, almost_const_blocks, deltablocks, deltadeltablocks,
         # linterp_blocks, deltablocks, deltadeltablocks,  # adding linterp doesn't seem to help
         # deltablocks, deltadeltablocks,
-        deltablocks, deltadeltablocks, smoothblocks,
-        # linterp_blocks,
+        # deltablocks, deltadeltablocks, smoothblocks,
+        # linterp_blocks, smoothblocks,
         # almost_const_blocks,
-        # deltablocks,
-        # deltadeltablocks,
+        deltablocks,
+        deltadeltablocks,
         # origblocks,
         # smoothblocks,  # yes, this alone is same as dyn_fixed_filt
         ], loss='logabs', return_counts=True)
@@ -1345,12 +1367,26 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
     blocks_left = None
     blocks_right = None
     while len(left_transforms) and left_transforms[0].startswith('linearize'):
-        const = float(left_transforms[0][len('linearize='):])
-        blocks_left = linearize(X, X_left, clamp_const=const)
+        # const = float(left_transforms[0][len('linearize='):])
+        # blocks_left = linearize(X, X_left, clamp_const=const)
+        use_smoothed = False
+        if left_transforms[0].startswith('linearize_smoothed'):
+            use_smoothed = True
+            const = float(left_transforms[0][len('linearize_smoothed='):])
+        else:
+            const = float(left_transforms[0][len('linearize='):])
+        blocks_left = linearize(X, X_left,
+                                clamp_const=const, use_smoothed=use_smoothed)
         left_transforms = left_transforms[1:]
     while len(right_transforms) and right_transforms[0].startswith('linearize'):
-        const = float(right_transforms[0][len('linearize='):])
-        blocks_right = linearize(X, X_right, clamp_const=const)
+        use_smoothed = False
+        if right_transforms[0].startswith('linearize_smoothed'):
+            use_smoothed = True
+            const = float(right_transforms[0][len('linearize_smoothed='):])
+        else:
+            const = float(right_transforms[0][len('linearize='):])
+        blocks_right = linearize(X, X_right,
+                                 clamp_const=const, use_smoothed=use_smoothed)
         right_transforms = right_transforms[1:]
 
     if blocks_left is None:
@@ -1535,12 +1571,14 @@ def plot_dset(d, numbits=8, n=100, left_transforms=None, right_transforms=None,
         # resids = np.minimum(max_resid, resids)
         # bins = [1, 2, 4, 8, 16, 32, 127, max_resid + 1]
 
-        max_nbits = 16
-        bins = np.arange(max_nbits + 1)
-
         raw_resid_blocks = np.copy(resid_blocks)
         resid_blocks = compress.nbits_cost(resid_blocks)
-        resid_blocks = np.minimum(resid_blocks, max_nbits)
+        # resid_blocks = np.minimum(resid_blocks, max_nbits)
+
+        # max_nbits = 16
+        # max_nbits = 16 if np.max(resid_blocks < (1 << 16))
+        max_nbits = max(resid_blocks.max(), 16)
+        bins = np.arange(max_nbits + 1)
 
         resids = resid_blocks.ravel()
         raw_resids = np.copy(resids)
@@ -1689,7 +1727,7 @@ def main():
     # left_transforms = 'delta'
     # left_transforms = 'double_delta'
     # left_transforms = 'dyn_delta'
-    # left_transforms = 'OnlineGradDescent'
+    left_transforms = 'OnlineGradDescent'
     # left_transforms = ['smooth', 'delta']
     # left_transforms = ['smooth', 'smooth', 'delta']
     # left_transforms = 'online_regress'
@@ -1704,11 +1742,17 @@ def main():
     # left_transforms = ['dyn_delta', 'kmeans']
     # left_transforms = 'dyn_fixed_filts_deltas12'
     # left_transforms = 'dyn_fixed_filts_deltas123'
+    # left_transforms = 'linearize=.001'
+    # left_transforms = 'linearize=.0001'
     # left_transforms = (['bilateral_smooth'] * 2) + ['double_delta']
     # left_transforms = (['bilateral_smooth'] * 2) + ['dyn_fixed_filts_deltas123']
-    left_transforms = (['bilateral_smooth'] * 2) + ['clamp_abs_change=.005', 'dyn_fixed_filts_deltas123']
+    # left_transforms = (['bilateral_smooth'] * 2) + ['clamp_abs_change=.005', 'dyn_fixed_filts_deltas123']
     # left_transforms = (['bilateral_smooth'] * 10) + ['dyn_fixed_filts_deltas123']
-    # left_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.01', 'dyn_fixed_filts_deltas123']
+    # left_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.001', 'dyn_fixed_filts_deltas12']
+    # left_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.001', 'dyn_fixed_filts_deltas123']
+    # left_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.0001', 'dyn_fixed_filts_deltas123']
+    # left_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.002', 'dyn_fixed_filts_deltas123']
+    # left_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.002', 'dyn_fixed_filts_deltas12']
     # left_transforms = (['bilateral_smooth'] * 8) + ['clamp_abs_change=.002', 'dyn_fixed_filts_deltas12']
     # left_transforms = (['bilateral_smooth'] * 16) + ['clamp_abs_change=.002', 'dyn_fixed_filts_deltas12']
 
@@ -1717,7 +1761,23 @@ def main():
     # right_transforms = (['bilateral_smooth'] * 1) + ['dyn_fixed_filts_deltas123']
     # right_transforms = (['bilateral_smooth'] * 2) + ['clamp_abs_change=0', 'dyn_fixed_filts_deltas123']
     # right_transforms = (['bilateral_smooth'] * 2) + ['linearize=.005', 'dyn_fixed_filts_deltas123']
-    right_transforms = (['bilateral_smooth'] * 2) + ['linearize=.005']
+    # right_transforms = (['bilateral_smooth'] * 2) + ['linearize=.005']
+    # NOTE: the clamp is redundant with the linearize, except that it makes
+    # the upper-right plot show the clamped smoothed data instead of just smoothed
+    # right_transforms = (['bilateral_smooth'] * 1) + ['clamp_abs_change=.001', 'dyn_fixed_filts_deltas123']
+    # right_transforms = (['bilateral_smooth'] * 2) + ['clamp_abs_change=.001', 'dyn_fixed_filts_deltas123']
+    # right_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.005', 'dyn_fixed_filts_deltas123']
+    # right_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.001', 'linearize=.001']
+    # right_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.0001', 'linearize=.0001']
+    # right_transforms = 'linearize=.001'
+    # right_transforms = (['bilateral_smooth'] * 2) + ['linearize=.0001']
+    # right_transforms = (['bilateral_smooth'] * 2) + ['linearize_smoothed=.0001']
+    # right_transforms = (['bilateral_smooth'] * 2) + ['clamp_abs_change=.0001', 'linearize_smoothed=.0001']
+    # right_transforms = (['bilateral_smooth'] * 2) + ['clamp_abs_change=.001', 'linearize_smoothed=.0001']
+    # right_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.001', 'linearize_smoothed=.0001']
+    right_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.001', 'dyn_fixed_filts_deltas123']
+    # right_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.002', 'dyn_fixed_filts_deltas12']
+    # right_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.002', 'linearize=.002']
     # right_transforms = (['bilateral_smooth'] * 4) + ['clamp_abs_change=.005', 'dyn_fixed_filts_deltas123']
     # right_transforms = (['bilateral_smooth'] * 8) + ['clamp_abs_change=.005', 'dyn_fixed_filts_deltas123']
     # right_transforms = (['bilateral_smooth'] * 8) + ['clamp_abs_change=.002', 'dyn_fixed_filts_deltas123']
@@ -1801,9 +1861,13 @@ def main():
     # right_transforms = ['delta', 'split_dyn_filt']
 
     # numbits = 60  # 63 and 64 break our quantization somehow
+    # numbits = 32  # breaks clamp changes code; probably from using i32s
+    # numbits = 30
     # numbits = 24
-    numbits = 16
-    # numbits = 12
+    # numbits = 16
+    numbits = 12
+    # numbits = 11
+    # numbits = 10
     # numbits = 8
 
     # num_neighbors = 256

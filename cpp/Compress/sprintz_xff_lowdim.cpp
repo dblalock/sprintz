@@ -876,8 +876,19 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                 case 1:
                     // printf("---- %d.%d\n", g, b);
                     // printf("coef: %d\n", coef);
+                    // this is just some ugliness to deal with the fact that
+                    // extract instruction technically requires a constant
+                    int_t errs[block_sz];
+                    #define EXTRACT_VAL(IDX) do { errs[IDX] = _mm256_extract_epi8(verrs, IDX); } while(0);
+                    EXTRACT_VAL(0); EXTRACT_VAL(1);
+                    EXTRACT_VAL(2); EXTRACT_VAL(3);
+                    EXTRACT_VAL(4); EXTRACT_VAL(5);
+                    EXTRACT_VAL(6); EXTRACT_VAL(7);
+                    #undef EXTRACT_VAL
+                    #pragma unroll
                     for (uint8_t i = 0; i < block_sz; i++) {
-                        int8_t err = _mm256_extract_epi8(verrs, i);
+                        // int8_t err = _mm256_extract_epi8(verrs, i);
+                        int8_t err = errs[i];
                         int8_t prediction = (((int32_t)prev_delta) * coef) >> elem_sz_nbits;
                         int8_t delta = err + (uint8_t)prediction;
                         uint8_t val = prev_val + delta;
@@ -984,10 +995,21 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
 
                     uint_t prev_val = prev_vals_ar[0];
                     int_t prev_delta = prev_deltas_ar[0];
+
+                    // this is just some ugliness to deal with the fact that
+                    // extract instruction technically requires a constant
+                    int_t errs[block_sz];
+                    #define EXTRACT_VAL(IDX) do { errs[IDX] = _mm256_extract_epi16(verrs, IDX); } while(0);
+                    EXTRACT_VAL(0); EXTRACT_VAL(1);
+                    EXTRACT_VAL(2); EXTRACT_VAL(3);
+                    EXTRACT_VAL(4); EXTRACT_VAL(5);
+                    EXTRACT_VAL(6); EXTRACT_VAL(7);
+                    #undef EXTRACT_VAL
+
                     for (uint32_t i = 0; i < block_sz; i++) {
                         int_t prediction = (((int32_t)prev_delta) * coef) >> elem_sz_nbits;
-                        // int_t prediction = (((int32_t)prev_delta) * coef) >> 8; // TODO rm
-                        int_t err = _mm256_extract_epi16(verrs, i);
+                        // int_t err = _mm256_extract_epi16(verrs, i);
+                        int_t err = errs[i];
                         int_t delta = err + (uint_t)prediction;
                         uint_t val = prev_val + delta;
 
@@ -1022,12 +1044,30 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_xff_rle_lowdim(
                     uint_t prev_val1 = prev_vals_ar[1];
                     int_t prev_delta0 = prev_deltas_ar[0];
                     int_t prev_delta1 = prev_deltas_ar[1];
+
+
+                    // this is just some ugliness to deal with the fact that
+                    // extract instruction technically requires a constant
+                    int_t errs[2 * block_sz];
+                    #define EXTRACT_VAL(IDX) do { errs[IDX] = _mm256_extract_epi16(verrs, IDX); } while(0);
+                    EXTRACT_VAL(0); EXTRACT_VAL(1);
+                    EXTRACT_VAL(2); EXTRACT_VAL(3);
+                    EXTRACT_VAL(4); EXTRACT_VAL(5);
+                    EXTRACT_VAL(6); EXTRACT_VAL(7);
+                    EXTRACT_VAL(8); EXTRACT_VAL(9);
+                    EXTRACT_VAL(10); EXTRACT_VAL(11);
+                    EXTRACT_VAL(12); EXTRACT_VAL(13);
+                    EXTRACT_VAL(14); EXTRACT_VAL(15);
+                    #undef EXTRACT_VAL
+
                     for (uint32_t i = 0; i < block_sz; i++) {
                         int_t prediction0 = (((int32_t)prev_delta0) * coef0) >> elem_sz_nbits;
                         int_t prediction1 = (((int32_t)prev_delta1) * coef1) >> elem_sz_nbits;
 
-                        int_t err0 = _mm256_extract_epi16(verrs, 2 * i);
-                        int_t err1 = _mm256_extract_epi16(verrs, 2 * i + 1);
+                        // int_t err0 = _mm256_extract_epi16(verrs, 2 * i);
+                        // int_t err1 = _mm256_extract_epi16(verrs, 2 * i + 1);
+                        int_t err0 = errs[2 * i];
+                        int_t err1 = errs[2 * i + 1];
                         int_t delta0 = err0 + prediction0;
                         int_t delta1 = err1 + prediction1;
                         uint_t val0 = prev_val0 + delta0;

@@ -638,8 +638,19 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
                 prev_vals = vals; }
 
                 case 1:
+                    // this is just some ugliness to deal with the fact that
+                    // extract_epi8 technically requires a constant
+                    int_t deltas[block_sz];
+                    #define EXTRACT_DELTA(IDX) do { deltas[IDX] = _mm256_extract_epi8(vdeltas, IDX); } while(0);
+                    EXTRACT_DELTA(0); EXTRACT_DELTA(1);
+                    EXTRACT_DELTA(2); EXTRACT_DELTA(3);
+                    EXTRACT_DELTA(4); EXTRACT_DELTA(5);
+                    EXTRACT_DELTA(6); EXTRACT_DELTA(7);
+                    #undef EXTRACT_DELTA
+                    #pragma unroll
                     for (uint8_t i = 0; i < block_sz; i++) {
-                        int8_t delta = _mm256_extract_epi8(vdeltas, i);
+                        // int8_t delta = _mm256_extract_epi8(vdeltas, i);
+                        int8_t delta = deltas[i];
                         uint8_t val = prev_val + delta;
                         dest[i] = val;
                         prev_val = val;
@@ -703,8 +714,20 @@ SPRINTZ_FORCE_INLINE int64_t decompress_rowmajor_delta_rle_lowdim(
                 uint16_t prev_val = (uint16_t)prev_vals_ar[0];
                 switch (ndims) {
                 case 1:
+                    // this is just some ugliness to deal with the fact that
+                    // extract_epi16 technically requires a constant
+                    int_t deltas[block_sz];
+                    #define EXTRACT_DELTA(IDX) do { deltas[IDX] = _mm256_extract_epi16(vdeltas, IDX); } while(0);
+                    EXTRACT_DELTA(0); EXTRACT_DELTA(1);
+                    EXTRACT_DELTA(2); EXTRACT_DELTA(3);
+                    EXTRACT_DELTA(4); EXTRACT_DELTA(5);
+                    EXTRACT_DELTA(6); EXTRACT_DELTA(7);
+                    #undef EXTRACT_DELTA
+
+                    #pragma unroll
                     for (uint8_t i = 0; i < block_sz; i++) {
-                        int_t delta = _mm256_extract_epi16(vdeltas, i);
+                        // int_t delta = _mm256_extract_epi16(vdeltas, i);
+                        int_t delta = deltas[i];
                         uint_t val = prev_val + delta;
                         dest[i] = val;
                         prev_val = val;

@@ -80,6 +80,7 @@
 		727742DC203536D400715175 /* sprintz_xff_rle_query.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = sprintz_xff_rle_query.hpp; sourceTree = "<group>"; };
 		727B032D1FCC9265004F07D4 /* sprintz_xff.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sprintz_xff.h; sourceTree = "<group>"; };
 		727B032F1FCC9265004F07D4 /* sprintz_xff.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz_xff.cpp; sourceTree = "<group>"; };
+		72817D7D2433F4DC00FC87EA /* online.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = online.hpp; sourceTree = "<group>"; };
 		729526CF2005753F00BFB134 /* search.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = search.hpp; sourceTree = "<group>"; };
 		729526D020094CD300BFB134 /* test_search.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = test_search.cpp; path = test/test_search.cpp; sourceTree = "<group>"; };
 		72C2D0AA1FD6013000D6740B /* sprintz_xff_lowdim.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz_xff_lowdim.cpp; sourceTree = "<group>"; };
@@ -167,6 +168,7 @@
 				723DE9D01FDA025300EE6510 /* macros.hpp */,
 				72766643200FDFE000C20B91 /* eigen */,
 				723DEB451FDA025600EE6510 /* test_bitpack.cpp */,
+				72817D7D2433F4DC00FC87EA /* online.hpp */,
 				727742D32032947D00715175 /* test_query.cpp */,
 				723DEB411FDA025500EE6510 /* test_delta.cpp */,
 				723DEB3A1FDA025300EE6510 /* test_predict.cpp */,
@@ -208,7 +210,7 @@
 		72E01C5D1EB554200038A2B9 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0930;
+				LastUpgradeCheck = 1130;
 				ORGANIZATIONNAME = "D Blalock";
 				TargetAttributes = {
 					72E01C641EB554200038A2B9 = {
@@ -223,6 +225,7 @@
 			developmentRegion = English;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				English,
 				en,
 			);
 			mainGroup = 72E01C5C1EB554200038A2B9;
@@ -275,6 +278,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
@@ -334,6 +338,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
@@ -388,6 +393,7 @@
 			buildSettings = {
 				CLANG_WARN_DOCUMENTATION_COMMENTS = NO;
 				CLANG_X86_VECTOR_INSTRUCTIONS = avx2;
+				CODE_SIGN_IDENTITY = "-";
 				DEVELOPMENT_TEAM = DZDSDMCUYH;
 				GCC_C_LANGUAGE_STANDARD = c99;
 				GCC_INPUT_FILETYPE = automatic;
@@ -406,6 +412,7 @@
 			buildSettings = {
 				CLANG_WARN_DOCUMENTATION_COMMENTS = NO;
 				CLANG_X86_VECTOR_INSTRUCTIONS = avx2;
+				CODE_SIGN_IDENTITY = "-";
 				DEVELOPMENT_TEAM = DZDSDMCUYH;
 				GCC_C_LANGUAGE_STANDARD = c99;
 				GCC_INPUT_FILETYPE = automatic;

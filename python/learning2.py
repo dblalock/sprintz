@@ -576,7 +576,7 @@ class OnlineRegressor(object):
 # }
 
 
-def sub_online_regress(blocks, verbose=2, group_sz_blocks=8, max_shift=4,
+def sub_online_regress(blocks, verbose=0, group_sz_blocks=8, max_shift=4,
                        only_16_shifts=True, method='linreg', numbits=8,
                        drop_first_half=False, **sink):
                        # drop_first_half=True, **sink):
@@ -624,7 +624,7 @@ def sub_online_regress(blocks, verbose=2, group_sz_blocks=8, max_shift=4,
             coeffs_counts = np.array(encoder.best_coef_counts.most_common())
             print("min, max coeff: {}, {}".format(
                 coeffs_counts[:, 0].min(), coeffs_counts[:, 0].max()))
-            print("most common (coeff, counts):\n", coeffs_counts[:16])
+            # print("most common (coeff, counts):\n", coeffs_counts[:16])
             # bias_counts = np.array(encoder.best_offset_counts.most_common())
             # print "most common (bias, counts):\n", bias_counts[:16]
 
@@ -636,7 +636,7 @@ def sub_online_regress(blocks, verbose=2, group_sz_blocks=8, max_shift=4,
         keep_idx = len(out) // 2
         out[:keep_idx] = out[keep_idx:(2*keep_idx)]
         print("NOTE: duplicating second half of data into first half!!" \
-            " (blocks {}:)".format(keep_idx))
+              " (blocks {}:)".format(keep_idx))
 
     return out
 
