@@ -398,7 +398,7 @@ static inline uint64_t decompress8b_bitpack(const uint8_t* src, uint64_t in_sz, 
     // assert(in_sz % nbits == 0);
 
     uint64_t nblocks = in_sz / nbits;
-    
+
 //    uint64_t ngroups = 0;
 //    if (group_sz > 0) {
 //        ngroups = nblocks / group_sz;

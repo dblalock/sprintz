@@ -19,7 +19,7 @@
 #include "util.h"
 
 
-// #define CHECK_INT_UINT_TYPES_VALID(uint_t, int_t)                           \
+// #define CHECK_INT_UINT_TYPES_VALID(uint_t, int_t)           \
 //     static_assert(sizeof(uint_t) == sizeof(int_t),          \
 //         "uint type and int type sizes must be the same!");
 
