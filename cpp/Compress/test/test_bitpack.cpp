@@ -135,7 +135,7 @@ TEST_CASE("max_nbits_i8", "[bitpack]") {
 TEST_CASE("zigzag_8b", "[bitpack][zigzag]") {
     SECTION("scalar") {
         for (int val = -128; val <= 127; val++) {
-            REQUIRE(val == zigzag_decode_i8(zigzag_encode_i8((int8_t)val)));
+            REQUIRE(val == zigzag_decode_8b(zigzag_encode_8b((int8_t)val)));
         }
     }
     SECTION("scalar macro") {

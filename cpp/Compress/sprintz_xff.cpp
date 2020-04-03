@@ -150,7 +150,7 @@ int64_t compress8b_rowmajor_xff(const uint8_t* src, uint64_t len, int8_t* dest,
                     int8_t delta = (int8_t)(val - prev_val);
                     int8_t prediction = (((int16_t)prev_delta) * coef) >> 8;
                     int8_t err = delta - prediction;
-                    uint8_t bits = zigzag_encode_i8(err);
+                    uint8_t bits = zigzag_encode_8b(err);
 
                     if (i % learning_downsample == learning_downsample - 1) {
                         grad_sum += copysign_i8(err, prev_delta);

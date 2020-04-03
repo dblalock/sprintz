@@ -281,14 +281,23 @@ static inline uint8_t needed_nbits_i16x8_simple(int16_t* x) {
 //     return (x >> 1) ^ -(x & 0x01);
 // }
 
+// NOTE to self: this will yield subtlely wrong behavior if the
+// expression (x) has side effects; use the functions below instead for
+// new code
 #define ZIGZAG_ENCODE_SCALAR(x) ( ((x) << 1) ^ ((x) >> (8 * sizeof(x) - 1)) )
 #define ZIGZAG_DECODE_SCALAR(x) ( ((x) >> 1) ^ -((x) & 0x01) )
 
-extern inline uint8_t zigzag_encode_i8(int8_t x) {
+static inline uint8_t zigzag_encode_8b(int8_t x) {
     return (x << 1) ^ (x >> 7);
 }
+static inline int8_t zigzag_decode_8b(uint8_t x) {
+    return (x >> 1) ^ -(x & 0x01);
+}
 
-extern inline int8_t zigzag_decode_i8(uint8_t x) {
+static inline uint16_t zigzag_encode_16b(int16_t x) {
+    return (x << 1) ^ (x >> 15);
+}
+static inline int16_t zigzag_decode_16b(uint16_t x) {
     return (x >> 1) ^ -(x & 0x01);
 }
 
