@@ -23,6 +23,8 @@
 		727742D62032949100715175 /* sprintz_delta_rle_query.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 727742D52032949100715175 /* sprintz_delta_rle_query.cpp */; };
 		727742D82032956600715175 /* sprintz_xff_rle_query.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 727742D72032956600715175 /* sprintz_xff_rle_query.cpp */; };
 		727B03311FCC9265004F07D4 /* sprintz_xff.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 727B032F1FCC9265004F07D4 /* sprintz_xff.cpp */; };
+		72817D7F243438DE00FC87EA /* online.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72817D7E243438DE00FC87EA /* online.cpp */; };
+		72817D852436944700FC87EA /* test_online.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72817D842436944700FC87EA /* test_online.cpp */; };
 		729526D120094CD300BFB134 /* test_search.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 729526D020094CD300BFB134 /* test_search.cpp */; };
 		72C2D0AB1FD6013100D6740B /* sprintz_xff_lowdim.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C2D0AA1FD6013000D6740B /* sprintz_xff_lowdim.cpp */; };
 		72C2D0B01FD6456200D6740B /* univariate_8b.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 72C2D0AF1FD6456200D6740B /* univariate_8b.cpp */; };
@@ -81,6 +83,8 @@
 		727B032D1FCC9265004F07D4 /* sprintz_xff.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sprintz_xff.h; sourceTree = "<group>"; };
 		727B032F1FCC9265004F07D4 /* sprintz_xff.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz_xff.cpp; sourceTree = "<group>"; };
 		72817D7D2433F4DC00FC87EA /* online.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = online.hpp; sourceTree = "<group>"; };
+		72817D7E243438DE00FC87EA /* online.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = online.cpp; sourceTree = "<group>"; };
+		72817D842436944700FC87EA /* test_online.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = test_online.cpp; path = test/test_online.cpp; sourceTree = "<group>"; };
 		729526CF2005753F00BFB134 /* search.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = search.hpp; sourceTree = "<group>"; };
 		729526D020094CD300BFB134 /* test_search.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = test_search.cpp; path = test/test_search.cpp; sourceTree = "<group>"; };
 		72C2D0AA1FD6013000D6740B /* sprintz_xff_lowdim.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sprintz_xff_lowdim.cpp; sourceTree = "<group>"; };
@@ -141,6 +145,7 @@
 				72E01C681EB554200038A2B9 /* main.cpp */,
 				7217C2FF1F929D820059CFA6 /* transpose.h */,
 				726D10581F6DCDD200080495 /* bitpack.h */,
+				72817D7E243438DE00FC87EA /* online.cpp */,
 				721AECE11FAEB88F0005B793 /* util.h */,
 				72C2D0AF1FD6456200D6740B /* univariate_8b.cpp */,
 				72C2D0AE1FD6456200D6740B /* univariate_8b.h */,
@@ -166,9 +171,10 @@
 				723DEB461FDA025600EE6510 /* catch.hpp */,
 				723DEB3B1FDA025300EE6510 /* compress_testing.hpp */,
 				723DE9D01FDA025300EE6510 /* macros.hpp */,
+				72817D7D2433F4DC00FC87EA /* online.hpp */,
 				72766643200FDFE000C20B91 /* eigen */,
 				723DEB451FDA025600EE6510 /* test_bitpack.cpp */,
-				72817D7D2433F4DC00FC87EA /* online.hpp */,
+				72817D842436944700FC87EA /* test_online.cpp */,
 				727742D32032947D00715175 /* test_query.cpp */,
 				723DEB411FDA025500EE6510 /* test_delta.cpp */,
 				723DEB3A1FDA025300EE6510 /* test_predict.cpp */,
@@ -222,11 +228,11 @@
 			};
 			buildConfigurationList = 72E01C601EB554200038A2B9 /* Build configuration list for PBXProject "Compress" */;
 			compatibilityVersion = "Xcode 3.2";
-			developmentRegion = English;
+			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				English,
 				en,
+				Base,
 			);
 			mainGroup = 72E01C5C1EB554200038A2B9;
 			productRefGroup = 72E01C661EB554200038A2B9 /* Products */;
@@ -248,9 +254,11 @@
 				72C2D0B01FD6456200D6740B /* univariate_8b.cpp in Sources */,
 				723DEB471FDA025600EE6510 /* test_predict.cpp in Sources */,
 				72C2D0BB1FD7279C00D6740B /* format.cpp in Sources */,
+				72817D852436944700FC87EA /* test_online.cpp in Sources */,
 				727B03311FCC9265004F07D4 /* sprintz_xff.cpp in Sources */,
 				723DEB4C1FDA025600EE6510 /* test_univariate_8b.cpp in Sources */,
 				727742D82032956600715175 /* sprintz_xff_rle_query.cpp in Sources */,
+				72817D7F243438DE00FC87EA /* online.cpp in Sources */,
 				72C2D0B51FD6460100D6740B /* sprintz_delta_lowdim.cpp in Sources */,
 				72CD9A851F9FFDD600736C6A /* entropy.cpp in Sources */,
 				727742CE203260FA00715175 /* sprintz_delta_rle.cpp in Sources */,
