@@ -123,7 +123,12 @@ struct DeltaPredictor_u16 {
         _prev = initial_val;
     }
 
+    void jump(data_t prev0, data_t prev1, data_t prev2) {
+        _prev = prev0;
+    }
+
     data_t predict() const {
+        // printf("delta prev_val: %d\n", _prev);
         return _prev;
     }
 
@@ -153,10 +158,16 @@ struct DoubleDeltaPredictor_u16 {
         // _prev1 = initial_val; // make it equivalent to delta coding at first
     }
 
+    void jump(data_t prev0, data_t prev1, data_t prev2) {
+        _prev_val = prev0;
+        _prev_diff = _sub_with_wraparound(prev0, prev1);
+    }
+
     data_t predict() const {
         // like `_prev + (prev0 - prev1)`, but avoids undefined behavior
         // err_t diff = _sub_with_wraparound(_prev0, _prev1);
         // return _add_with_wraparound(_prev0, diff);
+        // printf("double delta prev_val: %d\n", _prev_val);
         return _add_with_wraparound(_prev_val, _prev_diff);
     }
 
@@ -167,7 +178,7 @@ struct DoubleDeltaPredictor_u16 {
         // _prev0 = true_val;
     }
 
-private:
+private: // TODO uncomment
     // data_t _prev0;
     // data_t _prev1;
     data_t _prev_val;
@@ -189,6 +200,13 @@ struct TripleDeltaPredictor_u16 {
         // // make it equivalent to delta coding at first
         // _prev1 = initial_val;
         // _prev2 = initial_val;
+    }
+
+    void jump(data_t prev0, data_t prev1, data_t prev2) {
+        _prev_val = prev0;
+        _prev_diff = _sub_with_wraparound(prev0, prev1);
+        err_t diff1 = _sub_with_wraparound(prev1, prev2);
+        _prev_ddiff = _sub_with_wraparound(_prev_diff, diff1);
     }
 
     data_t predict() const {
@@ -221,7 +239,7 @@ struct TripleDeltaPredictor_u16 {
         // _prev0 = true_val;
     }
 
-private:
+private: // TODO uncomment
     // data_t _prev0;
     // data_t _prev1;
     // data_t _prev2;
@@ -238,6 +256,10 @@ struct MovingAvgPredictor_u16 {
 
     void init(data_t initial_val) {
         _accumulator = initial_val << _shift;
+    }
+
+    void jump(data_t prev0, data_t prev1, data_t prev2) {
+        assert(false); // finite history invalid for IIR filter
     }
 
     data_t predict() const {
@@ -271,6 +293,13 @@ struct PredictiveCoder {
         _predictor.init(initial_val);
     }
 
+    // lets you skip to somewhere else in a buffer without having to
+    // feed in all the intermediate values; note that some predictors
+    // might not actually let you do this; in particular, moving avg
+    void jump(data_t prev0, data_t prev1, data_t prev2) {
+        _predictor.jump(prev0, prev1, prev2);
+    }
+
     err_t encode_next(data_t val) {
         data_t prediction = _predictor.predict();
         // printf("enc prediction: %d\n", prediction);
@@ -279,6 +308,9 @@ struct PredictiveCoder {
         // printf("enc err: %d\n", err);
         // printf("---- enc val: %d\n", val);
         _predictor.train(err, val);
+        // if (val == 81) {
+        //     printf("val = %d, prediction = %d, err = %d\n", val, prediction, err);
+        // }
         return err;
     }
 
@@ -290,11 +322,21 @@ struct PredictiveCoder {
         // printf("dec err: %d\n", err);
         // printf("dec val: %d\n", val);
         // data_t val = prediction + err;
+        // printf("dec err, prediction, val = %d, %d, %d\n", err, prediction, val);
         _predictor.train(err, val);
         return val;
     }
 
-private:
+    // this is needed so that you can feed in data to keep the state
+    // correct even when using a different codec (when using a dynamically
+    // chosen predictor)
+    void train(data_t true_val) {
+        data_t prediction = _predictor.predict();
+        err_t err = true_val - prediction;
+        _predictor.train(err, true_val);
+    }
+
+// private: // TODO uncomment after debug
     predictor_type _predictor;
 };
 
@@ -348,113 +390,19 @@ struct Losses {  // just wrapping the enum so it has some reasonable scoping
     enum { MaxAbs, SumLogAbs };
 };
 
-template<int LossFunc, int BlockSz=8>
-loss_t _compute_loss_u16(const uint16_t* buff) {
-    typedef uint16_t int_t; // typedef so easy to adapt code for other types
-    static_assert(LossFunc == Losses::MaxAbs || LossFunc == Losses::SumLogAbs,
-                  "Invalid loss function!");
-    static_assert(BlockSz >= 1, "Blocks must contain at least 1 element!");
 
-    // uint8_t sign_bit_pos = 8 * sizeof(int_t) - 1;
-
-    if (LossFunc == Losses::MaxAbs) {
-        // int_t val = *buff;
-        // val ^= val >> sign_bit_pos;  // flip bits if negative
-        // loss_t loss = ZIGZAG_ENCODE_SCALAR(*buff);
-        loss_t loss = *buff;
-        for (int i = 1; i < BlockSz; i++) {
-            loss = MAX(loss, buff[i]);
-        }
-        return loss;
-    } else if (LossFunc == Losses::SumLogAbs) {
-        loss_t loss = 0;
-        for (int i = 0; i < BlockSz; i++) {
-            uint8_t nleading_zeros = __builtin_clz(buff[i]);
-            uint8_t logabs = sizeof(int_t) * 8 - nleading_zeros;
-            loss += logabs;
-        }
-        return loss;
-    }
-    return -1;
-}
-
-template<int LossFunc=Losses::SumLogAbs, int BlockSz=8>
-void dynamic_delta_zigzag_encode_u16(
-    const uint16_t* data_in, uint16_t* data_out, uint8_t* choices_out,
-    len_t length)
-{
-    typedef uint16_t uint_t;
-
-    if (length == 0) { return; }
-    // always copy the first value
-    *data_out = *data_in;
-    if (length == 1) { return; }
-
-    length -= 1;  // effective length is 1 less, since 1st elem already copied
-    len_t nblocks = length / BlockSz;
-    len_t full_blocks_len = nblocks * BlockSz;
-    len_t tail_len = length - full_blocks_len;
-
-    // allocate buffers for codecs we consider
-    uint_t tmp0[BlockSz];
-    uint_t tmp1[BlockSz];
-
-    // create encoders
-    PredictiveCoder<DeltaPredictor_u16> enc0;
-    PredictiveCoder<DoubleDeltaPredictor_u16> enc1;
-    enc0.init(data_in[0]);
-    enc1.init(data_in[0]);
-
-    // zero out choices buffer; it's a bitfield so length/8 bytes, rounded up
-    for (int i = 0; i < (length + 7) / 8; i++) {
-        choices_out[i] = 0;
-    }
-
-    const uint_t* in_ptr = data_in + 1;
-    uint_t* out_ptr = data_out + 1;
-    for (len_t b = 0; b < nblocks; b++) {
-        for (int bb = 0; bb < BlockSz; bb++) {
-            tmp0[bb] = ZIGZAG_ENCODE_SCALAR(enc0.encode_next(*in_ptr));
-            tmp1[bb] = ZIGZAG_ENCODE_SCALAR(enc1.encode_next(*in_ptr));
-            in_ptr++;
-        }
-        loss_t loss0 = _compute_loss_u16<LossFunc, BlockSz>(tmp0);
-        loss_t loss1 = _compute_loss_u16<LossFunc, BlockSz>(tmp1);
-
-        uint_t* copy_from;
-        uint8_t choice;
-        if (loss0 <= loss1) {
-            copy_from = tmp0;
-            choice = 0;
-        } else {
-            copy_from = tmp1;
-            choice = 1;
-        }
-        // write out prediction errs and choice of predictor
-        for (int bb = 0; bb < BlockSz; bb++) {
-            *out_ptr++ = copy_from[bb];
-        }
-        len_t choices_byte_offset = b / 8;
-        uint8_t choices_bit_offset = (uint8_t)(b % 8);
-        choices_out[choices_byte_offset] |= choice << choices_bit_offset;
-    }
-    // just delta code the tail
-    for (int i = 0; i < tail_len; i++) {
-        *out_ptr++ = enc0.encode_next(*in_ptr++);
-    }
-}
 
 len_t dynamic_delta_choices_size(len_t length, int blocksz=8);
 
-void dynamic_delta_zigzag_encode_u16(
-    const uint16_t* data_in, uint16_t* data_out, uint8_t* choices_out,
-    len_t length, int loss);
+len_t dynamic_delta_zigzag_encode_u16(
+    const uint16_t* data_in, len_t length, int16_t* data_out,
+    uint8_t* choices_out, int loss);
 
-void dynamic_delta_zigzag_decode_u16(
-    const uint16_t* data_in, uint16_t* data_out, uint8_t* choices_in,
-    len_t length);
+len_t dynamic_delta_zigzag_decode_u16(
+    const int16_t* data_in, len_t length, uint16_t* data_out,
+    uint8_t* choices_in);
 
-void dynamic_delta_zigzag_decode_u16(
-    const uint16_t* data_in, uint16_t* data_out, uint8_t* choices_in);
+// void dynamic_delta_zigzag_decode_u16(
+//     const uint16_t* data_in, uint16_t* data_out, uint8_t* choices_in);
 
 #endif /* online_h */

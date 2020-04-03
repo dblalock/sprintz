@@ -34,7 +34,7 @@ template<class PredictorT> void _debug_predictive_encoder(int len=2) {
     test_squares_input<sizeof(typename PredictorT::data_t)>(len, comp, decomp);
 }
 
-TEST_CASE("online codecs (no compression) invertible", "[online][preproc][current]") {
+TEST_CASE("online codecs (no compression) invertible", "[online][preproc]") {
     SECTION("16b") {
         SECTION("delta predictor") {
             _test_predictive_encoder<DeltaPredictor_u16>();
@@ -52,7 +52,7 @@ TEST_CASE("online codecs (no compression) invertible", "[online][preproc][curren
     }
 }
 
-TEST_CASE("sanity check online codecs", "[online][preproc][current]") {
+TEST_CASE("sanity check online codecs", "[online][preproc]") {
     SECTION("16b") {
         int sz = 42;
         Vec_u16 raw(sz);
@@ -128,3 +128,45 @@ TEST_CASE("sanity check online codecs", "[online][preproc][current]") {
     }
 }
 
+
+// template<class PredictorT> void _debug_predictive_encoder(int len=2) {
+//     auto comp = [](const uint16_t* src, size_t len, int16_t* dest) {
+//         return predictive_encode<PredictorT>(src, (len_t)len, dest);
+//     };
+//     auto decomp = [](const int16_t* src, size_t len, uint16_t* dest) {
+//         return predictive_decode<PredictorT>(src, (len_t)len, dest);
+//     };
+//     test_squares_input<sizeof(typename PredictorT::data_t)>(len, comp, decomp);
+// }
+
+TEST_CASE("dynamic delta coding", "[online][preproc][current]") {
+    Vec_u8 choices_buff_vec(1000*1000); // TODO use length it says it needs
+    auto choices_buff = choices_buff_vec.data();
+    int len = 128;
+    SECTION("16b") {
+        int loss = Losses::MaxAbs;
+        auto comp = [choices_buff, loss](const uint16_t* src, size_t len,
+                                         int16_t* dest)
+        {
+            return dynamic_delta_zigzag_encode_u16(
+                src, (len_t)len, dest, choices_buff, loss);
+        };
+        auto decomp = [choices_buff](const int16_t* src, size_t len,
+                                     uint16_t* dest)
+        {
+            return dynamic_delta_zigzag_decode_u16(
+                src, (len_t)len, dest, choices_buff);
+        };
+        // test_squares_input<2>(len, comp, decomp);
+        // test_squares_input<2>(len, comp, decomp);
+        test_codec<2>(comp, decomp);
+
+        // _debug_predictive_encoder()
+
+        // TODO pick up here
+
+
+
+
+    }
+}
