@@ -180,7 +180,7 @@ TEST_CASE("xff_rle_rowmajor_16b (with compression)",
             return compress_rowmajor_xff_rle_16b(src, (uint32_t)len, dest, ndims);
 //            return compress8b_rowmajor_xff(src, (uint32_t)len, dest, ndims);
         };
-        auto decomp = [](int16_t* src, uint16_t* dest) {
+        auto decomp = [](const int16_t* src, uint16_t* dest) {
             return decompress_rowmajor_xff_rle_16b(src, dest);
 //            return decompress8b_rowmajor_xff(src, dest);
         };

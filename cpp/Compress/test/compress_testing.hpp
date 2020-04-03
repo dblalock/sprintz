@@ -69,16 +69,77 @@ template<> struct elemsize_traits<2> {
     using ivec_t = Vec_i16;
 };
 
-template<int ElemSz, class RawT, class CompF, class DecompF>
+// struct compressor_test_config {
+//     // compressor_test_config(const char* name="", uint32_t size=0,
+//     // compressor_test_config(uint32_t size=0,
+//     compressor_test_config(size_t size=0,
+//                            bool check_overrun=false,
+//                            bool pass_sz_to_decomp=false):
+//         check_overrun(check_overrun), size(size),
+//         pass_sz_to_decomp(pass_sz_to_decomp)
+//     {}
+
+//     // const char* name;
+//     // uint32_t size;
+//     size_t size;
+//     bool check_overrun;
+//     bool pass_sz_to_decomp;
+// };
+
+template<int flags>
+struct test_compressor_flags {
+    enum { CHECK_OVERRUN = 1, PASS_SIZE_TO_DECOMP = 2 };
+
+    static constexpr bool check_overrun = flags & (CHECK_OVERRUN);
+    static constexpr bool pass_sz_to_decomp = flags & (PASS_SIZE_TO_DECOMP);
+};
+
+
+template<class DecompF, class uint_t, class int_t>
+static inline auto _run_decomp(DecompF&& f_decomp, const int_t* compressed,
+                   size_t orig_len, uint_t* decompressed)
+    -> decltype(f_decomp(compressed, decompressed))
+{
+    return f_decomp(compressed, decompressed);
+}
+
+// template<class DecompF, class uint_t, class int_t, class _=decltype(std::declval(DecompF)(const int_t*, uint32_t, uint_t*))>
+template<class DecompF, class uint_t, class int_t>
+static inline auto _run_decomp(DecompF&& f_decomp, const int_t* compressed,
+                   size_t orig_len, uint_t* decompressed)
+    -> decltype(f_decomp(compressed, (uint32_t)orig_len, decompressed))
+{
+    return f_decomp(compressed, orig_len, decompressed);
+}
+
+// template<class DecompF, class uint_t, class int_t>
+// static inline size_t
+// _run_decomp(DecompF&& f_decomp, const int_t* compressed,
+//                    uint_t* decompressed)
+//     // -> decltype(f_decomp(compressed, decompressed))
+// {
+//     return f_decomp(compressed, decompressed);
+// }
+
+template<int ElemSz, int Flags=0, class RawT=void,
+         class CompF=void, class DecompF=void>
 static inline void test_compressor(const RawT& raw, CompF&& f_comp,
-    DecompF&& f_decomp, const char* name="", bool check_overrun=false,
-    size_t sz=0)
+    DecompF&& f_decomp, const char* name="", size_t sz=0)
+    // compressor_test_config conf=compressor_test_config{})
+    //  bool check_overrun=false,
+    // size_t sz=0, bool pass_sz_to_decomp=false)
 {
     using traits = elemsize_traits<ElemSz>;
     using uint_t = typename traits::uint_t;
     using UVec = typename traits::uvec_t;
     using IVec = typename traits::ivec_t;
+    using flags = test_compressor_flags<Flags>;
+
+    // auto name = conf.name;
+    // auto sz = conf.size;
+
     if (sz == 0) {
+        // sz = (uint32_t)raw.size();
         sz = raw.size();
     }
     IVec compressed(sz * 3/2 + 64);
@@ -87,14 +148,21 @@ static inline void test_compressor(const RawT& raw, CompF&& f_comp,
     compressed.setZero();
     decompressed.setZero();
     // poison memory
-    uint_t comp_poison = ElemSz == 1 ? 0x55 : 0x55 + 1024 + 2048;
-    uint_t decomp_poison = ElemSz == 1 ? 0xaa : 0xaa + 512 + 4096;
+    uint_t comp_poison = ElemSz == 1 ? 0x55 : (uint_t)(0x55 + 1024 + 2048);
+    uint_t decomp_poison = ElemSz == 1 ? 0xaa : (uint_t)(0xaa + 512 + 4096);
     compressed += comp_poison;
     decompressed += decomp_poison;
 
     auto compressed_len = f_comp(raw.data(), sz, compressed.data());
     CAPTURE(compressed_len);
-    auto decompressed_len = f_decomp(compressed.data(), decompressed.data());
+    size_t decompressed_len = _run_decomp(f_decomp, compressed.data(), sz, decompressed.data());
+    // size_t decompressed_len = _run_decomp(f_decomp, compressed.data(), decompressed.data());
+    // size_t decompressed_len = f_decomp(compressed.data(), decompressed.data());
+    // if (flags::pass_sz_to_decomp) {
+    //     decompressed_len = f_decomp(compressed.data(), sz, decompressed.data());
+    // } else {
+    //     decompressed_len = f_decomp(compressed.data(), decompressed.data());
+    // }
     auto arrays_eq = ar::all_eq(raw.data(), decompressed.data(), sz);
     if (!arrays_eq) {
         printf("\n**** Test Failed: '%s' ****\n", name);
@@ -114,7 +182,7 @@ static inline void test_compressor(const RawT& raw, CompF&& f_comp,
             printf("output:\t%s\n", output_as_str.c_str());
         }
     }
-    if (check_overrun) {
+    if (flags::check_overrun) {
         bool fail = false;
         for (uint64_t i = 0; i < decomp_padding; i++) {
             if (decompressed(sz + i) != decomp_poison) {
@@ -429,7 +497,7 @@ static inline void test_codec_many_ndims(CompF f_comp, DecompF f_decomp,
         {                                                                    \
             return F_COMP(src, (uint32_t)len, dest, ndims);                  \
         };                                                                   \
-        auto decomp = [](int_t* src, uint_t* dest) {                         \
+        auto decomp = [](const int_t* src, uint_t* dest) {                   \
             return F_DECOMP(src, dest);                                      \
         };                                                                   \
         return test_codec_many_ndims<ELEM_SZ>(                               \

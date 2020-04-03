@@ -58,7 +58,7 @@ void test_query(QueryParams qp, CompF&& f_comp, DecompF&& f_decomp)
 
 TEST_CASE("query rowmajor delta rle 8b", "[rowmajor][delta][rle][8b][query][materialize]") {
     printf("executing rowmajor delta rle 8b query materialize test\n");
-    auto query_func = [](int8_t* src, uint8_t* dest) {
+    auto query_func = [](const int8_t* src, uint8_t* dest) {
         QueryParams qp;
         qp.op = QueryTypes::NOOP;
         qp.materialize = true;
@@ -114,7 +114,7 @@ TEST_CASE("query rowmajor delta rle 16b", "[rowmajor][delta][rle][16b][query]") 
         auto comp = [ndims](const uint16_t* src, size_t len, int16_t* dest) {
             return compress_rowmajor_delta_rle_16b(src, (uint32_t)len, dest, ndims);
         };
-        auto decomp = [](int16_t* src, uint16_t* dest) {
+        auto decomp = [](const int16_t* src, uint16_t* dest) {
             QueryParams qp;
             qp.materialize = true;
             return query_rowmajor_delta_rle_16b(src, dest, qp);
@@ -192,7 +192,7 @@ TEST_CASE("query delta reduce sum 16b", "[delta][8b][query]") {
 
 TEST_CASE("query rowmajor xff rle 8b", "[rowmajor][xff][rle][8b][query]") {
     printf("executing rowmajor xff rle 8b query test\n");
-    auto query_func = [](int8_t* src, uint8_t* dest) {
+    auto query_func = [](const int8_t* src, uint8_t* dest) {
         QueryParams qp;
         qp.materialize = true;
 //        qp.materialize = false; // this should, and does, fail

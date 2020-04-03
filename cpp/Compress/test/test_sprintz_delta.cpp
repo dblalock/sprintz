@@ -89,7 +89,7 @@ TEST_CASE("compress rowmajor bitpack 16b", "[rowmajor][bitpack][16b]") {
         auto comp = [ndims](const uint16_t* src, size_t len, int16_t* dest) {
             return compress_rowmajor_16b(src, (uint32_t)len, dest, ndims);
         };
-        auto decomp = [](int16_t* src, uint16_t* dest) {
+        auto decomp = [](const int16_t* src, uint16_t* dest) {
             return decompress_rowmajor_16b(src, dest);
         };
 
@@ -176,7 +176,7 @@ TEST_CASE("compress rowmajor delta 16b", "[rowmajor][delta][16b]") {
         auto comp = [ndims](const uint16_t* src, size_t len, int16_t* dest) {
             return compress_rowmajor_delta_16b(src, (uint32_t)len, dest, ndims);
         };
-        auto decomp = [](int16_t* src, uint16_t* dest) {
+        auto decomp = [](const int16_t* src, uint16_t* dest) {
             return decompress_rowmajor_delta_16b(src, dest);
         };
 
@@ -208,7 +208,7 @@ TEST_CASE("compress rowmajor delta rle 16b", "[rowmajor][delta][rle][16b][dbg]")
         auto comp = [ndims](const uint16_t* src, size_t len, int16_t* dest) {
             return compress_rowmajor_delta_rle_16b(src, (uint32_t)len, dest, ndims);
         };
-        auto decomp = [](int16_t* src, uint16_t* dest) {
+        auto decomp = [](const int16_t* src, uint16_t* dest) {
             return decompress_rowmajor_delta_rle_16b(src, dest);
         };
 
@@ -238,7 +238,7 @@ TEST_CASE("compress rowmajor delta rle lowdim 16b", "[rowmajor][delta][rle][16b]
         auto comp = [ndims](const uint16_t* src, size_t len, int16_t* dest) {
             return compress_rowmajor_delta_rle_lowdim_16b(src, (uint32_t)len, dest, ndims);
         };
-        auto decomp = [](int16_t* src, uint16_t* dest) {
+        auto decomp = [](const int16_t* src, uint16_t* dest) {
             return decompress_rowmajor_delta_rle_lowdim_16b(src, dest);
         };
 
