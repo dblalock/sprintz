@@ -396,11 +396,17 @@ len_t dynamic_delta_choices_size(len_t length, int blocksz=8);
 
 len_t dynamic_delta_zigzag_encode_u16(
     const uint16_t* data_in, len_t length, int16_t* data_out,
-    uint8_t* choices_out, int loss);
+    uint8_t* choices_out, int loss=Losses::SumLogAbs);
+// this version writes out choices buff at end of data_out and stores length;
+// goes with decomp func below that doesn't take in length or choices buff
+len_t dynamic_delta_pack_u16(
+    const uint16_t* data_in, size_t length, int16_t* data_out);
 
 len_t dynamic_delta_zigzag_decode_u16(
     const int16_t* data_in, len_t length, uint16_t* data_out,
-    uint8_t* choices_in);
+    const uint8_t* choices_in);
+len_t dynamic_delta_unpack_u16(
+    const int16_t* data_in, uint16_t* data_out);
 
 // void dynamic_delta_zigzag_decode_u16(
 //     const uint16_t* data_in, uint16_t* data_out, uint8_t* choices_in);

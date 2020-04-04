@@ -7,9 +7,10 @@
 //
 
 #include "online.hpp"
+#include "format.h"
 
-#include "array_utils.hpp"
-#include "debug_utils.hpp"
+// #include "array_utils.hpp"
+// #include "debug_utils.hpp"
 
 // =================================================== dynamic predictor choice
 
@@ -146,7 +147,7 @@ len_t dynamic_delta_zigzag_encode_u16(
 
 len_t dynamic_delta_zigzag_decode_u16(
     const int16_t* data_in, len_t length, uint16_t* data_out,
-    uint8_t* choices_in)
+    const uint8_t* choices_in)
 {
     typedef uint16_t uint_t;
     typedef int16_t int_t;
@@ -253,3 +254,25 @@ len_t dynamic_delta_zigzag_encode_u16(
     }
 }
 
+len_t dynamic_delta_pack_u16(
+    const uint16_t* data_in, size_t size, int16_t* data_out)
+{
+    len_t length = (len_t)size; // avoid implicit conversion warnings
+    int loss = Losses::SumLogAbs;
+    uint16_t offset = write_metadata_simple1d(data_out, length);
+    data_out += offset;
+    uint8_t* choices_out = (uint8_t*)(data_out + length);
+    len_t choices_size = dynamic_delta_choices_size(length);
+    return offset + dynamic_delta_zigzag_encode_u16(
+        data_in, length, data_out, choices_out, loss) + choices_size;
+}
+len_t dynamic_delta_unpack_u16(
+    const int16_t* data_in, uint16_t* data_out)
+{
+    len_t length;
+    uint16_t offset = read_metadata_simple1d(data_in, &length);
+    data_in += offset;
+    const uint8_t* choices_in = (const uint8_t*)(data_in + length);
+    return dynamic_delta_zigzag_decode_u16(
+        data_in, length, data_out, choices_in);
+}

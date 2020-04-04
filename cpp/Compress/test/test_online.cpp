@@ -144,22 +144,27 @@ TEST_CASE("dynamic delta coding", "[online][preproc][current]") {
     auto choices_buff = choices_buff_vec.data();
     int len = 128;
     SECTION("16b") {
-        int loss = Losses::MaxAbs;
-        auto comp = [choices_buff, loss](const uint16_t* src, size_t len,
-                                         int16_t* dest)
-        {
-            return dynamic_delta_zigzag_encode_u16(
-                src, (len_t)len, dest, choices_buff, loss);
-        };
-        auto decomp = [choices_buff](const int16_t* src, size_t len,
-                                     uint16_t* dest)
-        {
-            return dynamic_delta_zigzag_decode_u16(
-                src, (len_t)len, dest, choices_buff);
-        };
-        // test_squares_input<2>(len, comp, decomp);
-        // test_squares_input<2>(len, comp, decomp);
-        test_codec<2>(comp, decomp);
+        SECTION("length and choices buff kept separate") {
+            int loss = Losses::MaxAbs;
+            auto comp = [choices_buff, loss](const uint16_t* src, size_t len,
+                                             int16_t* dest)
+            {
+                return dynamic_delta_zigzag_encode_u16(
+                    src, (len_t)len, dest, choices_buff, loss);
+            };
+            auto decomp = [choices_buff](const int16_t* src, size_t len,
+                                         uint16_t* dest)
+            {
+                return dynamic_delta_zigzag_decode_u16(
+                    src, (len_t)len, dest, choices_buff);
+            };
+            // test_squares_input<2>(len, comp, decomp);
+            // test_squares_input<2>(len, comp, decomp);
+            test_codec<2>(comp, decomp);
+        }
+        SECTION("length and choices written in buff") {
+            test_codec<2>(dynamic_delta_pack_u16, dynamic_delta_unpack_u16);
+        }
 
         // _debug_predictive_encoder()
 
