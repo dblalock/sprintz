@@ -392,7 +392,7 @@ struct Losses {  // just wrapping the enum so it has some reasonable scoping
 
 
 
-len_t dynamic_delta_choices_size(len_t length, int blocksz=8);
+len_t dynamic_delta_choices_size_bytes(len_t length, int blocksz=8);
 
 len_t dynamic_delta_zigzag_encode_u16(
     const uint16_t* data_in, len_t length, int16_t* data_out,

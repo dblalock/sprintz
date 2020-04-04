@@ -235,8 +235,9 @@ len_t dynamic_delta_zigzag_decode_u16(
     return length + 1; // original length
 }
 
-len_t dynamic_delta_choices_size(len_t length, int blocksz) {
-    return (length + blocksz - 1) / blocksz;
+len_t dynamic_delta_choices_size_bytes(len_t length, int blocksz) {
+    len_t nblocks = (length + blocksz - 1) / blocksz;
+    return (nblocks + 7) / 8; // numbytes
 }
 
 len_t dynamic_delta_zigzag_encode_u16(
@@ -262,7 +263,7 @@ len_t dynamic_delta_pack_u16(
     uint16_t offset = write_metadata_simple1d(data_out, length);
     data_out += offset;
     uint8_t* choices_out = (uint8_t*)(data_out + length);
-    len_t choices_size = dynamic_delta_choices_size(length);
+    len_t choices_size = (dynamic_delta_choices_size_bytes(length) + 1) / 2;
     return offset + dynamic_delta_zigzag_encode_u16(
         data_in, length, data_out, choices_out, loss) + choices_size;
 }
