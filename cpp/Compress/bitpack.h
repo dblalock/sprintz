@@ -231,36 +231,36 @@ static inline uint8_t needed_nbits_epi16x8(__m128i v) {
     //    return 17 - __builtin_clz(maxval);
 }
 
-static inline uint8_t needed_nbits_epi8x8(__m128i v) {
+static inline uint8_t needed_nbits_epi8x8(const __m128i v) {
     return needed_nbits_epi16x8(_mm_cvtepi8_epi16(v));
 }
 
-static inline uint8_t needed_nbits_i16x8(int16_t* x) {
+static inline uint8_t needed_nbits_i16x8(const int16_t* x) {
     __m128i v = _mm_loadu_si128((__m128i*)x);
     return needed_nbits_epi16x8(v);
 }
 
-static inline uint8_t needed_nbits_i8x8(int8_t* x) {
+static inline uint8_t needed_nbits_i8x8(const int8_t* x) {
     __m128i v = _mm_loadu_si128((__m128i*)x);
     return needed_nbits_epi8x8(v);
 }
 
-static inline uint8_t needed_nbits_i8x8_simple(int8_t* x) {
+static inline uint8_t needed_nbits_i8x8_simple(const int8_t* x) {
     uint8_t max_nbits = NBITS_COST_I8[*x];
-    int8_t* end = x + 8;
+    const int8_t* end = x + 8;
     x++;
     for ( ; x < end; x++) {
         max_nbits = MAX(max_nbits, NBITS_COST_I8[*x]);
     }
     return max_nbits;
 }
-static inline uint8_t needed_nbits_i16x8_simple(int16_t* x) {
+static inline uint8_t needed_nbits_i16x8_simple(const int16_t* x) {
     int16_t val = *x;
     bool all_zeros = val == 0;
 
     val ^= val >> 15;  // flip bits if negative
     uint8_t min_nlz = __builtin_clz(val);
-    int16_t* end = x + 8;
+    const int16_t* end = x + 8;
     x++;
     for ( ; x < end; x++) {
         val = *x;
@@ -269,6 +269,21 @@ static inline uint8_t needed_nbits_i16x8_simple(int16_t* x) {
         min_nlz = MIN(min_nlz, __builtin_clz(val));
     }
     return all_zeros ? 0: 33 - min_nlz;
+}
+static inline uint8_t needed_nbits_u16x8_simple(
+    const uint16_t* x, int block_sz=8)
+{
+    uint16_t val = *x;
+
+    uint8_t min_nlz = __builtin_clz(val);
+    const uint16_t* end = x + block_sz;
+    x++;
+    for ( ; x < end; x++) {
+        val = *x;
+        min_nlz = MIN(min_nlz, __builtin_clz(val));
+    }
+    uint8_t ret = 32 - min_nlz;
+    return ret == 15 ? 16 : ret; // count 15 bits as 16 bits
 }
 
 // ------------------------------------------------ zigzag
@@ -412,7 +427,8 @@ static inline uint64_t decompress8b_bitpack(const uint8_t* src, uint64_t in_sz, 
 //    if (group_sz > 0) {
 //        ngroups = nblocks / group_sz;
 //    }
-    uint64_t ngroups = group_sz > 0 ? nblocks / group_sz : 0;
+    auto safe_group_sz = group_sz > 0 ? group_sz : 1; // avoid UB
+    uint64_t ngroups = group_sz > 0 ? nblocks / safe_group_sz : 0;
 
     uint8_t* orig_dest = dest;
     uint64_t mask = kBitpackMasks_any_nbits[nbits];

@@ -408,6 +408,37 @@ len_t dynamic_delta_zigzag_decode_u16(
 len_t dynamic_delta_unpack_u16(
     const int16_t* data_in, uint16_t* data_out);
 
+// =================================================== just zigzag
+// TODO this isn't really "online"
+
+len_t zigzag_encode_u16(
+    const uint16_t* data_in, len_t length, int16_t* data_out);
+len_t zigzag_pack_u16(
+    const uint16_t* data_in, size_t length, int16_t* data_out);
+
+len_t zigzag_decode_u16(
+    const int16_t* data_in, len_t length, uint16_t* data_out);
+len_t zigzag_unpack_u16(
+    const int16_t* data_in, uint16_t* data_out);
+
+// =================================================== just sprintz bitpack
+
+len_t sprintzpack_headers_size_bytes_u16(len_t length, int blocksz=8);
+
+len_t sprintzpack_encode_u16(
+    const uint16_t* data_in, len_t length, int16_t* data_out,
+    uint8_t* headers_out);
+// this version writes out choices buff at end of data_out and stores length;
+// goes with decomp func below that doesn't take in length or choices buff
+len_t sprintzpack_pack_u16(
+    const uint16_t* data_in, size_t length, int16_t* data_out);
+
+len_t sprintzpack_decode_u16(
+    const int16_t* data_in, len_t length, uint16_t* data_out,
+    const uint8_t* headers_in);
+len_t sprintzpack_unpack_u16(
+    const int16_t* data_in, uint16_t* data_out);
+
 // void dynamic_delta_zigzag_decode_u16(
 //     const uint16_t* data_in, uint16_t* data_out, uint8_t* choices_in);
 

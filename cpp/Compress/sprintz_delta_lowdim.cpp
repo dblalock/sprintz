@@ -325,6 +325,14 @@ do_rle:
                     // for 16b, even numbers fall exactly on byte boundaries
                     // and the largest odd number is 13, which yields 52b
                     // and therefore fits in 8B for any bit offset
+                    // 2 cases to think about:
+                    //  -first 4-elem chunk in block
+                    //      -prev block ends byte-aligned since 8 elems, so
+                    //      always a byte-aligned 8B write
+                    //  -2nd 4-elem chunk in block
+                    //      -prev block might end with trailing 4b in last
+                    //      byte, but worst case is 13b, which is a 52b write,
+                    //      so this write will be 52 + 4 = 56b
                     uint16_t total_bit_offset = 0;
                     int8_t* dest8 = (int8_t*)dest;
                     for (uint8_t s = 0; s < nstripes; s++) {

@@ -139,7 +139,7 @@ TEST_CASE("sanity check online codecs", "[online][preproc]") {
 //     test_squares_input<sizeof(typename PredictorT::data_t)>(len, comp, decomp);
 // }
 
-TEST_CASE("dynamic delta coding", "[online][preproc][current]") {
+TEST_CASE("dynamic delta coding", "[online][preproc]") {
     Vec_u8 choices_buff_vec(1000*1000); // TODO use length it says it needs
     auto choices_buff = choices_buff_vec.data();
     int len = 128;
@@ -165,13 +165,39 @@ TEST_CASE("dynamic delta coding", "[online][preproc][current]") {
         SECTION("length and choices written in buff") {
             test_codec<2>(dynamic_delta_pack_u16, dynamic_delta_unpack_u16);
         }
-
-        // _debug_predictive_encoder()
-
-        // TODO pick up here
-
-
-
-
     }
+}
+
+
+TEST_CASE("zigzag coding", "[online][preproc]") {
+    test_codec<2>(zigzag_pack_u16, zigzag_unpack_u16);
+}
+
+TEST_CASE("sprintzpack", "[online][preproc][current]") {
+    test_codec<2>(sprintzpack_pack_u16, sprintzpack_unpack_u16);
+//
+//    int len = 8;
+//    Vec_u8 headers(len);
+//    auto headers_ptr = headers.data();
+//
+//     auto comp = [headers_ptr](const uint16_t* src, size_t len, int16_t* dest) {
+////         return sprintzpack_encode_u16(src, (len_t)len, dest, headers_ptr);
+//         return sprintzpack_pack_u16(src, (len_t)len, dest);
+//     };
+//     auto decomp = [headers_ptr](const int16_t* src, size_t len, uint16_t* dest) {
+////         return sprintzpack_decode_u16(src, (len_t)len, dest, headers_ptr);
+//         return sprintzpack_unpack_u16(src, dest);
+//     };
+//
+////    63 11740 61568 27129 34758 61078 51543 32791
+//
+//    using UVec = typename elemsize_traits<2>::uvec_t;
+////    UVec raw(sz);
+//    for (int i = 0; i < sz; i++) {
+//        raw(i) = (i % 16) * (i % 16) + ((i / 16) % 16);
+//    }
+//    std::vector<uint16_t> raw {63,11740,61568,27129,34758,61078,51543,32791};
+//    test_compressor<2>(raw, comp, decomp, "debug");
+    
+//    test_squares_input<2>(len, comp, decomp);
 }
