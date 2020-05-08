@@ -355,6 +355,9 @@ len_t _sprintzpack_encode_u16(
 
     uint_t tmp0[BlockSz];
 
+
+    // printf("enc out ptr: %p\n", data_out);
+
     // zero out headers buffer; it's a bitfield so length/8 bytes, rounded up
     // memset(headers_out, 0, spritzpack_headers_size_bytes_u16(length));
     // for (int i = 0; i < header_nbytes; i++) { headers_out[i] = 0; }
@@ -448,7 +451,7 @@ len_t _sprintzpack_encode_u16(
     }
 
     // printf("enc wrote encoded elems: "); dump_elements((uint16_t*)data_out - length, length);
-    // auto headers_len = nblocks / 2;
+    // printf("enc out ptr: %p\n", data_out - length);
     // printf("enc wrote header: "); //dump_elements(headers_out - headers_len, headers_len);
     // for (int i = 0; i < nblocks; i++) {
     //     printf("%d ", (headers_out[i / 2] >> (i % 2 ? 4 : 0)) & 0xf);
@@ -484,6 +487,9 @@ len_t _sprintzpack_decode_u16(
     len_t full_blocks_len = nblocks * BlockSz;
     len_t tail_len = length - full_blocks_len;
 
+    // printf("dec in ptr: %p\n", data_in);
+    // printf("dec sees length: %d\n", length);
+    // printf("dec sees initial encoded elems: "); dump_elements((uint16_t*)data_in, 8);
     // printf("dec sees encoded elems: "); dump_elements((uint16_t*)data_in, length);
     // printf("dec sees header: ");
     // for (int i = 0; i < nblocks; i++) {
@@ -491,10 +497,20 @@ len_t _sprintzpack_decode_u16(
     // }
     // printf("\n");
 
+    // printf("dec sees encoded 8B before memset: "); dump_elements((uint16_t*)data_in, length);
+
+
+    // SELF: issue here is that this impl breaks when run inplace; memset right
+    // here breaks it
+
+
+
     auto block_payload_nbytes = BlockSz * sizeof(uint_t);
     if (nblocks >= 1) {
         memset(data_out, 0, block_payload_nbytes);
     }
+
+    // printf("dec sees encoded 8B after memset: "); dump_elements((uint16_t*)data_in, length);
 
     uint8_t shift = 0;  // for reading non-byte-aligned data
     for (len_t b = 0; b < nblocks; b++) {
@@ -517,8 +533,14 @@ len_t _sprintzpack_decode_u16(
 
         // read payload
         for (int c = 0; c < u64_chunks_per_block; c++) {
-            uint64_t packed = (*((uint64_t*)data_in)) >> shift;
+            auto in_ptr = (const uint64_t*)data_in;
+            uint64_t packed = (*in_ptr) >> shift;
+
+
+            // printf("dec sees encoded 8B: "); dump_elements((uint16_t*)in_ptr, 4);
             // printf("packed: "); dump_elements((uint16_t*)&packed, 4);
+
+
             for (int cc = 0; cc < elems_per_u64; cc++) {
                 uint8_t rshift = cc * nbits;
                 uint_t val = (uint_t)((packed >> rshift) & mask);
@@ -537,6 +559,7 @@ len_t _sprintzpack_decode_u16(
     for (int i = 0; i < tail_len; i++) {
         *data_out++ = *data_in++;
     }
+    // printf("dec output: "); dump_elements(data_out - length, length);
 
     return length;
 }

@@ -422,6 +422,7 @@ len_t zigzag_unpack_u16(
     const int16_t* data_in, uint16_t* data_out);
 
 // =================================================== just sprintz bitpack
+// TODO this isn't really "online"
 
 len_t sprintzpack_headers_size_bytes_u16(len_t length, int blocksz=8);
 

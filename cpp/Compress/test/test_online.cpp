@@ -175,11 +175,10 @@ TEST_CASE("zigzag coding", "[online][preproc]") {
 
 TEST_CASE("sprintzpack", "[online][preproc][current]") {
     test_codec<2>(sprintzpack_pack_u16, sprintzpack_unpack_u16);
-//
+
 //    int len = 8;
 //    Vec_u8 headers(len);
 //    auto headers_ptr = headers.data();
-//
 //     auto comp = [headers_ptr](const uint16_t* src, size_t len, int16_t* dest) {
 ////         return sprintzpack_encode_u16(src, (len_t)len, dest, headers_ptr);
 //         return sprintzpack_pack_u16(src, (len_t)len, dest);
@@ -188,6 +187,7 @@ TEST_CASE("sprintzpack", "[online][preproc][current]") {
 ////         return sprintzpack_decode_u16(src, (len_t)len, dest, headers_ptr);
 //         return sprintzpack_unpack_u16(src, dest);
 //     };
+//    test_squares_input<2>(len, comp, decomp);
 //
 ////    63 11740 61568 27129 34758 61078 51543 32791
 //
@@ -198,6 +198,5 @@ TEST_CASE("sprintzpack", "[online][preproc][current]") {
 //    }
 //    std::vector<uint16_t> raw {63,11740,61568,27129,34758,61078,51543,32791};
 //    test_compressor<2>(raw, comp, decomp, "debug");
-    
-//    test_squares_input<2>(len, comp, decomp);
+
 }
