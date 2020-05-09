@@ -346,14 +346,21 @@ len_t _sprintzpack_encode_u16(
 
     if (length <= 0) { return length; }
 
+    auto orig_data_out = data_out;
+
     len_t nblocks = length / BlockSz;
 
     // nblocks = 0; // all tests pass with this in both enc and dec
+    // nblocks -= 1;
 
     len_t full_blocks_len = nblocks * BlockSz;
     len_t tail_len = length - full_blocks_len;
 
     uint_t tmp0[BlockSz];
+
+    // printf("enc tail len: %d\n", tail_len);
+
+    // printf("enc last 16 values: "); dump_elements(data_in + length - 16, 16);
 
 
     // printf("enc out ptr: %p\n", data_out);
@@ -380,10 +387,13 @@ len_t _sprintzpack_encode_u16(
             }
         }
         uint8_t nbits = needed_nbits_u16x8_simple(tmp0);
-        auto write_nbits = nbits - (nbits == 16);
-        // printf("enc nbits: %d\n", nbits);
 
+        // if (b == nblocks - 1) { nbits = 16; } // TODO rm
+        // printf("enc nbits: %d\n", nbits);
         // nbits = 16; // TODO rm after debug
+        // nbits = 12; // TODO rm after debug
+        auto write_nbits = nbits - (nbits == 16);
+
 
         // write out header
         static_assert(nbits_sz_bits == 4, "impl assumes 4bit headers");
@@ -435,10 +445,7 @@ len_t _sprintzpack_encode_u16(
 
         // zero out next chunk of output buffer; this is always safe if
         // we've been passed a large enough output buffer (same length as
-        // input or more); we start with next byte so that we don't
-        // overwrite trailing bits from this block; this can write past end
-        // of buffer if only same length as input, but we require a buffer
-        // slightly larger than that anyway
+        // input or more)
         if (b < nblocks - 1) {
             memset(data_out, 0, max_payload_nbytes);
         }
@@ -451,14 +458,30 @@ len_t _sprintzpack_encode_u16(
     }
 
     // printf("enc wrote encoded elems: "); dump_elements((uint16_t*)data_out - length, length);
+    // printf("enc wrote encoded elems: "); dump_elements((uint16_t*)data_out - 8, 8);
+    // printf("enc wrote encoded elems: "); dump_elements((uint16_t*)data_out - 12, 12);
     // printf("enc out ptr: %p\n", data_out - length);
     // printf("enc wrote header: "); //dump_elements(headers_out - headers_len, headers_len);
     // for (int i = 0; i < nblocks; i++) {
     //     printf("%d ", (headers_out[i / 2] >> (i % 2 ? 4 : 0)) & 0xf);
     // }
     // printf("\n");
+    auto ret_nbytes = ((uint8_t*)data_out) - ((uint8_t*)orig_data_out);
+    auto ret = (len_t)(ret_nbytes + 1) / 2;
+    if (ret != ret_nbytes * 2) {
+        // if didn't consume an even number of u16s, ensure that the trailing
+        // byte is deterministic (probably unnecessary by why take chances)
+        ((uint8_t*)orig_data_out)[ret_nbytes + 1] = 0;
+    }
 
-    return length;
+    // auto ret = (len_t)(data_out - orig_data_out);
+    assert(ret <= length);
+    // printf("enc returning len %d\n", ret);
+    // auto byteptr = ((uint8_t*)orig_data_out) + ret_nbytes;
+    // printf("enc encoded elems v2: "); dump_elements(((uint16_t*)byteptr) - 12, 12);
+    return ret;
+
+    // return length;
 }
 len_t sprintzpack_encode_u16(
     const uint16_t* data_in, len_t length, int16_t* data_out,
@@ -484,6 +507,10 @@ len_t _sprintzpack_decode_u16(
     if (length <= 0) { return length; }
 
     len_t nblocks = length / BlockSz;
+
+    // nblocks -= 1; // TODO rm
+
+
     len_t full_blocks_len = nblocks * BlockSz;
     len_t tail_len = length - full_blocks_len;
 
@@ -492,10 +519,20 @@ len_t _sprintzpack_decode_u16(
     // printf("dec sees initial encoded elems: "); dump_elements((uint16_t*)data_in, 8);
     // printf("dec sees encoded elems: "); dump_elements((uint16_t*)data_in, length);
     // printf("dec sees header: ");
+    // printf("dec tail len: %d\n", tail_len);
+
+    // printf("dec last 16 inputs: "); dump_elements(data_in + length - 16, 16);
+
+    // double nbits_sum = 0;
     // for (int i = 0; i < nblocks; i++) {
-    //     printf("%d ", (headers_in[i / 2] >> (i % 2 ? 4 : 0)) & 0xf);
+    //     auto nbits = (headers_in[i / 2] >> (i % 2 ? 4 : 0)) & 0xf;
+    //     nbits_sum += nbits;
+    //     // printf("%d ", (headers_in[i / 2] >> (i % 2 ? 4 : 0)) & 0xf);
     // }
     // printf("\n");
+    // if (nblocks >= 1) {
+    //     printf("dec mean nbits: %g\n", nbits_sum / nblocks);
+    // }
 
     // printf("dec sees encoded 8B before memset: "); dump_elements((uint16_t*)data_in, length);
 
@@ -524,7 +561,7 @@ len_t _sprintzpack_decode_u16(
         nbits += (nbits == 15); // 15 is actually 16, since 16 doesn't fit
 
 
-        // nbits = 16; // TODO rm after debug
+        // nbits = 12; // TODO rm after debug
 
 
         uint64_t mask = (((uint64_t)1) << nbits) - 1;
@@ -557,9 +594,13 @@ len_t _sprintzpack_decode_u16(
 
     // handle trailing elems; note that end of block always byte aligned
     for (int i = 0; i < tail_len; i++) {
+        // printf("copying tail value %d\n", *data_in);
         *data_out++ = *data_in++;
     }
-    // printf("dec output: "); dump_elements(data_out - length, length);
+    // printf("dec last 8 outputs: "); dump_elements(data_out - 8, 8);
+    // printf("dec last 16 outputs: "); dump_elements(data_out - 16, 16);
+    // printf("dec last 12 outputs: "); dump_elements(data_out - 12, 1);
+
 
     return length;
 }
@@ -577,10 +618,15 @@ len_t sprintzpack_pack_u16(
     uint16_t offset = write_metadata_simple1d(data_out, length);
     data_out += offset;
 
-    uint8_t* headers_out = (uint8_t*)(data_out + length);
+    // uint8_t* headers_out = (uint8_t*)(data_out + length);
     len_t headers_size = (sprintzpack_headers_size_bytes_u16(length) + 1) / 2;
+    uint8_t* headers_out = (uint8_t*)(data_out);
+    // int16_t* payloads_out = (int16_t*)((uint8_t*)data_out + headers_size);
+    int16_t* payloads_out = data_out + headers_size;
+    // printf("enc headers sz: %d\n", headers_size);
+    // printf("enc offset: %d\n", offset);
     return offset + sprintzpack_encode_u16(
-        data_in, length, data_out, headers_out) + headers_size;
+        data_in, length, payloads_out, headers_out) + headers_size;
 }
 len_t sprintzpack_unpack_u16(
     const int16_t* data_in, uint16_t* data_out)
@@ -588,7 +634,10 @@ len_t sprintzpack_unpack_u16(
     len_t length;
     uint16_t offset = read_metadata_simple1d(data_in, &length);
     data_in += offset;
-    const uint8_t* headers_in = (const uint8_t*)(data_in + length);
-    return sprintzpack_decode_u16(data_in, length, data_out, headers_in);
+    // const uint8_t* headers_in = (const uint8_t*)(data_in + length);
+    len_t headers_size = (sprintzpack_headers_size_bytes_u16(length) + 1) / 2;
+    const uint8_t* headers_in = (const uint8_t*)data_in;
+    const int16_t* payloads_in = data_in + headers_size;
+    return sprintzpack_decode_u16(payloads_in, length, data_out, headers_in);
 }
 
