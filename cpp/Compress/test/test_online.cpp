@@ -174,7 +174,12 @@ TEST_CASE("zigzag coding", "[online][preproc]") {
 }
 
 TEST_CASE("sprintzpack", "[online][preproc][current]") {
-    test_codec<2>(sprintzpack_pack_u16, sprintzpack_unpack_u16);
+    SECTION("zigzag") {
+        test_codec<2>(sprintzpack_pack_u16_zigzag, sprintzpack_unpack_u16_zigzag);
+    }
+    SECTION("no zigzag") {
+        test_codec<2>(sprintzpack_pack_u16, sprintzpack_unpack_u16);
+    }
 
 //    int len = 8;
 //    Vec_u8 headers(len);

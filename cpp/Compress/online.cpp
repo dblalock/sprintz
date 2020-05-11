@@ -261,7 +261,8 @@ len_t dynamic_delta_pack_u16(
     const uint16_t* data_in, size_t size, int16_t* data_out)
 {
     len_t length = (len_t)size; // avoid implicit conversion warnings
-    int loss = Losses::SumLogAbs;
+    // int loss = Losses::SumLogAbs;
+    int loss = Losses::MaxAbs;
     uint16_t offset = write_metadata_simple1d(data_out, length);
     data_out += offset;
     uint8_t* choices_out = (uint8_t*)(data_out + length);
@@ -331,7 +332,7 @@ len_t sprintzpack_headers_size_bytes_u16(len_t length, int blocksz) {
 
 // template<int BlockSz=8>
 // template<int BlockSz=8, bool ZigZag=false>
-template<int BlockSz=8, bool ZigZag=true>
+template<bool ZigZag=true, int BlockSz=8>
 len_t _sprintzpack_encode_u16(
     const uint16_t* data_in, len_t length, int16_t* data_out,
     uint8_t* headers_out)
@@ -483,15 +484,10 @@ len_t _sprintzpack_encode_u16(
 
     // return length;
 }
-len_t sprintzpack_encode_u16(
-    const uint16_t* data_in, len_t length, int16_t* data_out,
-    uint8_t* headers_out)
-{
-    return _sprintzpack_encode_u16(data_in, length, data_out, headers_out);
-}
+
 
 // template<int BlockSz=8, bool ZigZag=false>
-template<int BlockSz=8, bool ZigZag=true>
+template<bool ZigZag=true, int BlockSz=8>
 len_t _sprintzpack_decode_u16(
     const int16_t* data_in, len_t length, uint16_t* data_out,
     const uint8_t* headers_in)
@@ -535,12 +531,6 @@ len_t _sprintzpack_decode_u16(
     // }
 
     // printf("dec sees encoded 8B before memset: "); dump_elements((uint16_t*)data_in, length);
-
-
-    // SELF: issue here is that this impl breaks when run inplace; memset right
-    // here breaks it
-
-
 
     auto block_payload_nbytes = BlockSz * sizeof(uint_t);
     if (nblocks >= 1) {
@@ -600,19 +590,41 @@ len_t _sprintzpack_decode_u16(
     // printf("dec last 8 outputs: "); dump_elements(data_out - 8, 8);
     // printf("dec last 16 outputs: "); dump_elements(data_out - 16, 16);
     // printf("dec last 12 outputs: "); dump_elements(data_out - 12, 1);
+    // printf("dec returning length: %d\n", length);
 
 
     return length;
 }
+
+len_t sprintzpack_encode_u16(
+    const uint16_t* data_in, len_t length, int16_t* data_out,
+    uint8_t* headers_out, bool zigzag)
+{
+    // zigzag = true; // TODO rm
+    if (zigzag) {
+        return _sprintzpack_encode_u16<true>(
+            data_in, length, data_out, headers_out);
+    } else {
+        return _sprintzpack_encode_u16<false>(
+            data_in, length, data_out, headers_out);
+    }
+}
 len_t sprintzpack_decode_u16(
     const int16_t* data_in, len_t length, uint16_t* data_out,
-    const uint8_t* headers_in)
+    const uint8_t* headers_in, bool zigzag)
 {
-    return _sprintzpack_decode_u16(data_in, length, data_out, headers_in);
+    // zigzag = true; // TODO rm
+    if (zigzag) {
+        return _sprintzpack_decode_u16<true>(
+            data_in, length, data_out, headers_in);
+    } else {
+        return _sprintzpack_decode_u16<false>(
+            data_in, length, data_out, headers_in);
+    }
 }
 
-len_t sprintzpack_pack_u16(
-    const uint16_t* data_in, size_t size, int16_t* data_out)
+len_t _sprintzpack_pack_u16(
+    const uint16_t* data_in, size_t size, int16_t* data_out, bool zigzag)
 {
     len_t length = (len_t)size; // avoid implicit conversion warnings
     uint16_t offset = write_metadata_simple1d(data_out, length);
@@ -623,13 +635,23 @@ len_t sprintzpack_pack_u16(
     uint8_t* headers_out = (uint8_t*)(data_out);
     // int16_t* payloads_out = (int16_t*)((uint8_t*)data_out + headers_size);
     int16_t* payloads_out = data_out + headers_size;
-    // printf("enc headers sz: %d\n", headers_size);
-    // printf("enc offset: %d\n", offset);
-    return offset + sprintzpack_encode_u16(
-        data_in, length, payloads_out, headers_out) + headers_size;
+    auto len = sprintzpack_encode_u16(
+        data_in, length, payloads_out, headers_out, zigzag);
+    return offset + headers_size + len;
 }
-len_t sprintzpack_unpack_u16(
-    const int16_t* data_in, uint16_t* data_out)
+len_t sprintzpack_pack_u16(
+    const uint16_t* data_in, size_t length, int16_t* data_out)
+{
+    return _sprintzpack_pack_u16(data_in, length, data_out, false);
+}
+len_t sprintzpack_pack_u16_zigzag(
+    const uint16_t* data_in, size_t length, int16_t* data_out)
+{
+    return _sprintzpack_pack_u16(data_in, length, data_out, true);
+}
+
+len_t _sprintzpack_unpack_u16(
+    const int16_t* data_in, uint16_t* data_out, bool zigzag)
 {
     len_t length;
     uint16_t offset = read_metadata_simple1d(data_in, &length);
@@ -638,6 +660,16 @@ len_t sprintzpack_unpack_u16(
     len_t headers_size = (sprintzpack_headers_size_bytes_u16(length) + 1) / 2;
     const uint8_t* headers_in = (const uint8_t*)data_in;
     const int16_t* payloads_in = data_in + headers_size;
-    return sprintzpack_decode_u16(payloads_in, length, data_out, headers_in);
+    // return sprintzpack_decode_u16(payloads_in, length, data_out, headers_in);
+    return sprintzpack_decode_u16(
+            payloads_in, length, data_out, headers_in, zigzag);
 }
 
+len_t sprintzpack_unpack_u16(const int16_t* data_in, uint16_t* data_out) {
+    return _sprintzpack_unpack_u16(data_in, data_out, false);
+}
+
+len_t sprintzpack_unpack_u16_zigzag(const int16_t* data_in, uint16_t* data_out)
+{
+    return _sprintzpack_unpack_u16(data_in, data_out, true);
+}
