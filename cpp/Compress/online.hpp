@@ -401,6 +401,8 @@ len_t dynamic_delta_zigzag_encode_u16(
 // goes with decomp func below that doesn't take in length or choices buff
 len_t dynamic_delta_pack_u16(
     const uint16_t* data_in, size_t length, int16_t* data_out);
+len_t dynamic_delta_pack_u16_altloss(
+    const uint16_t* data_in, size_t length, int16_t* data_out);
 
 len_t dynamic_delta_zigzag_decode_u16(
     const int16_t* data_in, len_t length, uint16_t* data_out,

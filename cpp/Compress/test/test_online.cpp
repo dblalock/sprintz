@@ -139,7 +139,7 @@ TEST_CASE("sanity check online codecs", "[online][preproc]") {
 //     test_squares_input<sizeof(typename PredictorT::data_t)>(len, comp, decomp);
 // }
 
-TEST_CASE("dynamic delta coding", "[online][preproc]") {
+TEST_CASE("dynamic delta coding", "[online][preproc][current]") {
     Vec_u8 choices_buff_vec(1000*1000); // TODO use length it says it needs
     auto choices_buff = choices_buff_vec.data();
     int len = 128;

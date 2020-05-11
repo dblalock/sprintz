@@ -257,12 +257,12 @@ len_t dynamic_delta_zigzag_encode_u16(
     }
 }
 
-len_t dynamic_delta_pack_u16(
-    const uint16_t* data_in, size_t size, int16_t* data_out)
+len_t _dynamic_delta_pack_u16(
+    const uint16_t* data_in, size_t size, int16_t* data_out, int loss)
 {
     len_t length = (len_t)size; // avoid implicit conversion warnings
     // int loss = Losses::SumLogAbs;
-    int loss = Losses::MaxAbs;
+    // int loss = Losses::MaxAbs;
     uint16_t offset = write_metadata_simple1d(data_out, length);
     data_out += offset;
     uint8_t* choices_out = (uint8_t*)(data_out + length);
@@ -270,6 +270,19 @@ len_t dynamic_delta_pack_u16(
     return offset + dynamic_delta_zigzag_encode_u16(
         data_in, length, data_out, choices_out, loss) + choices_size;
 }
+len_t dynamic_delta_pack_u16(
+    const uint16_t* data_in, size_t length, int16_t* data_out)
+{
+    return _dynamic_delta_pack_u16(
+        data_in, length, data_out, Losses::SumLogAbs);
+}
+len_t dynamic_delta_pack_u16_altloss(
+    const uint16_t* data_in, size_t length, int16_t* data_out)
+{
+    return _dynamic_delta_pack_u16(
+        data_in, length, data_out, Losses::MaxAbs);
+}
+
 len_t dynamic_delta_unpack_u16(
     const int16_t* data_in, uint16_t* data_out)
 {
