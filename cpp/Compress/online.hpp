@@ -446,7 +446,4 @@ len_t sprintzpack_decode_u16(
 len_t sprintzpack_unpack_u16(const int16_t* data_in, uint16_t* data_out);
 len_t sprintzpack_unpack_u16_zigzag(const int16_t* data_in, uint16_t* data_out);
 
-// void dynamic_delta_zigzag_decode_u16(
-//     const uint16_t* data_in, uint16_t* data_out, uint8_t* choices_in);
-
 #endif /* online_h */

@@ -57,6 +57,8 @@ len_t dynamic_delta_zigzag_encode_u16(
     *data_out = *data_in;
     if (length == 1) { return length; }
 
+    // auto orig_data_out = data_out;
+
     // ar::print(data_in, "input")
 
     length -= 1;  // effective length is 1 less, since 1st elem already copied
@@ -76,8 +78,12 @@ len_t dynamic_delta_zigzag_encode_u16(
     enc1.init(data_in[0]);
 
     // zero out choices buffer; it's a bitfield so length/8 bytes, rounded up
-    for (int i = 0; i < (length + 7) / 8; i++) {
+    auto nheader_bytes = (length + 7) / 8;
+    for (int i = 0; i < nheader_bytes; i++) {
         choices_out[i] = 0;
+    }
+    if (nheader_bytes % 2) { // ensure deterministic last byte if odd nbytes
+        choices_out[nheader_bytes] = 0;
     }
 
     const uint_t* in_ptr = data_in + 1;
@@ -139,10 +145,19 @@ len_t dynamic_delta_zigzag_encode_u16(
         *out_ptr++ = enc0.encode_next(*in_ptr++);
     }
 
+    // auto ret_nbytes = ((uint8_t*)data_out) - ((uint8_t*)orig_data_out);
+    // auto ret = (len_t)(ret_nbytes + 1) / 2;
+    // if (ret_nbytes % 2) {
+    //     // if didn't consume an even number of u16s, ensure that the trailing
+    //     // byte is deterministic (probably unnecessary by why take chances)
+    //     ((uint8_t*)orig_data_out)[ret_nbytes + 1] = 0;
+    // }
+
     // ar::print(data_out, length + 1, "compressed\t\t\t");
     // ar::print(ar::map(zigzag_decode_16b, data_out, length+1).get(), length+1, "compressed nozigzag\t");
 
     return length + 1; // original length
+    // return ret;
 }
 
 len_t dynamic_delta_zigzag_decode_u16(
@@ -482,7 +497,7 @@ len_t _sprintzpack_encode_u16(
     // printf("\n");
     auto ret_nbytes = ((uint8_t*)data_out) - ((uint8_t*)orig_data_out);
     auto ret = (len_t)(ret_nbytes + 1) / 2;
-    if (ret != ret_nbytes * 2) {
+    if (ret_nbytes % 2) {
         // if didn't consume an even number of u16s, ensure that the trailing
         // byte is deterministic (probably unnecessary by why take chances)
         ((uint8_t*)orig_data_out)[ret_nbytes + 1] = 0;

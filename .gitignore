@@ -123,5 +123,6 @@ _results/
 # ------------------------ project-specific
 *.parquet
 *.bz2
+*.zip
 
 debug*
