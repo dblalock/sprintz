@@ -3,6 +3,8 @@
 
 *.py[cod]
 
+__pycache__/*
+
 # C extensions
 *.so
 
@@ -121,3 +123,5 @@ _results/
 # ------------------------ project-specific
 *.parquet
 *.bz2
+
+debug*
