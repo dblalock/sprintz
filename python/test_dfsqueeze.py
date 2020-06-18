@@ -9,6 +9,7 @@ import unittest
 
 from python import dfset
 from python import dfsqueeze as sq
+from python import codec
 
 
 MOCK_IN_DIR = 'debug_in'
@@ -41,32 +42,36 @@ def _populate_mock_input_dir(df0, df1):
 
 
 def _rm_mock_input_files():
-    os.path.remove(os.path.join(MOCK_IN_DIR, 'df0.csv'))
-    os.path.remove(os.path.join(MOCK_IN_DIR, 'df1.csv'))
+    os.remove(os.path.join(MOCK_IN_DIR, 'df0.csv'))
+    os.remove(os.path.join(MOCK_IN_DIR, 'df1.csv'))
 
 
-class TestDfSet(unittest.TestCase):
+class DfsetTest(unittest.TestCase):
 
     def setUp(self):
         self.df0 = _debug_df0()
         self.df1 = _debug_df1()
         _populate_mock_input_dir(self.df0, self.df1)
 
-    def teatDown(self):
+    def tearDown(self):
         _rm_mock_input_files()
+
+
+class TestDfSet(DfsetTest):
 
     def _test_dfs(self, filetype):
         dfs = dfset.make_dfset(filetype=filetype, csvsdir=MOCK_IN_DIR)
-        # dfs = dfset.make_dfset(filetype='csv')
+        # dfs = dfset.make_dfset(filetype=filetype)
         # print("dfs._dfsdir", dfs._dfsdir)
         # print("os.listdir(self._dfsdir)", os.listdir(dfs._dfsdir))
+        # print("endswith:", dfs._endswith)
         # dfs.copy_from_csvs_dir(MOCK_IN_DIR)
         # print("os.listdir(self._dfsdir)", os.listdir(dfs._dfsdir))
         # print("dfs._dfsdir", dfs._dfsdir)
-        # print("dfs.ids():", dfs.ids())
+        # print("dfs.ids:", dfs.ids)
         # print("dfs._find_ids():", dfs._find_ids())
 
-        assert sorted(dfs.ids()) == ['df0', 'df1']
+        assert sorted(dfs.ids) == ['df0', 'df1']
         # print(dfs._cols_stored_for_dfid('df0'))
         assert sorted(dfs._cols_stored_for_dfid('df0')) == 'a b c'.split()
         assert sorted(dfs._cols_stored_for_dfid('df1')) == 'a b d'.split()
@@ -74,32 +79,93 @@ class TestDfSet(unittest.TestCase):
         df0_hat = dfs['df0']
         df1_hat = dfs['df1']
         assert self.df0.shape == df0_hat.shape
-        # assert self.df0.dtypes == df0_hat.dtypes  # not true for csv
+        assert self.df1.shape == df1_hat.shape
+        if filetype != 'csv':
+            # print(self.df0.dtypes)
+            # print(df0_hat.dtypes)
+            # print(self.df0.index)
+            # print(df0_hat.index)
+            assert set(self.df0.dtypes) == set(df0_hat.dtypes)
+            assert set(self.df1.dtypes) == set(df1_hat.dtypes)
         # print(self.df0.dtypes)
         # print(df0_hat.dtypes)
         assert set(self.df0.columns) == set(df0_hat.columns)
         assert set(self.df1.columns) == set(df1_hat.columns)
         for col in self.df0:
-            assert np.allclose(self.df0[col], df0_hat[col])
+            assert np.array_equal(self.df0[col], df0_hat[col])
         for col in self.df1:
-            assert np.allclose(self.df1[col], df1_hat[col])
+            assert np.array_equal(self.df1[col], df1_hat[col])
+
         # assert np.allclose(self.df0['a'], df0_hat['a'])
         # assert np.allclose(self.df0['b'], df0_hat['b'])
         # assert np.allclose(self.df0['c'], df0_hat['c'])
-        # assert self.df0.equals(df0_hat)  # csv discards dtypes
-        # assert self.df1.equals(dfs['df1'])  # csv discards dtypes
+        # assert np.allclose(self.df1['a'], df1_hat['a'])
+        # assert np.allclose(self.df1['b'], df1_hat['b'])
+        # assert np.allclose(self.df1['d'], df1_hat['d'])
+        # assert np.array_equal(self.df1['a'], df1_hat['a'])
+        # assert np.array_equal(self.df1['b'], df1_hat['b'])
+        # assert np.array_equal(self.df1['d'], df1_hat['d'])
+        # if filetype != 'csv':
+            # print(self.df1.dtypes)
+            # print(df1_hat.dtypes)
+            # # print(df1_hat.columns)
+            # # print(self.df1.columns)
+            # print(self.df1['a'])
+            # print(df1_hat['a'])
+
+            # this function doesn't seem reliable; returns false for two
+            # dfs with same cols, dtypes, and all values pass allclose;
+            # maybe related to weird warnings about ufunc size changing
+            # and latest numpy being broken for me
+            # assert self.df0.equals(df0_hat)
+            # assert self.df1.equals(df1_hat)
 
     def test_csv_dfs(self):
         self._test_dfs(filetype='csv')
 
     def test_npy_dfs(self):
-        pass
+        self._test_dfs(filetype='npy')
 
     def test_parquet_dfs(self):
-        pass
+        self._test_dfs(filetype='parquet')
 
     def test_h5_dfs(self):
-        pass
+        self._test_dfs(filetype='h5')
+
+
+class TestEncodeDecode(DfsetTest):
+
+    def _test_filetype(self, filetype):
+        dfs = dfset.make_dfset(filetype=filetype, csvsdir=MOCK_IN_DIR)
+
+        encs = [codec.Debug(), codec.Delta()]
+        # encs = [codec.Delta()]
+        # encs = [codec.Debug()]
+
+        sizes_df_orig, sizes_df_comp = sq.encode_measure_decode(
+            dfs, encs)
+
+    def test_all_filetypes(self):
+        # for ftype in ('csv', 'npy'):
+        # for ftype in ('csv',):
+        for ftype in ('csv', 'npy', 'parquet', 'h5'):
+            self._test_filetype(ftype)
+
+
+class TestCodecs(DfsetTest):
+
+    def _test_filetype(self, filetype):
+        dfs = dfset.make_dfset(filetype=filetype, csvsdir=MOCK_IN_DIR)
+
+        encs = [codec.Debug(), codec.Delta()]
+
+        sizes_df_orig, sizes_df_comp = sq.encode_measure_decode(
+            dfs, encs)
+
+    def test_all_filetypes(self):
+        # for ftype in ('csv', 'npy', 'parquet', 'h5'):
+        for ftype in ('csv',):
+            self._test_filetype(ftype)
 
 
 if __name__ == '__main__':

@@ -32,8 +32,8 @@ def encode(dfs, codeclist):
     # TODO ideally look at dependency structure of which cols are read and
     # written to inform how dfs caches cols
 
-    ret = []
-    dfids = dfs.all_ids()
+    all_headers = []
+    dfids = dfs.ids
     for est in codeclist:
         headers = {}
         if est.needs_training:
@@ -41,15 +41,16 @@ def encode(dfs, codeclist):
             for dfid in dfids:
                 est.train(dfs[dfid, traincols])
         for dfid in dfids:
-            df, header = est.encode(dfs[dfid, est.cols()])
+            df = dfs[dfid, est.cols()]
+            dirty_df, header = est.encode(df)
             headers[dfid] = header
-            dfs[dfid, est.write_cols()] = df
-        ret.append(headers)
+            dfs[dfid] = dirty_df
+        all_headers.append(headers)
 
-    return ret
+    return all_headers
 
 
-def decode(dfs, codeclist, headers):
+def decode(dfs, codeclist, headerlist):
     """
     args:
         dfs (DfSet): wrapper around a collection of DataFrames; can
@@ -58,55 +59,66 @@ def decode(dfs, codeclist, headers):
         codeclist (iterable of BaseCodec): sequence of transformations
             to apply to each DataFrame. These codec objects must be the same
             ones used in the corresponding call to `encode`.
-        headers (iterable of dict: dfid -> params): the sequence of header
+        headerlist (iterable of dict: dfid -> params): the sequence of header
             dictionaries returned by the corresponding call to `encode`.
     returns:
         None
     """
-    ids = dfs.all_ids()
+    codeclist = codeclist[::-1]
+    headerlist = headerlist[::-1]
+
+    ids = dfs.ids
     for dfid in ids:
         df = dfs[dfid]
         modified_cols = set()
         for i, est in enumerate(codeclist):
-            header = headers[i]
-            write_cols = est.write_cols()
-            est.decode(df[est.cols()], header)  # modifies df inplace
-            # updated_df = est.decode(df[est.cols()], header)
-            # # TODO can we rely on decode to just modify these series inplace?
-            # if write_cols is None:
-            #     df = updated_df
-            # else:
-            #     df[write_cols] = updated_df
-
-            # update set of modified cols (so we don't necessarily have to
-            # write back everything)
-            if modified_cols is None or write_cols is None:
-                modified_cols = None  # None = all cols
-            else:
-                modified_cols |= set(write_cols)
-        write_df = df if modified_cols is None else df[list(modified_cols)]
-        dfs[dfid, modified_cols] = write_df
+            header = headerlist[i]
+            cols = est.cols() or df.columns
+            dirty_df = est.decode(df[cols], header)  # writes inplace
+            dirty_cols = dirty_df.columns
+            for col in dirty_cols:
+                df[col] = dirty_df[col]
+            modified_cols |= set(dirty_cols)
+        # print("dfid: ", dfid)
+        # print("modified_cols: ", modified_cols)
+        # print("should be about to write stuff...")
+        # print("col a: ", df['a'])
+        dfs[dfid] = df[list(modified_cols)]
 
 
 # def encode_measure_decode(csvdir, dfsdir, codeclist, filetype='h5', **dfset_kwargs):
-def encode_measure_decode(dfs, codeclist, filetype='h5', check_correct=True,
-                          **dfset_kwargs):
+# def encode_measure_decode(dfs, codeclist, check_correct=True, **dfset_kwargs):
+def encode_measure_decode(dfs, codeclist, check_correct=True):
     # dfs = dfset.make_dfset(csvdir, dfsdir, filetype=filetype, **dfset_kwargs)
 
     with tempfile.TemporaryDirectory() as dirpath:
-        dfs_orig = dfset.make_dfset(dfsdir=dirpath,
-                                    filetype=filetype, **dfset_kwargs)
+
+        # print("dirpath: ", dirpath)
+
+        # dfs_orig = dfset.make_dfset(
+        #     dfsdir=dirpath, filetype=dfs.filetype)
+        dfs_orig = dfs.copy(dfsdir=dirpath)
         if check_correct:
             dfs.clone_into(dfs_orig)
         # dfs_orig = dfset.make_dfset(csvdir, dfsdir.rstrip('/') + '_orig',
         #                             filetype=filetype, **dfset_kwargs)
 
+        print("about to measure file sizes")
         sizes_df_orig = dfs.file_sizes()
-        encode(dfs, codeclist)
+        print("about to encode")
+        headerlist = encode(dfs, codeclist)
+        print("about to re-measure file sizes")
         sizes_df_comp = dfs.file_sizes()
 
         if check_correct:
-            decode(dfs, codeclist)
+
+
+            # TODO decode needs headers, which encode should be returning but
+            # isn't (or at least we aren't assigning them to anything)
+
+
+
+            decode(dfs, codeclist, headerlist)
             sizes_df_decomp = dfs.file_sizes()
 
             sizes_df_orig.sort_values(['dfid', 'col'], axis=0, inplace=True)
@@ -114,6 +126,9 @@ def encode_measure_decode(dfs, codeclist, filetype='h5', check_correct=True,
             sizes_orig = sizes_df_orig['nbytes'].values
             sizes_decomp = sizes_df_decomp['nbytes'].values
 
+            # print('sizes_orig', sizes_orig)
+            # print('sizes_comp', sizes_comp)
+            # print('sizes_decomp', sizes_decomp)
             # first sanity check file sizes
             assert np.array_equal(sizes_orig, sizes_decomp)
             # full equality comparison

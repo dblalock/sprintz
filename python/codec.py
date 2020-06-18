@@ -2,13 +2,16 @@
 
 import abc
 import numpy as np
-import pandas as pd
+
+
+def _wrap_in_list_if_str(obj):
+    return ([obj] if isinstance(obj, str) else obj)
 
 
 class BaseCodec(abc.ABC):
 
     def __init__(self):
-        self._needs_training = True
+        self._needs_training = False
 
     # @property
     def cols(self):
@@ -61,16 +64,80 @@ class BaseCodec(abc.ABC):
         pass
 
 
-class DeltaCodec(BaseCodec):
+class Debug(BaseCodec):
 
     def encode(self, df):
+        # return df.columns, None # TODO rm after debug
         for col in df:
-            vals = df[col]
-            df[col][1:] = vals[1:] - vals[:-1]
+            df[col] = df[col].values[::-1]
+            # df[col] -= 1
+        return df, None
 
-    def decode(self, df, header):
+    def decode(self, df, header_unused):
+        # return # TODO rm after debug
         for col in df:
+            df[col] = df[col].values[::-1]
+            # df[col] += 1
+        # print("df col a within decode: ", df['a'])
+        return df
+
+
+class Delta(BaseCodec):
+
+    def __init__(self, which_cols=None):
+        super().__init__()
+        self._cols = _wrap_in_list_if_str(which_cols)  # None = all
+        # self.cols_to_sum = _wrap_in_list_if_str(cols_to_sum)
+        # self.col_to_predict = col_to_predict
+
+    def encode(self, df):
+        # print("running encode!")
+        # return df.columns, None # TODO rm after debug
+        use_cols = self._cols if self._cols is not None else df.columns
+        for col in use_cols:
+            vals = df[col].values
+            vals[1:] -= vals[:-1]
+            df[col] = vals
+            # df[col] = df[col].values[::-1]  # TODO rm after debug
+        return df[use_cols], None
+
+    def decode(self, df, header_unused):
+        # print("running decode!")
+        # return # TODO rm after debug
+        use_cols = self._cols if self._cols is not None else df.columns
+        for col in use_cols:
             df[col] = np.cumsum(df[col])
+            # df[col] = df[col].values[::-1]  # TODO rm after debug
+        return df[use_cols]
 
 
+class ColSumPredictor(BaseCodec):
+    """predicts one column as the sum of one or more other columns"""
 
+    def __init__(self, cols_to_sum, col_to_predict):
+        super().__init__()
+        self.cols_to_sum = _wrap_in_list_if_str(cols_to_sum)
+        self.col_to_predict = col_to_predict
+
+    def readonly_cols(self):
+        return self.cols_to_sum
+
+    def write_cols(self):
+        return [self.col_to_predict]
+
+    def _compute_predictions(self, df):
+        predictions = df[self.cols_to_sum[0]]
+        if len(self.cols_to_sum) > 1:
+            for col in self.cols_to_sum[1:]:
+                predictions += df[col].values
+        return predictions
+
+    def encode(self, df):
+        predictions = self._compute_predictions(df)
+        df[self.col_to_predict] = df[self.col_to_predict].values - predictions
+        return df[self.col_to_predict], None  # no headers
+
+    def decode(self, df):
+        predictions = self._compute_predictions(df)
+        df[self.col_to_predict] = df[self.col_to_predict].values + predictions
+        return df[self.col_to_predict]
