@@ -2,7 +2,9 @@
 
 import abc
 import copy
+
 import numpy as np
+from scipy import signal
 
 from python import dfquantize2 as dfq
 
@@ -17,24 +19,24 @@ class BaseCodec(abc.ABC):
         self._needs_training = False
         self._cols = _wrap_in_list_if_str(cols)  # None = all
 
-    @property
+    # @property
     def cols(self):
-        readonly_cols = self.readonly_cols or []
-        write_cols = self.write_cols or []
+        readonly_cols = self.readonly_cols() or []
+        write_cols = self.write_cols() or []
         return (readonly_cols + write_cols) or None
 
-    @property
+    # @property
     def readonly_cols(self):
         return None  # None = all of them
 
     # @abc.abstractmethod
-    @property
+    # @property
     def write_cols(self):
         return None  # None = all of them
 
-    @property
+    # @property
     def train_cols(self):
-        return self.cols
+        return self._cols
 
     def train(self, dfc):
         pass
@@ -42,13 +44,13 @@ class BaseCodec(abc.ABC):
     def _cols_to_use(self, df):
         return self._cols if self._cols is not None else df.columns
 
-    @property
+    # @property
     def needs_training(self):
         return self._needs_training
 
-    @needs_training.setter
-    def needs_training(self, val):
-        self._needs_training = val
+    # @needs_training.setter
+    # def needs_training(self, val):
+    #     self._needs_training = val
 
     # TODO using json-serializable params would be less brittle
     # than pickling in case the class definition changes between
@@ -116,12 +118,19 @@ class Delta(BaseCodec):
 
 
 class ColSumPredictor(BaseCodec):
-    """predicts one column as the sum of one or more other columns"""
+    """predicts a column as the (weighted) sum of one or more other columns"""
 
-    def __init__(self, cols_to_sum, col_to_predict):
+    def __init__(self, cols_to_sum, col_to_predict, weights=None):
         super().__init__()
         self.cols_to_sum = _wrap_in_list_if_str(cols_to_sum)
         self.col_to_predict = col_to_predict
+        self._weights = weights
+        # if weights is not None and weights != 'auto':
+        if self._weights is not None:  # TODO support regression to infer weights
+            # assert weights.ndim == 2  #
+            assert self._weights.shape[-1] == len(self.cols_to_sum)
+            if len(cols_to_sum) == 1:
+                self._weights = self._weights.reshape(-1, 1)
 
     def readonly_cols(self):
         return self.cols_to_sum
@@ -131,9 +140,17 @@ class ColSumPredictor(BaseCodec):
 
     def _compute_predictions(self, df):
         predictions = df[self.cols_to_sum[0]]
+        if self._weights is not None:
+            predictions = signal.correlate(
+                predictions, self._weights[:, 0], padding='valid')
         if len(self.cols_to_sum) > 1:
-            for col in self.cols_to_sum[1:]:
-                predictions += df[col].values
+            for i, col in enumerate(self.cols_to_sum[1:]):
+                # predictions += df[col].values
+                vals = df[col].values
+                if self._weights is not None:
+                    vals = signal.correlate(
+                        vals, self._weights[:, i + 1], padding='valid')
+                predictions += vals
         return predictions
 
     def encode(self, df):

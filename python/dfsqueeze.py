@@ -40,16 +40,16 @@ def encode(dfs, codeclist):
 
     # TODO do as much as possible before and after stuff that needs training
     # one df at a time (like in the `else`), rather than one enc at a time
-    needs_train = any([est.needs_training for est in codeclist])
+    needs_train = any([est.needs_training() for est in codeclist])
     headers = {}
     if needs_train:
         for est in codeclist:
-            if est.needs_training:
-                traincols = est.train_cols
+            if est.needs_training():
+                traincols = est.train_cols()
                 for dfid in dfids:
                     est.train(dfs[dfid, traincols])
             for dfid in dfids:
-                df = dfs[dfid, est.cols]
+                df = dfs[dfid, est.cols()]
                 dirty_df, header = est.encode(df)
                 headers[dfid] = headers.get(dfid, []) + [header]
                 # print("dirty_df.shape", dirty_df.shape)
@@ -60,7 +60,8 @@ def encode(dfs, codeclist):
         for dfid in dfids:
             headerlist = []
             for est in codeclist:
-                df = dfs[dfid, est.cols]
+                # print("est cols: ", est.cols())
+                df = dfs[dfid, est.cols()]
                 dirty_df, header = est.encode(df)
                 headerlist.append(header)
                 dfs[dfid] = dirty_df
@@ -93,7 +94,7 @@ def decode(dfs, codeclist, headers):
         headerlist = headers[dfid][::-1]
         for i, est in enumerate(codeclist):
             header = headerlist[i]
-            cols = est.cols or df.columns
+            cols = est.cols() or df.columns
             dirty_df = est.decode(df[cols], header)  # writes inplace
             dirty_cols = dirty_df.columns
             for col in dirty_cols:

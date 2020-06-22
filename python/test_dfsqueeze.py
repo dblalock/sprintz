@@ -43,12 +43,12 @@ def _populate_mock_input_dir(df0, df1):
     # TODO uncomment below
 
 
-    # df1.to_csv(os.path.join(MOCK_IN_DIR, 'df1.csv'), index=False)
+    df1.to_csv(os.path.join(MOCK_IN_DIR, 'df1.csv'), index=False)
 
 
 def _rm_mock_input_files():
     os.remove(os.path.join(MOCK_IN_DIR, 'df0.csv'))
-    # os.remove(os.path.join(MOCK_IN_DIR, 'df1.csv'))
+    os.remove(os.path.join(MOCK_IN_DIR, 'df1.csv'))
 
 
 class DfsetTest(unittest.TestCase):
