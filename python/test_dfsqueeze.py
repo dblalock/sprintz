@@ -38,12 +38,17 @@ def _debug_df1():
 
 def _populate_mock_input_dir(df0, df1):
     df0.to_csv(os.path.join(MOCK_IN_DIR, 'df0.csv'), index=False)
-    df1.to_csv(os.path.join(MOCK_IN_DIR, 'df1.csv'), index=False)
+
+
+    # TODO uncomment below
+
+
+    # df1.to_csv(os.path.join(MOCK_IN_DIR, 'df1.csv'), index=False)
 
 
 def _rm_mock_input_files():
     os.remove(os.path.join(MOCK_IN_DIR, 'df0.csv'))
-    os.remove(os.path.join(MOCK_IN_DIR, 'df1.csv'))
+    # os.remove(os.path.join(MOCK_IN_DIR, 'df1.csv'))
 
 
 class DfsetTest(unittest.TestCase):
@@ -154,20 +159,56 @@ class TestEncodeDecode(DfsetTest):
 
 class TestCodecs(DfsetTest):
 
-    def _test_filetype(self, filetype):
+    def _test_codecs_for_filetype(self, filetype, codeclist):
         dfs = dfset.make_dfset(filetype=filetype, csvsdir=MOCK_IN_DIR)
 
-        encs = [codec.Debug(), codec.Delta()]
-
         sizes_df_orig, sizes_df_comp = sq.encode_measure_decode(
-            dfs, encs)
+            dfs, codeclist)
 
-    def test_all_filetypes(self):
-        # for ftype in ('csv', 'npy', 'parquet', 'h5'):
-        for ftype in ('csv',):
-            self._test_filetype(ftype)
+    def _test_codecs_all_filetypes(self, codeclist):
+        # for ftype in ('csv',):
+        for ftype in ('csv', 'npy', 'parquet', 'h5'):
+            self._test_codecs_for_filetype(ftype, codeclist)
+
+    def test_colsum(self):
+        encs = [codec.ColSumPredictor(
+            cols_to_sum='a', col_to_predict='b')]
+        self._test_codecs_all_filetypes(encs)
+        encs = [codec.Debug(), codec.ColSumPredictor(
+            cols_to_sum='a', col_to_predict='b')]
+        self._test_codecs_all_filetypes(encs)
+
+    def test_delta(self):
+        encs = [codec.Delta()]
+        self._test_codecs_all_filetypes(encs)
+
+        encs = [codec.Delta(cols='a')]
+        self._test_codecs_all_filetypes(encs)
+
+        encs = [codec.Delta(cols=['a', 'b'])]
+        self._test_codecs_all_filetypes(encs)
+
+        encs = [codec.Debug(), codec.Delta()]
+        self._test_codecs_all_filetypes(encs)
+
+    def test_quantize(self):
+        encs = [codec.Quantize(cols='a')]
+        self._test_codecs_all_filetypes(encs)
+
+        encs = [codec.Delta(cols=['a', 'b'])]
+        self._test_codecs_all_filetypes(encs)
+
+        encs = [codec.Quantize()]
+        self._test_codecs_all_filetypes(encs)
+
+        encs = [codec.Debug(), codec.Quantize()]
+        self._test_codecs_all_filetypes(encs)
+
+        # self._test_codecs_for_filetype('csv', encs)
+        # self._test_codecs_for_filetype('npy', encs)
+        # self._test_codecs_for_filetype('parquet', encs)
+        # self._test_codecs_for_filetype('h5', encs)
 
 
 if __name__ == '__main__':
-    _populate_mock_input_dir()
     unittest.main()

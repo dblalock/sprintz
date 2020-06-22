@@ -18,7 +18,7 @@ class Variable(object):
 
 
 class Schema(object):
-    __slots__ = 'variables'.split()
+    __slots__ = 'variables'
 
 # import pathlib as pl
 

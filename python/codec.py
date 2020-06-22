@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 
 import abc
+import copy
 import numpy as np
+
+from python import dfquantize2 as dfq
 
 
 def _wrap_in_list_if_str(obj):
@@ -10,29 +13,34 @@ def _wrap_in_list_if_str(obj):
 
 class BaseCodec(abc.ABC):
 
-    def __init__(self):
+    def __init__(self, cols=None):
         self._needs_training = False
+        self._cols = _wrap_in_list_if_str(cols)  # None = all
 
-    # @property
+    @property
     def cols(self):
-        readonly_cols = self.readonly_cols() or []
-        write_cols = self.write_cols() or []
+        readonly_cols = self.readonly_cols or []
+        write_cols = self.write_cols or []
         return (readonly_cols + write_cols) or None
 
-    # @property
+    @property
     def readonly_cols(self):
         return None  # None = all of them
 
     # @abc.abstractmethod
-    # @property
+    @property
     def write_cols(self):
         return None  # None = all of them
 
+    @property
     def train_cols(self):
-        return self.cols()
+        return self.cols
 
     def train(self, dfc):
         pass
+
+    def _cols_to_use(self, df):
+        return self._cols if self._cols is not None else df.columns
 
     @property
     def needs_training(self):
@@ -84,16 +92,11 @@ class Debug(BaseCodec):
 
 class Delta(BaseCodec):
 
-    def __init__(self, which_cols=None):
-        super().__init__()
-        self._cols = _wrap_in_list_if_str(which_cols)  # None = all
-        # self.cols_to_sum = _wrap_in_list_if_str(cols_to_sum)
-        # self.col_to_predict = col_to_predict
-
     def encode(self, df):
         # print("running encode!")
         # return df.columns, None # TODO rm after debug
-        use_cols = self._cols if self._cols is not None else df.columns
+        # use_cols = self._cols if self._cols is not None else df.columns
+        use_cols = self._cols_to_use(df)
         for col in use_cols:
             vals = df[col].values
             vals[1:] -= vals[:-1]
@@ -104,7 +107,8 @@ class Delta(BaseCodec):
     def decode(self, df, header_unused):
         # print("running decode!")
         # return # TODO rm after debug
-        use_cols = self._cols if self._cols is not None else df.columns
+        # use_cols = self._cols if self._cols is not None else df.columns
+        use_cols = self._cols_to_use(df)
         for col in use_cols:
             df[col] = np.cumsum(df[col])
             # df[col] = df[col].values[::-1]  # TODO rm after debug
@@ -134,10 +138,83 @@ class ColSumPredictor(BaseCodec):
 
     def encode(self, df):
         predictions = self._compute_predictions(df)
-        df[self.col_to_predict] = df[self.col_to_predict].values - predictions
-        return df[self.col_to_predict], None  # no headers
+        vals = df[self.col_to_predict].values
+        # df.drop(self.col_to_predict, axis=1, inplace=True)
+        df[self.col_to_predict] = vals - predictions
+        # NOTE: have to give it a list of cols or it returns a series, not df
+        return df[[self.col_to_predict]], None  # no headers
 
-    def decode(self, df):
+    def decode(self, df, header_unused):
         predictions = self._compute_predictions(df)
-        df[self.col_to_predict] = df[self.col_to_predict].values + predictions
-        return df[self.col_to_predict]
+        # df[self.col_to_predict] = df[self.col_to_predict].values + predictions
+        # NOTE: have to give it a list of cols or it returns a series, not df
+        vals = df[self.col_to_predict].values
+        # df.drop(self.col_to_predict, axis=1, inplace=True)
+        df[self.col_to_predict] = vals + predictions
+        return df[[self.col_to_predict]]
+
+
+class Quantize(BaseCodec):
+
+    def __init__(self, *args, col2qparams=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._needs_training = True
+        self._col2qparams = col2qparams or {}
+
+    # def train(self, df):
+    #     # use_cols = self._cols if self._cols is not None else df.columns
+    #     use_cols = self._cols_to_use(df)
+    #     # col2qparams =
+    #     for col in use_cols:
+    #         if self._col
+
+    def encode(self, df):
+        use_cols = self._cols_to_use(df)
+        col2qparams = {}
+        for col in use_cols:
+            vals = df[col].values
+            if col in self._col2qparams:
+                qparams = self._col2qparams[col]
+            else:
+                # infered params need to be saved as headers
+                qparams = dfq.infer_qparams(vals)
+                col2qparams[col] = qparams
+
+            # import pprint
+            # print("col: ", col)
+            # pprint.pprint(col2qparams)
+            # print("df dtypes:\n", df.dtypes)
+            # print("df[col]:\n", df[col])
+
+            df[col] = dfq.quantize(vals, qparams)
+            assert df.dtypes[col] == qparams.dtype
+
+            # vals = df[col].to_numeric().values
+            # print("vals dtype:", vals.dtype)
+            # print("vals dtype:", df[col].dtype)
+            # import pandas as pd
+            # print(df[col])
+            # print("df dtypes before numeric:\n", df.dtypes)
+            # df[col] = pd.to_numeric(df[col])
+            # print("df dtypes after numeric:\n", df.dtypes)
+            # df[col] = pd.to_numeric(df[col]).astype(np.int)
+            # df.dtypes[col] = qparams.dtype
+            # df.dtypes[col] = qparams.dtype
+            # print("col: ", col)
+            # print("vals: ", vals)
+            # print("df dtypes after quantize:\n", df.dtypes)
+            # print("qparams dtype: ", qparams.dtype)
+
+        return df[use_cols], col2qparams
+
+    def decode(self, df, col2qparams):
+        use_cols = self._cols_to_use(df)
+        if self._col2qparams:
+            # header only contains info for cols not specified a priori
+            col2qparams = copy.deepcopy(col2qparams)
+            col2qparams.update(self._col2qparams)
+        for col in use_cols:
+            vals = df[col].values
+            qparams = col2qparams[col]
+            df[col] = dfq.unquantize(vals, qparams)
+        return df[use_cols]
