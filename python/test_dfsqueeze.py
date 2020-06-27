@@ -38,11 +38,6 @@ def _debug_df1():
 
 def _populate_mock_input_dir(df0, df1):
     df0.to_csv(os.path.join(MOCK_IN_DIR, 'df0.csv'), index=False)
-
-
-    # TODO uncomment below
-
-
     df1.to_csv(os.path.join(MOCK_IN_DIR, 'df1.csv'), index=False)
 
 
@@ -178,31 +173,74 @@ class TestCodecs(DfsetTest):
             cols_to_sum='a', col_to_predict='b')]
         self._test_codecs_all_filetypes(encs)
 
+    def _test_simple_codec(self, f_ctor):
+        encs = [f_ctor()]
+        self._test_codecs_all_filetypes(encs)
+
+        encs = [f_ctor(cols='a')]
+        self._test_codecs_all_filetypes(encs)
+
+        encs = [f_ctor(cols=['a', 'b'])]
+        self._test_codecs_all_filetypes(encs)
+
+        encs = [codec.Debug(), f_ctor()]
+        self._test_codecs_all_filetypes(encs)
+
     def test_delta(self):
-        encs = [codec.Delta()]
-        self._test_codecs_all_filetypes(encs)
+        self._test_simple_codec(codec.Delta)
+        # encs = [codec.Delta()]
+        # self._test_codecs_all_filetypes(encs)
 
-        encs = [codec.Delta(cols='a')]
-        self._test_codecs_all_filetypes(encs)
+        # encs = [codec.Delta(cols='a')]
+        # self._test_codecs_all_filetypes(encs)
 
-        encs = [codec.Delta(cols=['a', 'b'])]
-        self._test_codecs_all_filetypes(encs)
+        # encs = [codec.Delta(cols=['a', 'b'])]
+        # self._test_codecs_all_filetypes(encs)
 
-        encs = [codec.Debug(), codec.Delta()]
-        self._test_codecs_all_filetypes(encs)
+        # encs = [codec.Debug(), codec.Delta()]
+        # self._test_codecs_all_filetypes(encs)
+
+    def test_double_delta(self):
+        self._test_simple_codec(codec.DoubleDelta)
+        # encs = [codec.Delta()]
+        # self._test_codecs_all_filetypes(encs)
+
+        # encs = [codec.Delta(cols='a')]
+        # self._test_codecs_all_filetypes(encs)
+
+        # encs = [codec.Delta(cols=['a', 'b'])]
+        # self._test_codecs_all_filetypes(encs)
+
+        # encs = [codec.Debug(), codec.Delta()]
+        # self._test_codecs_all_filetypes(encs)
+
+    def test_dynamic_delta(self):
+        self._test_simple_codec(codec.DynamicDelta)
+        # encs = [codec.Delta()]
+        # self._test_codecs_all_filetypes(encs)
+
+        # encs = [codec.Delta(cols='a')]
+        # self._test_codecs_all_filetypes(encs)
+
+        # encs = [codec.Delta(cols=['a', 'b'])]
+        # self._test_codecs_all_filetypes(encs)
+
+        # encs = [codec.Debug(), codec.Delta()]
+        # self._test_codecs_all_filetypes(encs)
 
     def test_quantize(self):
-        encs = [codec.Quantize(cols='a')]
-        self._test_codecs_all_filetypes(encs)
+        self._test_simple_codec(codec.Quantize)
+        # encs = [codec.Quantize(cols='a')]
+        # self._test_codecs_all_filetypes(encs)
 
-        encs = [codec.Delta(cols=['a', 'b'])]
-        self._test_codecs_all_filetypes(encs)
+        # encs = [codec.Delta(cols=['a', 'b'])]
+        # self._test_codecs_all_filetypes(encs)
 
-        encs = [codec.Quantize()]
-        self._test_codecs_all_filetypes(encs)
+        # encs = [codec.Quantize()]
+        # self._test_codecs_all_filetypes(encs)
 
-        encs = [codec.Debug(), codec.Quantize()]
-        self._test_codecs_all_filetypes(encs)
+        # encs = [codec.Debug(), codec.Quantize()]
+        # self._test_codecs_all_filetypes(encs)
 
         # self._test_codecs_for_filetype('csv', encs)
         # self._test_codecs_for_filetype('npy', encs)

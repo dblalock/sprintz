@@ -7,6 +7,7 @@ import numpy as np
 from scipy import signal
 
 from python import dfquantize2 as dfq
+from python import learning  # for compute_loss
 
 
 def _wrap_in_list_if_str(obj):
@@ -117,6 +118,109 @@ class Delta(BaseCodec):
         return df[use_cols]
 
 
+class DoubleDelta(BaseCodec):
+
+    def encode(self, df):
+        # print("running encode!")
+        # return df.columns, None # TODO rm after debug
+        # use_cols = self._cols if self._cols is not None else df.columns
+        use_cols = self._cols_to_use(df)
+        for col in use_cols:
+            vals = df[col].values
+            vals[1:] -= vals[:-1]
+            vals[1:] -= vals[:-1]
+            df[col] = vals
+        return df[use_cols], None
+
+    def decode(self, df, header_unused):
+        # print("running decode!")
+        # return # TODO rm after debug
+        # use_cols = self._cols if self._cols is not None else df.columns
+        use_cols = self._cols_to_use(df)
+        for col in use_cols:
+            df[col] = np.cumsum(np.cumsum(df[col]))
+        return df[use_cols]
+
+
+class DynamicDelta(BaseCodec):
+
+    def __init__(self, *args, block_len=3, loss='logabs', **kwargs):
+        super().__init__(*args, **kwargs)
+        self._block_len = block_len
+        assert loss in ('l1', 'l2', 'linf', 'logabs')
+        self._loss = loss
+
+    def encode(self, df):
+        use_cols = self._cols_to_use(df)
+        trailing_len = df.shape[0] % self._block_len
+        if df.shape[0] < self._block_len:  # no blocks
+            return df[use_cols], None
+
+        col2mask = {}
+        for col in use_cols:
+            # construct delta coded and double-delta coded versions
+            vals_delta = df[col].values
+            vals_delta[1:] -= vals_delta[:-1]
+            vals_double = vals_delta.copy()
+            vals_double[1:] -= vals_double[:-1]
+
+            orig_vals_delta = vals_delta.copy()
+            if trailing_len > 0:
+                vals_delta = vals_delta[:-trailing_len]
+                vals_double = vals_double[:-trailing_len]
+            X_delta = vals_delta.reshape(-1, self._block_len)
+            X_double = vals_double.reshape(-1, self._block_len)
+
+            losses_delta = learning.compute_loss(X_delta, loss=self._loss)
+            losses_double = learning.compute_loss(X_delta, loss=self._loss)
+            # X_out = X_delta.copy()
+            X_out = X_delta
+            mask = losses_double < losses_delta
+            X_out[mask] = X_double
+            col2mask[col] = mask
+
+            # TODO also
+            ret = orig_vals_delta
+            if trailing_len > 0:
+                ret[:-trailing_len] = X_out.ravel()
+            else:
+                ret = X_out.ravel()
+            df[col] = ret
+
+        return df[use_cols], col2mask
+
+    def decode(self, df, header):
+        use_cols = self._cols_to_use(df)
+        trailing_len = df.shape[0] % self._block_len
+        if df.shape[0] < self._block_len:  # no blocks
+            return df[use_cols]
+
+        col2mask = header
+        for col in use_cols:
+            vals_delta = np.cumsum(df[col].values)
+            vals_double = np.cumsum(vals_delta)
+
+            orig_vals_delta = vals_delta.copy()
+            if trailing_len > 0:
+                vals_delta = vals_delta[:-trailing_len]
+                vals_double = vals_double[:-trailing_len]
+
+            X_delta = vals_delta.reshape(-1, self._block_len)
+            X_double = vals_double.reshape(-1, self._block_len)
+            mask = col2mask[col]
+            X_out = X_delta
+            X_out[mask] = X_double
+
+            ret = orig_vals_delta
+            if trailing_len > 0:
+                ret[:-trailing_len] = X_out.ravel()
+            else:
+                ret = X_out.ravel()
+            df[col] = ret
+
+        return df[use_cols]
+
+
 class ColSumPredictor(BaseCodec):
     """predicts a column as the (weighted) sum of one or more other columns"""
 
@@ -178,12 +282,7 @@ class Quantize(BaseCodec):
         self._needs_training = True
         self._col2qparams = col2qparams or {}
 
-    # def train(self, df):
-    #     # use_cols = self._cols if self._cols is not None else df.columns
-    #     use_cols = self._cols_to_use(df)
-    #     # col2qparams =
-    #     for col in use_cols:
-    #         if self._col
+        # TODO support just going from f64 to f32 (as opposed outputing ints)?
 
     def encode(self, df):
         use_cols = self._cols_to_use(df)
