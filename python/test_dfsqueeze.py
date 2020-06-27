@@ -247,6 +247,11 @@ class TestCodecs(DfsetTest):
         # self._test_codecs_for_filetype('parquet', encs)
         # self._test_codecs_for_filetype('h5', encs)
 
+    def test_byteshuf(self):
+        self._test_simple_codec(codec.ByteShuffle)
+        # encs = [codec.ByteShuffle(cols='a')]
+        # self._test_codecs_all_filetypes(encs)
+
 
 if __name__ == '__main__':
     unittest.main()

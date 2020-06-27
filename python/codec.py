@@ -66,13 +66,23 @@ class BaseCodec(abc.ABC):
     # def from_params(self, params):
     #     pass
 
-    @abc.abstractmethod
     def encode(self, df):
-        pass
+        use_cols = self._cols_to_use(df)
+        for col in use_cols:
+            df[col] = self.encode_col(df[col].values)
+        return df[use_cols], None
 
-    @abc.abstractmethod
     def decode(self, df, header):
-        pass
+        use_cols = self._cols_to_use(df)
+        for col in use_cols:
+            df[col] = self.decode_col(df[col].values)
+        return df[use_cols]
+
+    def encode_col(self, values):
+        pass  # either overwrite this or encode()
+
+    def decode_col(self, values):
+        pass  # either overwrite this or decode()
 
 
 class Debug(BaseCodec):
@@ -95,51 +105,66 @@ class Debug(BaseCodec):
 
 class Delta(BaseCodec):
 
-    def encode(self, df):
-        # print("running encode!")
-        # return df.columns, None # TODO rm after debug
-        # use_cols = self._cols if self._cols is not None else df.columns
-        use_cols = self._cols_to_use(df)
-        for col in use_cols:
-            vals = df[col].values
-            vals[1:] -= vals[:-1]
-            df[col] = vals
-            # df[col] = df[col].values[::-1]  # TODO rm after debug
-        return df[use_cols], None
+    def encode_col(self, vals):
+        vals[1:] -= vals[:-1]
+        return vals
 
-    def decode(self, df, header_unused):
-        # print("running decode!")
-        # return # TODO rm after debug
-        # use_cols = self._cols if self._cols is not None else df.columns
-        use_cols = self._cols_to_use(df)
-        for col in use_cols:
-            df[col] = np.cumsum(df[col])
-            # df[col] = df[col].values[::-1]  # TODO rm after debug
-        return df[use_cols]
+    def decode_col(self, vals):
+        return np.cumsum(vals)
+
+    # def encode(self, df):
+    #     # print("running encode!")
+    #     # return df.columns, None # TODO rm after debug
+    #     # use_cols = self._cols if self._cols is not None else df.columns
+    #     use_cols = self._cols_to_use(df)
+    #     for col in use_cols:
+    #         vals = df[col].values
+    #         vals[1:] -= vals[:-1]
+    #         df[col] = vals
+    #         # df[col] = df[col].values[::-1]  # TODO rm after debug
+    #     return df[use_cols], None
+
+    # def decode(self, df, header_unused):
+    #     # print("running decode!")
+    #     # return # TODO rm after debug
+    #     # use_cols = self._cols if self._cols is not None else df.columns
+    #     use_cols = self._cols_to_use(df)
+    #     for col in use_cols:
+    #         df[col] = np.cumsum(df[col])
+    #         # df[col] = df[col].values[::-1]  # TODO rm after debug
+    #     return df[use_cols]
 
 
 class DoubleDelta(BaseCodec):
 
-    def encode(self, df):
-        # print("running encode!")
-        # return df.columns, None # TODO rm after debug
-        # use_cols = self._cols if self._cols is not None else df.columns
-        use_cols = self._cols_to_use(df)
-        for col in use_cols:
-            vals = df[col].values
-            vals[1:] -= vals[:-1]
-            vals[1:] -= vals[:-1]
-            df[col] = vals
-        return df[use_cols], None
+    def encode_col(self, vals):
+        vals[1:] -= vals[:-1]
+        vals[1:] -= vals[:-1]
+        return vals
 
-    def decode(self, df, header_unused):
-        # print("running decode!")
-        # return # TODO rm after debug
-        # use_cols = self._cols if self._cols is not None else df.columns
-        use_cols = self._cols_to_use(df)
-        for col in use_cols:
-            df[col] = np.cumsum(np.cumsum(df[col]))
-        return df[use_cols]
+    def decode_col(self, vals):
+        return np.cumsum(np.cumsum(vals))
+
+    # def encode(self, df):
+    #     # print("running encode!")
+    #     # return df.columns, None # TODO rm after debug
+    #     # use_cols = self._cols if self._cols is not None else df.columns
+    #     use_cols = self._cols_to_use(df)
+    #     for col in use_cols:
+    #         vals = df[col].values
+    #         vals[1:] -= vals[:-1]
+    #         vals[1:] -= vals[:-1]
+    #         df[col] = vals
+    #     return df[use_cols], None
+
+    # def decode(self, df, header_unused):
+    #     # print("running decode!")
+    #     # return # TODO rm after debug
+    #     # use_cols = self._cols if self._cols is not None else df.columns
+    #     use_cols = self._cols_to_use(df)
+    #     for col in use_cols:
+    #         df[col] = np.cumsum(np.cumsum(df[col]))
+    #     return df[use_cols]
 
 
 class DynamicDelta(BaseCodec):
@@ -153,6 +178,8 @@ class DynamicDelta(BaseCodec):
     def encode(self, df):
         use_cols = self._cols_to_use(df)
         trailing_len = df.shape[0] % self._block_len
+        # n = df.shape[0]
+        # nblocks = n // self._block_len
         if df.shape[0] < self._block_len:  # no blocks
             return df[use_cols], None
 
@@ -177,9 +204,8 @@ class DynamicDelta(BaseCodec):
             X_out = X_delta
             mask = losses_double < losses_delta
             X_out[mask] = X_double
-            col2mask[col] = mask
+            col2mask[col] = np.packbits(mask)
 
-            # TODO also
             ret = orig_vals_delta
             if trailing_len > 0:
                 ret[:-trailing_len] = X_out.ravel()
@@ -192,7 +218,8 @@ class DynamicDelta(BaseCodec):
     def decode(self, df, header):
         use_cols = self._cols_to_use(df)
         trailing_len = df.shape[0] % self._block_len
-        if df.shape[0] < self._block_len:  # no blocks
+        nblocks = df.shape[0] // self._block_len
+        if nblocks < 1:  # no blocks
             return df[use_cols]
 
         col2mask = header
@@ -207,7 +234,7 @@ class DynamicDelta(BaseCodec):
 
             X_delta = vals_delta.reshape(-1, self._block_len)
             X_double = vals_double.reshape(-1, self._block_len)
-            mask = col2mask[col]
+            mask = np.unpackbits(col2mask[col], count=nblocks).astype(np.bool)
             X_out = X_delta
             X_out[mask] = X_double
 
@@ -219,6 +246,34 @@ class DynamicDelta(BaseCodec):
             df[col] = ret
 
         return df[use_cols]
+
+
+class ByteShuffle(BaseCodec):
+
+    def encode_col(self, vals):
+        if vals.itemsize == 1:
+            return vals  # shuffling is no-op for 1B dtypes
+        X = vals.view(np.uint8).reshape(-1, vals.itemsize)
+        return np.asfortranarray(X).ravel().view(vals.dtype)
+
+    def decode_col(self, vals):
+        if vals.itemsize == 1:
+            return vals  # shuffling is no-op for 1B dtypes
+        X = vals.view(np.uint8).reshape(vals.itemsize, -1)
+        return np.asfortranarray(X).ravel().view(vals.dtype)
+
+
+class CodecSearch(BaseCodec):
+
+    def __init__(self, pipelines, loss='logabs', *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pipelines = pipelines
+        self._loss = loss
+
+    def encode_col(self, vals):
+        orig_vals = vals.copy()
+        for pipeline in self._pipelines:
+            pass # TODO
 
 
 class ColSumPredictor(BaseCodec):
