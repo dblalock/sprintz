@@ -182,6 +182,10 @@ def compute_loss(errs, loss='l2', axis=-1):
         return np.max(np.abs(errs), axis=axis)
     elif loss == 'logabs':
         return np.log(1 + np.abs(errs)).sum(axis=axis)
+    elif loss == 'zstd':
+        assert axis in (-1, None)  # Zstd only supported for whole array
+        byte_ar = compress.zstd_compress(errs.ravel())
+        return len(byte_ar)
     else:
         raise ValueError("Unrecognized loss function '{}'".format(loss))
 

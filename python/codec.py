@@ -68,20 +68,24 @@ class BaseCodec(abc.ABC):
 
     def encode(self, df):
         use_cols = self._cols_to_use(df)
+        col2header = {}
         for col in use_cols:
-            df[col] = self.encode_col(df[col].values)
-        return df[use_cols], None
+            df[col], header = self.encode_col(df[col].values)
+            if header is not None:
+                col2header[col] = header
+        return df[use_cols], col2header or None  # no headers -> None
 
     def decode(self, df, header):
+        col2header = header or {}
         use_cols = self._cols_to_use(df)
         for col in use_cols:
-            df[col] = self.decode_col(df[col].values)
+            df[col] = self.decode_col(df[col].values, col2header.get(col))
         return df[use_cols]
 
     def encode_col(self, values):
         pass  # either overwrite this or encode()
 
-    def decode_col(self, values):
+    def decode_col(self, values, header):
         pass  # either overwrite this or decode()
 
 
@@ -107,9 +111,9 @@ class Delta(BaseCodec):
 
     def encode_col(self, vals):
         vals[1:] -= vals[:-1]
-        return vals
+        return vals, None
 
-    def decode_col(self, vals):
+    def decode_col(self, vals, header_unused):
         return np.cumsum(vals)
 
     # def encode(self, df):
@@ -140,9 +144,9 @@ class DoubleDelta(BaseCodec):
     def encode_col(self, vals):
         vals[1:] -= vals[:-1]
         vals[1:] -= vals[:-1]
-        return vals
+        return vals, None
 
-    def decode_col(self, vals):
+    def decode_col(self, vals, header_unused):
         return np.cumsum(np.cumsum(vals))
 
     # def encode(self, df):
@@ -254,9 +258,9 @@ class ByteShuffle(BaseCodec):
         if vals.itemsize == 1:
             return vals  # shuffling is no-op for 1B dtypes
         X = vals.view(np.uint8).reshape(-1, vals.itemsize)
-        return np.asfortranarray(X).ravel().view(vals.dtype)
+        return np.asfortranarray(X).ravel().view(vals.dtype), None
 
-    def decode_col(self, vals):
+    def decode_col(self, vals, header_unused):
         if vals.itemsize == 1:
             return vals  # shuffling is no-op for 1B dtypes
         X = vals.view(np.uint8).reshape(vals.itemsize, -1)
@@ -265,15 +269,65 @@ class ByteShuffle(BaseCodec):
 
 class CodecSearch(BaseCodec):
 
-    def __init__(self, pipelines, loss='logabs', *args, **kwargs):
+    def __init__(self, pipelines, loss='zstd', *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._pipelines = pipelines
         self._loss = loss
 
+    def encode(self, df):
+        col2headers = {}
+        use_cols = self._cols_to_use(df)
+        for col in use_cols:
+            df[col], (pipeline_idx, headers) = self.encode_col(df[col].values)
+            if len(headers) and any(headers):
+                col2headers[col] = (pipeline_idx, headers)
+            else:
+                col2headers[col] = pipeline_idx
+        return df[use_cols], col2headers
+
     def encode_col(self, vals):
-        orig_vals = vals.copy()
-        for pipeline in self._pipelines:
-            pass # TODO
+        orig_vals = vals
+        best_loss = np.inf
+        best_pipeline_idx = None
+        best_vals = None
+        best_headers = None
+        for i, pipeline in enumerate(self._pipelines):
+            vals = orig_vals.copy()
+            headers = []
+            for enc in pipeline:
+                vals, header = enc.encode_col(vals)
+                headers.append(header)
+                loss = learning.compute_loss(vals)
+                if loss < best_loss:
+                    best_loss = loss
+                    best_pipeline_idx = i
+                    best_vals = vals
+                    best_headers = headers
+        return best_vals, (best_pipeline_idx, best_headers)
+
+    def decode_col(self, vals, header):
+        if isinstance(header, tuple):
+            assert len(header) == 2  # should have pipeline idx and headerlist
+            pipeline_idx, headers_list = header
+            pipeline = self._pipelines[pipeline_idx]
+            headers_list = headers_list
+        else:
+            pipeline_idx = header
+            pipeline = self._pipelines[pipeline_idx]
+            headers_list = [None for est in pipeline]
+
+        for i in range(len(pipeline))[::-1]:
+            est = pipeline[i]
+            header = headers_list[i]
+            vals = est.decode_col(vals, header)
+        return vals
+
+    def decode(self, df, headers):
+        col2headers = headers
+        use_cols = self._cols_to_use(df)
+        for col in use_cols:
+            df[col] = self.decode_col(df[col].values, col2headers[col])
+        return df[use_cols]
 
 
 class ColSumPredictor(BaseCodec):

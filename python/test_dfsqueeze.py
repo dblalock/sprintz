@@ -188,69 +188,18 @@ class TestCodecs(DfsetTest):
 
     def test_delta(self):
         self._test_simple_codec(codec.Delta)
-        # encs = [codec.Delta()]
-        # self._test_codecs_all_filetypes(encs)
-
-        # encs = [codec.Delta(cols='a')]
-        # self._test_codecs_all_filetypes(encs)
-
-        # encs = [codec.Delta(cols=['a', 'b'])]
-        # self._test_codecs_all_filetypes(encs)
-
-        # encs = [codec.Debug(), codec.Delta()]
-        # self._test_codecs_all_filetypes(encs)
 
     def test_double_delta(self):
         self._test_simple_codec(codec.DoubleDelta)
-        # encs = [codec.Delta()]
-        # self._test_codecs_all_filetypes(encs)
-
-        # encs = [codec.Delta(cols='a')]
-        # self._test_codecs_all_filetypes(encs)
-
-        # encs = [codec.Delta(cols=['a', 'b'])]
-        # self._test_codecs_all_filetypes(encs)
-
-        # encs = [codec.Debug(), codec.Delta()]
-        # self._test_codecs_all_filetypes(encs)
 
     def test_dynamic_delta(self):
         self._test_simple_codec(codec.DynamicDelta)
-        # encs = [codec.Delta()]
-        # self._test_codecs_all_filetypes(encs)
-
-        # encs = [codec.Delta(cols='a')]
-        # self._test_codecs_all_filetypes(encs)
-
-        # encs = [codec.Delta(cols=['a', 'b'])]
-        # self._test_codecs_all_filetypes(encs)
-
-        # encs = [codec.Debug(), codec.Delta()]
-        # self._test_codecs_all_filetypes(encs)
 
     def test_quantize(self):
         self._test_simple_codec(codec.Quantize)
-        # encs = [codec.Quantize(cols='a')]
-        # self._test_codecs_all_filetypes(encs)
-
-        # encs = [codec.Delta(cols=['a', 'b'])]
-        # self._test_codecs_all_filetypes(encs)
-
-        # encs = [codec.Quantize()]
-        # self._test_codecs_all_filetypes(encs)
-
-        # encs = [codec.Debug(), codec.Quantize()]
-        # self._test_codecs_all_filetypes(encs)
-
-        # self._test_codecs_for_filetype('csv', encs)
-        # self._test_codecs_for_filetype('npy', encs)
-        # self._test_codecs_for_filetype('parquet', encs)
-        # self._test_codecs_for_filetype('h5', encs)
 
     def test_byteshuf(self):
         self._test_simple_codec(codec.ByteShuffle)
-        # encs = [codec.ByteShuffle(cols='a')]
-        # self._test_codecs_all_filetypes(encs)
 
 
 if __name__ == '__main__':
