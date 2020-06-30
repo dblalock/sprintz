@@ -57,8 +57,13 @@ def infer_qparams(x, offset=None, scale='lossless_base10', dtype=None,
             raise ValueError(f"offset and scaled maximum value {maxval} is "
                              "large to quantize")
 
-    return QuantizeParams(dtype=dtype, offset=offset, scale=scale,
-                          orig_dtype=orig_dtype)
+    # return QuantizeParams(dtype=dtype, offset=offset, scale=scale,
+    #                       orig_dtype=orig_dtype)
+
+    ret = QuantizeParams(dtype=dtype, offset=offset, scale=scale,
+                         orig_dtype=orig_dtype)
+    # print("inferred qparams: ", ret)
+    return ret
 
 
 def quantize(x, qparams):
@@ -70,5 +75,18 @@ def quantize(x, qparams):
 def unquantize(x, qparams):
     x = x.astype(np.float64)
     x *= (1. / qparams.scale)
+    x = x.astype(qparams.orig_dtype)
     x += qparams.offset
-    return x.astype(qparams.orig_dtype)
+    return x
+    # return x.astype(qparams.orig_dtype)
+
+
+def mask_for_dtype(dtype):
+    if not isinstance(dtype, np.dtype):
+        dtype = dtype.type  # handle dtype object vs its type
+    return {np.uint8: 0xff, np.uint16: 0xffff,
+            np.uint32: 0xffffffff}.get(dtype)
+    # d = {np.dtype(k): v for k, v in d.items()}
+    # return d.get(dtype)
+
+# def test_quantize_unquantize

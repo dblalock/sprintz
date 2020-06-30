@@ -69,6 +69,11 @@ class BaseDfSet(abc.ABC):
             if fname.endswith('.csv'):
                 fname = fname[:-4]
             self[self._id_from_dirname(fname)] = df
+            # print("df fname:", fname)
+            # print("df dtypes:\n", df.dtypes)
+            # df_hat = self[self._id_from_dirname(fname)]
+            # print("df hat fname:", fname)
+            # print("df hat dtypes:\n", df.dtypes)  # yep, same
         return self
 
     # TODO put in some caching logic so we don't actually have to touch
@@ -94,6 +99,9 @@ class BaseDfSet(abc.ABC):
             cols = [cols]  # was actually just one col
         for col in cols:
             path = self._path(dfid, col)
+            if not os.path.exists(path):
+                # TODO add option to throw here if path not found
+                continue  # just omit instead of crashing
             ret[col] = self._read_col_from_path(path)
         return pd.DataFrame.from_dict(ret)
 
@@ -157,11 +165,13 @@ class BaseDfSet(abc.ABC):
                     our_vals = self[dfid, col]
                     other_vals = other[dfid, col]
                     assert len(our_vals) == len(other_vals)
-                    # print("dfid, col = ", dfid, col)
-                    # print("our vals:", our_vals)
-                    # print("other vals:", other_vals)
-                    assert np.allclose(
-                        np.sort(our_vals), np.sort(other_vals))
+                    # if col == 'c':
+                    #     print("dfid, col = ", dfid, col)
+                    #     print("our vals:", our_vals)
+                    #     print("other vals:", other_vals)
+                    assert np.allclose(our_vals, other_vals)
+                    # assert np.allclose(
+                    #     np.sort(our_vals), np.sort(other_vals))
         except AssertionError as e:
             if raise_error:
                 raise e

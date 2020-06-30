@@ -5,9 +5,11 @@ import copy
 
 import numpy as np
 from scipy import signal
+import numba
 
 from python import dfquantize2 as dfq
 from python import learning  # for compute_loss
+from python import compress
 
 
 def _wrap_in_list_if_str(obj):
@@ -17,8 +19,8 @@ def _wrap_in_list_if_str(obj):
 class BaseCodec(abc.ABC):
 
     def __init__(self, cols=None):
-        self._needs_training = False
         self._cols = _wrap_in_list_if_str(cols)  # None = all
+        self._needs_training = False
 
     # @property
     def cols(self):
@@ -33,7 +35,8 @@ class BaseCodec(abc.ABC):
     # @abc.abstractmethod
     # @property
     def write_cols(self):
-        return None  # None = all of them
+        return self._cols
+        # return None  # None = all of them
 
     # @property
     def train_cols(self):
@@ -42,8 +45,11 @@ class BaseCodec(abc.ABC):
     def train(self, dfc):
         pass
 
-    def _cols_to_use(self, df):
-        return self._cols if self._cols is not None else df.columns
+    def cols_to_use(self, df):
+        cols = self.cols()
+        if cols is not None:
+            return sorted(set(cols) & set(df.columns))
+        return sorted(df.columns)
 
     # @property
     def needs_training(self):
@@ -67,25 +73,27 @@ class BaseCodec(abc.ABC):
     #     pass
 
     def encode(self, df):
-        use_cols = self._cols_to_use(df)
+        use_cols = self.cols_to_use(df)
+        # print("basecodec use cols: ", use_cols)
         col2header = {}
         for col in use_cols:
-            df[col], header = self.encode_col(df[col].values)
+            df[col], header = self.encode_col(df[col].values, col)
             if header is not None:
                 col2header[col] = header
         return df[use_cols], col2header or None  # no headers -> None
 
     def decode(self, df, header):
         col2header = header or {}
-        use_cols = self._cols_to_use(df)
+        use_cols = self.cols_to_use(df)
         for col in use_cols:
-            df[col] = self.decode_col(df[col].values, col2header.get(col))
+            df[col] = self.decode_col(
+                df[col].values, col, col2header.get(col))
         return df[use_cols]
 
-    def encode_col(self, values):
+    def encode_col(self, values, col):
         pass  # either overwrite this or encode()
 
-    def decode_col(self, values, header):
+    def decode_col(self, values, col, header):
         pass  # either overwrite this or decode()
 
 
@@ -107,68 +115,65 @@ class Debug(BaseCodec):
         return df
 
 
+@numba.njit(fastmath=True)
+def _cumsum_1d(x):
+    n = len(x)
+    out = np.empty(n, x.dtype)
+    out[0] = x[0]
+    for j in range(1, n):
+        out[j] = out[j - 1] + x[j]
+    return out
+
+
 class Delta(BaseCodec):
 
-    def encode_col(self, vals):
+    def encode_col(self, vals, col_unused):
         vals[1:] -= vals[:-1]
         return vals, None
 
-    def decode_col(self, vals, header_unused):
-        return np.cumsum(vals)
+    def decode_col(self, vals, col_unused, header_unused):
+        return _cumsum_1d(vals)
+        # print("delta: ret before cumsum:\n", vals)
+        # ret = np.cumsum(vals)
+        # print("delta: ret after cumsum:\n", ret)
 
-    # def encode(self, df):
-    #     # print("running encode!")
-    #     # return df.columns, None # TODO rm after debug
-    #     # use_cols = self._cols if self._cols is not None else df.columns
-    #     use_cols = self._cols_to_use(df)
-    #     for col in use_cols:
-    #         vals = df[col].values
-    #         vals[1:] -= vals[:-1]
-    #         df[col] = vals
-    #         # df[col] = df[col].values[::-1]  # TODO rm after debug
-    #     return df[use_cols], None
+        # print("delta: vals dtype: ", vals.dtype)
+        # mask = dfq.mask_for_dtype(vals.dtype)
+        # print("delta: dtype mask: ", mask)
+        # assert vals.dtype == np.uint16
+        # print("type(vals.dtype)", type(vals.dtype))
+        # # print("delta: dtype mask direct: ", {np.uint8: 0xff, np.uint16: 0xffff}[np.uint16])
+        # # print("delta: dtype mask directer: ", {np.uint8: 0xff, np.uint16: 0xffff}[vals.dtype])
+        # if mask is not None:
+        #     ret = np.bitwise_and(ret, mask)
+        #     print("delta: ret after mask:\n", ret)
+        # return ret
 
-    # def decode(self, df, header_unused):
-    #     # print("running decode!")
-    #     # return # TODO rm after debug
-    #     # use_cols = self._cols if self._cols is not None else df.columns
-    #     use_cols = self._cols_to_use(df)
-    #     for col in use_cols:
-    #         df[col] = np.cumsum(df[col])
-    #         # df[col] = df[col].values[::-1]  # TODO rm after debug
-    #     return df[use_cols]
+
+
+        # SELF: pick up here by writing func in dfquantize2 or something to
+        # compute an appropriate mask for the dtype of vals and apply it
+        #   -also apply to doubledelta and other stuff; these all need to make
+        #   sure they don't accidentally change the dtype
+        #
+        # this is the issue with test_codecsearch right now; the cumsum
+        # converts to int64, so stuff is like 65533 instead of -2
+
+
+
+
 
 
 class DoubleDelta(BaseCodec):
 
-    def encode_col(self, vals):
+    def encode_col(self, vals, col_unused):
         vals[1:] -= vals[:-1]
         vals[1:] -= vals[:-1]
         return vals, None
 
-    def decode_col(self, vals, header_unused):
-        return np.cumsum(np.cumsum(vals))
-
-    # def encode(self, df):
-    #     # print("running encode!")
-    #     # return df.columns, None # TODO rm after debug
-    #     # use_cols = self._cols if self._cols is not None else df.columns
-    #     use_cols = self._cols_to_use(df)
-    #     for col in use_cols:
-    #         vals = df[col].values
-    #         vals[1:] -= vals[:-1]
-    #         vals[1:] -= vals[:-1]
-    #         df[col] = vals
-    #     return df[use_cols], None
-
-    # def decode(self, df, header_unused):
-    #     # print("running decode!")
-    #     # return # TODO rm after debug
-    #     # use_cols = self._cols if self._cols is not None else df.columns
-    #     use_cols = self._cols_to_use(df)
-    #     for col in use_cols:
-    #         df[col] = np.cumsum(np.cumsum(df[col]))
-    #     return df[use_cols]
+    def decode_col(self, vals, col_unused, header_unused):
+        return _cumsum_1d(_cumsum_1d(vals))
+        # return np.cumsum(np.cumsum(vals))
 
 
 class DynamicDelta(BaseCodec):
@@ -180,7 +185,7 @@ class DynamicDelta(BaseCodec):
         self._loss = loss
 
     def encode(self, df):
-        use_cols = self._cols_to_use(df)
+        use_cols = self.cols_to_use(df)
         trailing_len = df.shape[0] % self._block_len
         # n = df.shape[0]
         # nblocks = n // self._block_len
@@ -220,7 +225,7 @@ class DynamicDelta(BaseCodec):
         return df[use_cols], col2mask
 
     def decode(self, df, header):
-        use_cols = self._cols_to_use(df)
+        use_cols = self.cols_to_use(df)
         trailing_len = df.shape[0] % self._block_len
         nblocks = df.shape[0] // self._block_len
         if nblocks < 1:  # no blocks
@@ -254,13 +259,13 @@ class DynamicDelta(BaseCodec):
 
 class ByteShuffle(BaseCodec):
 
-    def encode_col(self, vals):
+    def encode_col(self, vals, col_unused):
         if vals.itemsize == 1:
             return vals  # shuffling is no-op for 1B dtypes
         X = vals.view(np.uint8).reshape(-1, vals.itemsize)
         return np.asfortranarray(X).ravel().view(vals.dtype), None
 
-    def decode_col(self, vals, header_unused):
+    def decode_col(self, vals, col_unused, header_unused):
         if vals.itemsize == 1:
             return vals  # shuffling is no-op for 1B dtypes
         X = vals.view(np.uint8).reshape(vals.itemsize, -1)
@@ -276,16 +281,18 @@ class CodecSearch(BaseCodec):
 
     def encode(self, df):
         col2headers = {}
-        use_cols = self._cols_to_use(df)
+        use_cols = self.cols_to_use(df)
+        # print("codecsearch cols to use: ", use_cols)
         for col in use_cols:
-            df[col], (pipeline_idx, headers) = self.encode_col(df[col].values)
+            df[col], (pipeline_idx, headers) = self.encode_col(
+                df[col].values, col)
             if len(headers) and any(headers):
                 col2headers[col] = (pipeline_idx, headers)
             else:
                 col2headers[col] = pipeline_idx
         return df[use_cols], col2headers
 
-    def encode_col(self, vals):
+    def encode_col(self, vals, col):
         orig_vals = vals
         best_loss = np.inf
         best_pipeline_idx = None
@@ -295,38 +302,70 @@ class CodecSearch(BaseCodec):
             vals = orig_vals.copy()
             headers = []
             for enc in pipeline:
-                vals, header = enc.encode_col(vals)
+
+                # skip codecs that don't think they're supposed to run on
+                # this columns
+                enc_cols = enc.write_cols()
+                # print("encode: col, enc_cols, cls = ", col, enc_cols, enc.__class__)
+                if enc_cols is not None and col not in enc_cols:
+                    continue
+                # print("not skipping!")
+
+                vals, header = enc.encode_col(vals, col)
+
+                # if col == 'c':
+                #     print(f"enc_col {col}, {type(enc)}: got vals:\n", vals, vals.dtype)
+
                 headers.append(header)
-                loss = learning.compute_loss(vals)
-                if loss < best_loss:
-                    best_loss = loss
-                    best_pipeline_idx = i
-                    best_vals = vals
-                    best_headers = headers
+            # print(f"enc col {col}, headers={headers} list with type {type(headers[0])}")
+            loss = learning.compute_loss(vals, loss=self._loss)
+            if loss < best_loss:
+                # print("got new best loss: ", loss)
+                best_loss = loss
+                best_pipeline_idx = i
+                best_vals = vals
+                best_headers = headers
+        # print(f"enc col {col}, headers={best_headers} list with type {type(best_headers[0])}")
+        # combined_header = (best_pipeline_idx, best_headers)
+        # print(f"enc col {col}, type of returned header, header[1] = {type(combined_header)}, {type(combined_header[1])}")
+        # if col == 'c':
+        #     print(f"enc_col {col}: returning vals:\n", best_vals, best_vals.dtype)
         return best_vals, (best_pipeline_idx, best_headers)
 
-    def decode_col(self, vals, header):
+    def decode_col(self, vals, col, header):
+        # print("search decoding col, header", col, header)
+        # print("type of header: ", type(header))
         if isinstance(header, tuple):
             assert len(header) == 2  # should have pipeline idx and headerlist
             pipeline_idx, headers_list = header
+            # print("pipeline idx:", pipeline_idx)
             pipeline = self._pipelines[pipeline_idx]
             headers_list = headers_list
         else:
             pipeline_idx = header
             pipeline = self._pipelines[pipeline_idx]
-            headers_list = [None for est in pipeline]
+            headers_list = [None for enc in pipeline]
 
         for i in range(len(pipeline))[::-1]:
-            est = pipeline[i]
+            enc = pipeline[i]
             header = headers_list[i]
-            vals = est.decode_col(vals, header)
+
+            enc_cols = enc.write_cols()
+            # print("decode: col, enc_cols, cls = ", col, enc_cols, enc.__class__)
+            if enc_cols is not None and col not in enc_cols:
+                continue
+            # print("not skipping!")
+
+            vals = enc.decode_col(vals, col, header)
+            # if col == 'c':
+            #     print(f"dec_col {col}, {type(enc)}: got vals:\n", vals, vals.dtype)
         return vals
 
     def decode(self, df, headers):
         col2headers = headers
-        use_cols = self._cols_to_use(df)
+        use_cols = self.cols_to_use(df)
         for col in use_cols:
-            df[col] = self.decode_col(df[col].values, col2headers[col])
+            df[col] = self.decode_col(df[col].values, col, col2headers[col])
         return df[use_cols]
 
 
@@ -370,7 +409,7 @@ class ColSumPredictor(BaseCodec):
         predictions = self._compute_predictions(df)
         vals = df[self.col_to_predict].values
         # df.drop(self.col_to_predict, axis=1, inplace=True)
-        df[self.col_to_predict] = vals - predictions
+        df[self.col_to_predict] = vals - predictions.astype(vals.dtype)
         # NOTE: have to give it a list of cols or it returns a series, not df
         return df[[self.col_to_predict]], None  # no headers
 
@@ -380,7 +419,7 @@ class ColSumPredictor(BaseCodec):
         # NOTE: have to give it a list of cols or it returns a series, not df
         vals = df[self.col_to_predict].values
         # df.drop(self.col_to_predict, axis=1, inplace=True)
-        df[self.col_to_predict] = vals + predictions
+        df[self.col_to_predict] = vals + predictions.astype(vals.dtype)
         return df[[self.col_to_predict]]
 
 
@@ -388,58 +427,95 @@ class Quantize(BaseCodec):
 
     def __init__(self, *args, col2qparams=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self._needs_training = True
         self._col2qparams = col2qparams or {}
 
         # TODO support just going from f64 to f32 (as opposed outputing ints)?
 
-    def encode(self, df):
-        use_cols = self._cols_to_use(df)
-        col2qparams = {}
-        for col in use_cols:
-            vals = df[col].values
-            if col in self._col2qparams:
-                qparams = self._col2qparams[col]
-            else:
-                # infered params need to be saved as headers
-                qparams = dfq.infer_qparams(vals)
-                col2qparams[col] = qparams
+    def encode_col(self, vals, col):
+        # print("quantize encoding col", col)
+        if col in self._col2qparams:
+            qparams = self._col2qparams[col]
+            return_qparams = False
+        else:
+            # infered params need to be saved as headers
+            qparams = dfq.infer_qparams(vals)
+            return_qparams = True
 
-            # import pprint
-            # print("col: ", col)
-            # pprint.pprint(col2qparams)
-            # print("df dtypes:\n", df.dtypes)
-            # print("df[col]:\n", df[col])
+        ret = dfq.quantize(vals, qparams)
+        # print("returning quantized vals:\n", ret, ret.dtype)
+        assert ret.dtype == qparams.dtype
+        return ret, qparams if return_qparams else None
 
-            df[col] = dfq.quantize(vals, qparams)
-            assert df.dtypes[col] == qparams.dtype
+    def decode_col(self, vals, col, qparams):
+        if qparams is None:
+            qparams = self._col2qparams[col]  # None because defined a priori
+        # print("quantize decoding col using qparams", col, qparams)
+        return dfq.unquantize(vals, qparams)
 
-            # vals = df[col].to_numeric().values
-            # print("vals dtype:", vals.dtype)
-            # print("vals dtype:", df[col].dtype)
-            # import pandas as pd
-            # print(df[col])
-            # print("df dtypes before numeric:\n", df.dtypes)
-            # df[col] = pd.to_numeric(df[col])
-            # print("df dtypes after numeric:\n", df.dtypes)
-            # df[col] = pd.to_numeric(df[col]).astype(np.int)
-            # df.dtypes[col] = qparams.dtype
-            # df.dtypes[col] = qparams.dtype
-            # print("col: ", col)
-            # print("vals: ", vals)
-            # print("df dtypes after quantize:\n", df.dtypes)
-            # print("qparams dtype: ", qparams.dtype)
 
-        return df[use_cols], col2qparams
+class Zigzag(BaseCodec):
 
-    def decode(self, df, col2qparams):
-        use_cols = self._cols_to_use(df)
-        if self._col2qparams:
-            # header only contains info for cols not specified a priori
-            col2qparams = copy.deepcopy(col2qparams)
-            col2qparams.update(self._col2qparams)
-        for col in use_cols:
-            vals = df[col].values
-            qparams = col2qparams[col]
-            df[col] = dfq.unquantize(vals, qparams)
-        return df[use_cols]
+    def encode_col(self, vals, col_unused):
+        print(f"zigzag encoding col: {col_unused} with dtype {vals.dtype}")
+        # return vals + 10, None  # TODO rm
+        # return compress.zigzag_encode(vals), None
+        ret = compress.zigzag_encode(vals)
+        print("zigzag encode: ret dtype: ", ret.dtype)
+        return ret, None
+
+
+    def decode_col(self, vals, col_unused, header_unused):
+        print(f"zigzag decoding col: {col_unused} with dtype {vals.dtype}")
+        return compress.zigzag_decode(vals)
+        # return vals - 10 # TODO rm
+
+    # def encode(self, df):
+    #     use_cols = self.cols_to_use(df)
+    #     col2qparams = {}
+    #     for col in use_cols:
+    #         vals = df[col].values
+    #         if col in self._col2qparams:
+    #             qparams = self._col2qparams[col]
+    #         else:
+    #             # infered params need to be saved as headers
+    #             qparams = dfq.infer_qparams(vals)
+    #             col2qparams[col] = qparams
+
+    #         # import pprint
+    #         # print("col: ", col)
+    #         # pprint.pprint(col2qparams)
+    #         # print("df dtypes:\n", df.dtypes)
+    #         # print("df[col]:\n", df[col])
+
+    #         df[col] = dfq.quantize(vals, qparams)
+    #         assert df.dtypes[col] == qparams.dtype
+
+    #         # vals = df[col].to_numeric().values
+    #         # print("vals dtype:", vals.dtype)
+    #         # print("vals dtype:", df[col].dtype)
+    #         # import pandas as pd
+    #         # print(df[col])
+    #         # print("df dtypes before numeric:\n", df.dtypes)
+    #         # df[col] = pd.to_numeric(df[col])
+    #         # print("df dtypes after numeric:\n", df.dtypes)
+    #         # df[col] = pd.to_numeric(df[col]).astype(np.int)
+    #         # df.dtypes[col] = qparams.dtype
+    #         # df.dtypes[col] = qparams.dtype
+    #         # print("col: ", col)
+    #         # print("vals: ", vals)
+    #         # print("df dtypes after quantize:\n", df.dtypes)
+    #         # print("qparams dtype: ", qparams.dtype)
+
+    #     return df[use_cols], col2qparams
+
+    # def decode(self, df, col2qparams):
+    #     use_cols = self.cols_to_use(df)
+    #     if self._col2qparams:
+    #         # header only contains info for cols not specified a priori
+    #         col2qparams = copy.deepcopy(col2qparams)
+    #         col2qparams.update(self._col2qparams)
+    #     for col in use_cols:
+    #         vals = df[col].values
+    #         qparams = col2qparams[col]
+    #         df[col] = dfq.unquantize(vals, qparams)
+    #     return df[use_cols]

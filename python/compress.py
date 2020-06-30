@@ -61,20 +61,29 @@ def nbits_cost(diffs, signed=True):
 
 
 @numba.njit(fastmath=True)
+def _zigzag_encode(x):
+    shift = (x.itemsize * 8) - 1
+    return ((x << 1) ^ (x >> shift))
+
+
 def zigzag_encode(x):
     """
     >>> [zigzag_encode(i) for i in [0,1,-1,2,-2,3,-3]]
-    [0, 1, 2, 3, 4, 5, 6]
-    >>> zigzag_encode([0,1,-1,2,-2,3,-3])
-    array([0, 1, 2, 3, 4, 5, 6], dtype=int32)
+    [0, 2, 1, 4, 3, 6, 5]
+    >>> zigzag_encode([0, -1, 1, -2, 2, -3, 3])
+    array([0, 1, 2, 3, 4, 5, 6])
     """
-    x = np.asarray(x, dtype=np.int32)
-    return (np.abs(x) << 1) - (x > 0).astype(np.int32)
+    try:
+        dtype = x.dtype
+    except AttributeError:
+        dtype = np.int32
+    x = np.asarray(x, dtype=dtype)  # TODO support
+    return _zigzag_encode(x)
 
 
 @numba.njit(fastmath=True)
 def zigzag_decode(x):
-    return np.bitwise_xor(x >> 1, -np.bitwise_and(x, 1))
+    return np.bitwise_xor(x >> 1, -np.bitwise_and(x, 1)).astype(x.dtype)
 
 
 def quantize(X, nbits=16, minval=None, maxval=None):

@@ -24,13 +24,15 @@ for subdir in [MOCK_IN_DIR, MOCK_OUT_DIR]:
 
 def _debug_df0():
     a = np.arange(4) + 10
+    assert a.dtype == np.int
     b = a[::-1].copy()
     c = np.array([-1, 1, -2, 2])
     return pd.DataFrame.from_dict(dict(a=a, b=b, c=c))
 
 
 def _debug_df1():
-    a = np.arange(4) - 3.5
+    a = np.arange(4) - 3
+    assert a.dtype == np.int
     b = np.array([100.12, -100.34, 100.56, -100.78])
     d = np.array([5, -4, 3, -2])
     return pd.DataFrame.from_dict(dict(a=a, b=b, d=d))
@@ -160,31 +162,32 @@ class TestCodecs(DfsetTest):
         sizes_df_orig, sizes_df_comp = sq.encode_measure_decode(
             dfs, codeclist)
 
-    def _test_codecs_all_filetypes(self, codeclist):
-        # for ftype in ('csv',):
-        for ftype in ('csv', 'npy', 'parquet', 'h5'):
+    def _test_codecs_many_filetypes(self, codeclist, filetypes=None):
+        if filetypes is None:
+            filetypes = ('csv', 'npy', 'parquet', 'h5')
+        for ftype in filetypes:
             self._test_codecs_for_filetype(ftype, codeclist)
 
     def test_colsum(self):
         encs = [codec.ColSumPredictor(
             cols_to_sum='a', col_to_predict='b')]
-        self._test_codecs_all_filetypes(encs)
+        self._test_codecs_many_filetypes(encs)
         encs = [codec.Debug(), codec.ColSumPredictor(
             cols_to_sum='a', col_to_predict='b')]
-        self._test_codecs_all_filetypes(encs)
+        self._test_codecs_many_filetypes(encs)
 
-    def _test_simple_codec(self, f_ctor):
+    def _test_simple_codec(self, f_ctor, filetypes=None):
         encs = [f_ctor()]
-        self._test_codecs_all_filetypes(encs)
+        self._test_codecs_many_filetypes(encs, filetypes=filetypes)
 
         encs = [f_ctor(cols='a')]
-        self._test_codecs_all_filetypes(encs)
+        self._test_codecs_many_filetypes(encs, filetypes=filetypes)
 
         encs = [f_ctor(cols=['a', 'b'])]
-        self._test_codecs_all_filetypes(encs)
+        self._test_codecs_many_filetypes(encs, filetypes=filetypes)
 
         encs = [codec.Debug(), f_ctor()]
-        self._test_codecs_all_filetypes(encs)
+        self._test_codecs_many_filetypes(encs, filetypes=filetypes)
 
     def test_delta(self):
         self._test_simple_codec(codec.Delta)
@@ -195,11 +198,72 @@ class TestCodecs(DfsetTest):
     def test_dynamic_delta(self):
         self._test_simple_codec(codec.DynamicDelta)
 
+        # self._test_simple_codec(codec.Zigzag)
+
     def test_quantize(self):
-        self._test_simple_codec(codec.Quantize)
+        # # encs = [codec.Quantize(cols='a')]
+        # encs = [codec.Quantize(cols='c')]
+        # # encs = [codec.Quantize()]
+        # for ftype in ['npy']:  # csv doesn't preserve dtype
+        # for ftype in ('npy', 'parquet', 'h5'):  # csv doesn't preserve dtype
+        #     self._test_codecs_for_filetype(ftype, encs)
+        # self._test_codecs_many_filetypes(encs)
+
+        ftypes = ('npy', 'parquet', 'h5')  # csv doesn't preserve dtype
+        self._test_simple_codec(codec.Quantize, filetypes=ftypes)
+
+    def test_zigzag(self):
+        ftypes = ('npy', 'parquet', 'h5')  # csv doesn't preserve dtype
+        encs = [codec.Quantize(cols='a'), codec.Zigzag(cols='a')]
+        self._test_codecs_many_filetypes(encs, ftypes)
+        encs = [codec.Quantize(cols='c'), codec.Zigzag(cols='c')]
+        self._test_codecs_many_filetypes(encs, ftypes)
+        encs = [codec.Zigzag(cols='c')]
+        self._test_codecs_many_filetypes(encs, ftypes)
+        encs = [codec.Zigzag(cols=['a', 'c'])]
+        self._test_codecs_many_filetypes(encs, ftypes)
+        encs = [codec.Quantize(cols=['a', 'c']), codec.Zigzag(cols=['a', 'c'])]
+        self._test_codecs_many_filetypes(encs, ftypes)
 
     def test_byteshuf(self):
         self._test_simple_codec(codec.ByteShuffle)
+
+    def test_codecsearch(self):
+        # pipelines = [[codec.Delta(cols='a')]]
+        # encs = [codec.CodecSearch(pipelines=pipelines)]
+        # self._test_codecs_many_filetypes(encs)
+
+        # pipelines = [(codec.Delta(cols='a'), codec.Delta(cols='a'))]
+        # encs = [codec.CodecSearch(pipelines=pipelines)]
+        # self._test_codecs_many_filetypes(encs)
+
+        # pipelines += [[codec.Delta(cols='a')]]
+        # encs = [codec.CodecSearch(pipelines=pipelines)]
+        # self._test_codecs_many_filetypes(encs)
+
+        # pipelines += [[codec.DoubleDelta()]]
+        # encs = [codec.CodecSearch(pipelines=pipelines)]
+        # self._test_codecs_many_filetypes(encs)
+
+        # pipelines += [[codec.Quantize(), codec.DoubleDelta()]]
+        # pipelines = [[codec.Quantize(), codec.Delta()]]
+        # pipelines = [[codec.Delta()]]
+        # pipelines = [[codec.Quantize(cols='a'), codec.Delta(cols='a')]]
+        # pipelines = [[codec.Quantize(cols='a'), codec.DoubleDelta(cols='a')]]
+        # pipelines = [[codec.Quantize()]]
+        # pipelines = [[codec.Quantize(cols='a')]]
+        # pipelines = [[codec.Delta(cols='a')]]
+        # pipelines = [[codec.Quantize(cols='a'), codec.Delta(cols='a')]]
+        # pipelines += [[codec.Quantize(cols='c'), codec.Delta(cols='c')]]
+        # pipelines += [[codec.Quantize(cols='c'), codec.DoubleDelta(cols='c')]]
+        # pipelines += [[codec.Quantize(cols='c'), codec.Delta(cols='c'),
+        pipelines = [[codec.Quantize(cols='c'), codec.Delta(cols='c'),
+                      codec.Zigzag(cols='c')]]
+        encs = [codec.CodecSearch(pipelines=pipelines)]
+        self._test_codecs_for_filetype('npy', encs)
+        # ftypes = ('npy', 'parquet', 'h5')  # csv doesn't preserve dtype
+        # self._test_codecs_many_filetypes(encs, filetypes=ftypes)
+
 
 
 if __name__ == '__main__':
