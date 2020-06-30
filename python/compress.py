@@ -60,10 +60,12 @@ def nbits_cost(diffs, signed=True):
     return nbits.reshape(shape) if nbits.size > 1 else nbits[0]  # unpack if scalar
 
 
-@numba.njit(fastmath=True)
-def _zigzag_encode(x):
-    shift = (x.itemsize * 8) - 1
-    return ((x << 1) ^ (x >> shift))
+# @numba.njit(fastmath=True)
+# def _zigzag_encode(x):
+#     shift = (x.itemsize * 8) - 1
+#     ret = np.empty(x.shape, dtype=x.dtype)
+#     ret = (x << 1) ^ (x >> shift)
+#     return ret
 
 
 def zigzag_encode(x):
@@ -77,8 +79,16 @@ def zigzag_encode(x):
         dtype = x.dtype
     except AttributeError:
         dtype = np.int32
-    x = np.asarray(x, dtype=dtype)  # TODO support
-    return _zigzag_encode(x)
+    x = np.asarray(x, dtype=dtype)
+    dtype = {np.uint8:  np.int8,  np.int8:   np.int8,
+             np.uint16: np.int16, np.int16:  np.int16,
+             np.uint32: np.int32, np.uint32: np.int32,
+             np.uint64: np.int64, np.int64:  np.int64}[x.dtype.type]
+    x = x.view(dtype)  # must view as signed type to get arithmetic shifts
+
+    shift = (x.itemsize * 8) - 1
+    return (x << 1) ^ (x >> shift)
+    # return _zigzag_encode(x)
 
 
 @numba.njit(fastmath=True)

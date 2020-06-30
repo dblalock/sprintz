@@ -140,19 +140,19 @@ def encode_measure_decode(dfs, codeclist, check_correct=True):
         if check_correct:
 
             # print("a orig:\n", dfs_orig['df0', 'a'])
-            print("c orig:\n", dfs_orig['df0', 'c'])
+            # print("c orig:\n", dfs_orig['df0', 'c'])
             # print(dfs_orig['df0', 'c'].dtypes)
             # print("a comp: ", dfs['df0', 'a'])
             # print(dfs['df0', 'a'].dtypes)
             # print(dfs['df0', 'a'].dtypes)
-            print("c comp:\n", dfs['df0', 'c'])
-            print(dfs['df0', 'c'].dtypes)
+            # print("c comp:\n", dfs['df0', 'c'])
+            # print(dfs['df0', 'c'].dtypes)
             decode(dfs, codeclist, headerlist)
             # print("a hat:\n", dfs['df0', 'a'])
             # print(dfs['df0', 'a'].dtypes)
-            print("c hat:\n", dfs['df0', 'c'])
+            # print("c hat:\n", dfs['df0', 'c'])
             # print(dfs['df0', 'c'].dtypes)
-            print("------------------------")
+            # print("------------------------")
             sizes_df_decomp = dfs.file_sizes()
 
             # dfid = 'df1'

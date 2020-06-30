@@ -214,6 +214,10 @@ class TestCodecs(DfsetTest):
 
     def test_zigzag(self):
         ftypes = ('npy', 'parquet', 'h5')  # csv doesn't preserve dtype
+        encs = [codec.Delta(cols='c'), codec.Zigzag(cols='c')]
+        self._test_codecs_many_filetypes(encs, ftypes)
+        encs = [codec.Quantize(cols='c'), codec.Delta(cols='c'), codec.Zigzag(cols='c')]
+        self._test_codecs_many_filetypes(encs, ftypes)
         encs = [codec.Quantize(cols='a'), codec.Zigzag(cols='a')]
         self._test_codecs_many_filetypes(encs, ftypes)
         encs = [codec.Quantize(cols='c'), codec.Zigzag(cols='c')]
@@ -229,21 +233,21 @@ class TestCodecs(DfsetTest):
         self._test_simple_codec(codec.ByteShuffle)
 
     def test_codecsearch(self):
-        # pipelines = [[codec.Delta(cols='a')]]
-        # encs = [codec.CodecSearch(pipelines=pipelines)]
-        # self._test_codecs_many_filetypes(encs)
+        pipelines = [[codec.Delta(cols='a')]]
+        encs = [codec.CodecSearch(pipelines=pipelines)]
+        self._test_codecs_many_filetypes(encs)
 
-        # pipelines = [(codec.Delta(cols='a'), codec.Delta(cols='a'))]
-        # encs = [codec.CodecSearch(pipelines=pipelines)]
-        # self._test_codecs_many_filetypes(encs)
+        pipelines = [(codec.Delta(cols='a'), codec.Delta(cols='a'))]
+        encs = [codec.CodecSearch(pipelines=pipelines)]
+        self._test_codecs_many_filetypes(encs)
 
-        # pipelines += [[codec.Delta(cols='a')]]
-        # encs = [codec.CodecSearch(pipelines=pipelines)]
-        # self._test_codecs_many_filetypes(encs)
+        pipelines += [[codec.Delta(cols='a')]]
+        encs = [codec.CodecSearch(pipelines=pipelines)]
+        self._test_codecs_many_filetypes(encs)
 
-        # pipelines += [[codec.DoubleDelta()]]
-        # encs = [codec.CodecSearch(pipelines=pipelines)]
-        # self._test_codecs_many_filetypes(encs)
+        pipelines += [[codec.DoubleDelta()]]
+        encs = [codec.CodecSearch(pipelines=pipelines)]
+        self._test_codecs_many_filetypes(encs)
 
         # pipelines += [[codec.Quantize(), codec.DoubleDelta()]]
         # pipelines = [[codec.Quantize(), codec.Delta()]]
@@ -257,13 +261,19 @@ class TestCodecs(DfsetTest):
         # pipelines += [[codec.Quantize(cols='c'), codec.Delta(cols='c')]]
         # pipelines += [[codec.Quantize(cols='c'), codec.DoubleDelta(cols='c')]]
         # pipelines += [[codec.Quantize(cols='c'), codec.Delta(cols='c'),
+
+        pipelines = [[codec.Delta(cols='c'), codec.Zigzag(cols='c')]]  # works
+        encs = [codec.CodecSearch(pipelines=pipelines)]
+        self._test_codecs_for_filetype('npy', encs)
+
+        pipelines = [[codec.Quantize(cols='c'), codec.Delta(cols='c')]]  # works
+        encs = [codec.CodecSearch(pipelines=pipelines)]
+        self._test_codecs_for_filetype('npy', encs)
+
         pipelines = [[codec.Quantize(cols='c'), codec.Delta(cols='c'),
                       codec.Zigzag(cols='c')]]
         encs = [codec.CodecSearch(pipelines=pipelines)]
         self._test_codecs_for_filetype('npy', encs)
-        # ftypes = ('npy', 'parquet', 'h5')  # csv doesn't preserve dtype
-        # self._test_codecs_many_filetypes(encs, filetypes=ftypes)
-
 
 
 if __name__ == '__main__':

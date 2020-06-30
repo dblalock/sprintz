@@ -456,17 +456,29 @@ class Quantize(BaseCodec):
 class Zigzag(BaseCodec):
 
     def encode_col(self, vals, col_unused):
-        print(f"zigzag encoding col: {col_unused} with dtype {vals.dtype}")
+        return compress.zigzag_encode(vals), None
+        # print(f"zigzag encoding col: {col_unused} with dtype {vals.dtype}")
+        # print("zigzag enc got vals: ", vals, vals.dtype)
         # return vals + 10, None  # TODO rm
-        # return compress.zigzag_encode(vals), None
-        ret = compress.zigzag_encode(vals)
-        print("zigzag encode: ret dtype: ", ret.dtype)
-        return ret, None
+        # ret = compress.zigzag_encode(vals)
 
+        # x = vals
+        # shift = (x.itemsize * 8) - 1
+        # print("x >> shift dtype: ", (x >> shift).dtype)
+        # print("x << 1 dtype: ", (x << 1).dtype)
+        # ret = (x << 1) ^ (x >> shift)
+
+        # print("zigzag enc returning vals: ", ret, ret.dtype)
+        # print("zigzag encode: ret dtype: ", ret.dtype)
+        # return ret, None
 
     def decode_col(self, vals, col_unused, header_unused):
-        print(f"zigzag decoding col: {col_unused} with dtype {vals.dtype}")
+        # print(f"zigzag decoding col: {col_unused} with dtype {vals.dtype}")
+        # print("zigzag dec got vals: ", vals, vals.dtype)
         return compress.zigzag_decode(vals)
+        # ret = compress.zigzag_decode(vals)
+        # print("zigzag dec returning vals: ", ret, ret.dtype)
+        # return ret
         # return vals - 10 # TODO rm
 
     # def encode(self, df):
