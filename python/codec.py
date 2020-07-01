@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 import abc
-import copy
+# import copy
+import bz2
 
 import numpy as np
 from scipy import signal
@@ -133,35 +134,6 @@ class Delta(BaseCodec):
 
     def decode_col(self, vals, col_unused, header_unused):
         return _cumsum_1d(vals)
-        # print("delta: ret before cumsum:\n", vals)
-        # ret = np.cumsum(vals)
-        # print("delta: ret after cumsum:\n", ret)
-
-        # print("delta: vals dtype: ", vals.dtype)
-        # mask = dfq.mask_for_dtype(vals.dtype)
-        # print("delta: dtype mask: ", mask)
-        # assert vals.dtype == np.uint16
-        # print("type(vals.dtype)", type(vals.dtype))
-        # # print("delta: dtype mask direct: ", {np.uint8: 0xff, np.uint16: 0xffff}[np.uint16])
-        # # print("delta: dtype mask directer: ", {np.uint8: 0xff, np.uint16: 0xffff}[vals.dtype])
-        # if mask is not None:
-        #     ret = np.bitwise_and(ret, mask)
-        #     print("delta: ret after mask:\n", ret)
-        # return ret
-
-
-
-        # SELF: pick up here by writing func in dfquantize2 or something to
-        # compute an appropriate mask for the dtype of vals and apply it
-        #   -also apply to doubledelta and other stuff; these all need to make
-        #   sure they don't accidentally change the dtype
-        #
-        # this is the issue with test_codecsearch right now; the cumsum
-        # converts to int64, so stuff is like 65533 instead of -2
-
-
-
-
 
 
 class DoubleDelta(BaseCodec):
@@ -173,7 +145,6 @@ class DoubleDelta(BaseCodec):
 
     def decode_col(self, vals, col_unused, header_unused):
         return _cumsum_1d(_cumsum_1d(vals))
-        # return np.cumsum(np.cumsum(vals))
 
 
 class DynamicDelta(BaseCodec):
@@ -391,7 +362,7 @@ class ColSumPredictor(BaseCodec):
         return [self.col_to_predict]
 
     def _compute_predictions(self, df):
-        predictions = df[self.cols_to_sum[0]]
+        predictions = df[self.cols_to_sum[0]].values
         if self._weights is not None:
             predictions = signal.correlate(
                 predictions, self._weights[:, 0], padding='valid')
@@ -457,77 +428,34 @@ class Zigzag(BaseCodec):
 
     def encode_col(self, vals, col_unused):
         return compress.zigzag_encode(vals), None
-        # print(f"zigzag encoding col: {col_unused} with dtype {vals.dtype}")
-        # print("zigzag enc got vals: ", vals, vals.dtype)
-        # return vals + 10, None  # TODO rm
-        # ret = compress.zigzag_encode(vals)
-
-        # x = vals
-        # shift = (x.itemsize * 8) - 1
-        # print("x >> shift dtype: ", (x >> shift).dtype)
-        # print("x << 1 dtype: ", (x << 1).dtype)
-        # ret = (x << 1) ^ (x >> shift)
-
-        # print("zigzag enc returning vals: ", ret, ret.dtype)
-        # print("zigzag encode: ret dtype: ", ret.dtype)
-        # return ret, None
 
     def decode_col(self, vals, col_unused, header_unused):
         # print(f"zigzag decoding col: {col_unused} with dtype {vals.dtype}")
         # print("zigzag dec got vals: ", vals, vals.dtype)
         return compress.zigzag_decode(vals)
-        # ret = compress.zigzag_decode(vals)
-        # print("zigzag dec returning vals: ", ret, ret.dtype)
-        # return ret
-        # return vals - 10 # TODO rm
 
-    # def encode(self, df):
-    #     use_cols = self.cols_to_use(df)
-    #     col2qparams = {}
-    #     for col in use_cols:
-    #         vals = df[col].values
-    #         if col in self._col2qparams:
-    #             qparams = self._col2qparams[col]
-    #         else:
-    #             # infered params need to be saved as headers
-    #             qparams = dfq.infer_qparams(vals)
-    #             col2qparams[col] = qparams
 
-    #         # import pprint
-    #         # print("col: ", col)
-    #         # pprint.pprint(col2qparams)
-    #         # print("df dtypes:\n", df.dtypes)
-    #         # print("df[col]:\n", df[col])
+class Bzip2(BaseCodec):
 
-    #         df[col] = dfq.quantize(vals, qparams)
-    #         assert df.dtypes[col] == qparams.dtype
+    # so the non-obvious thing here is that we need to stop all the other
+    # code from breaking by ensuring that what we return (both from encode
+    # *and* decode) is a numpy array; and since type info is lost, we
+    # need to save it as a header
 
-    #         # vals = df[col].to_numeric().values
-    #         # print("vals dtype:", vals.dtype)
-    #         # print("vals dtype:", df[col].dtype)
-    #         # import pandas as pd
-    #         # print(df[col])
-    #         # print("df dtypes before numeric:\n", df.dtypes)
-    #         # df[col] = pd.to_numeric(df[col])
-    #         # print("df dtypes after numeric:\n", df.dtypes)
-    #         # df[col] = pd.to_numeric(df[col]).astype(np.int)
-    #         # df.dtypes[col] = qparams.dtype
-    #         # df.dtypes[col] = qparams.dtype
-    #         # print("col: ", col)
-    #         # print("vals: ", vals)
-    #         # print("df dtypes after quantize:\n", df.dtypes)
-    #         # print("qparams dtype: ", qparams.dtype)
+    def encode_col(self, vals, col_unused):
+        ret = bz2.compress(vals)
+        # print("bz2 enc ret type: ", type(ret))
+        ret = np.frombuffer(ret, dtype=np.uint8)
+        # print("bz2 enc ret type: ", type(ret))
+        # print("bz2 enc ret type: ", type(ret), ret.dtype)
+        return ret, vals.dtype
+        # return bz2.compress(vals), None
 
-    #     return df[use_cols], col2qparams
-
-    # def decode(self, df, col2qparams):
-    #     use_cols = self.cols_to_use(df)
-    #     if self._col2qparams:
-    #         # header only contains info for cols not specified a priori
-    #         col2qparams = copy.deepcopy(col2qparams)
-    #         col2qparams.update(self._col2qparams)
-    #     for col in use_cols:
-    #         vals = df[col].values
-    #         qparams = col2qparams[col]
-    #         df[col] = dfq.unquantize(vals, qparams)
-    #     return df[use_cols]
+    def decode_col(self, vals, col_unused, header):
+        orig_dtype = header
+        # print("bz2 dec vals type, dtype: ", type(vals), vals.dtype)
+        ret = bz2.decompress(vals.tobytes())
+        ret = np.frombuffer(ret, dtype=orig_dtype)
+        # print("bz2 ret type: ", type(ret))
+        # print("bz2 ret type: ", type(ret), ret.dtype)
+        return ret

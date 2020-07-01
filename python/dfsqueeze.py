@@ -54,7 +54,7 @@ def encode(dfs, codeclist):
                 headers[dfid] = headers.get(dfid, []) + [header]
                 # print("dirty_df.shape", dirty_df.shape)
                 # print("dirty_df", dirty_df)
-                dfs[dfid] = dirty_df
+                dfs[dfid, dirty_df.columns] = dirty_df
             # all_headers.append(headers)
     else:
         for dfid in dfids:
@@ -63,9 +63,10 @@ def encode(dfs, codeclist):
                 # print("est cols: ", est.cols())
                 # cols = est.cols_to_use(df)
                 df = dfs[dfid, est.cols()]
+                # print("about to encode df with cols: ", df.columns)
                 dirty_df, header = est.encode(df)
                 headerlist.append(header)
-                dfs[dfid] = dirty_df
+                dfs[dfid, dirty_df.columns] = dirty_df
             headers[dfid] = headerlist
 
     return headers
@@ -110,7 +111,8 @@ def decode(dfs, codeclist, headers):
         # print("modified_cols: ", modified_cols)
         # print("should be about to write stuff...")
         # print("col a: ", df['a'])
-        dfs[dfid] = df[list(modified_cols)]
+        modified_cols = list(modified_cols)
+        dfs[dfid, modified_cols] = df[modified_cols]
 
 
 # def encode_measure_decode(csvdir, dfsdir, codeclist, filetype='h5', **dfset_kwargs):
@@ -120,7 +122,7 @@ def encode_measure_decode(dfs, codeclist, check_correct=True):
 
     with tempfile.TemporaryDirectory() as dirpath:
 
-        print("dirpath: ", dirpath)
+        # print("dirpath: ", dirpath)
 
         # dfs_orig = dfset.make_dfset(
         #     dfsdir=dirpath, filetype=dfs.filetype)

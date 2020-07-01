@@ -7,6 +7,8 @@ import tempfile
 import numpy as np
 import pandas as pd
 
+from python import simple_dataframe as sdf
+
 
 class BaseDfSet(abc.ABC):
 
@@ -80,8 +82,11 @@ class BaseDfSet(abc.ABC):
     # the filesystem each time
 
     def _cols_stored_for_dfid(self, dfid):
+        dirname = self._path(dfid)
+        if not os.path.exists(dirname):
+            return []
         return [self._rm_endswith(fname)
-                for fname in os.listdir(self._path(dfid))]
+                for fname in os.listdir(dirname)]
 
     # def __getitem__(self, dfid, cols=None):
     def __getitem__(self, dfid_and_maybe_cols):
@@ -93,17 +98,26 @@ class BaseDfSet(abc.ABC):
 
         if cols is None:
             cols = self._cols_stored_for_dfid(dfid)
-        ret = {}
         # print("cols: ", cols)
+        # ret = {}
+        ret = sdf.SimpleDataFrame()
+        just_one_col = False
         if isinstance(cols, str):
             cols = [cols]  # was actually just one col
+            just_one_col = True
         for col in cols:
             path = self._path(dfid, col)
             if not os.path.exists(path):
                 # TODO add option to throw here if path not found
                 continue  # just omit instead of crashing
-            ret[col] = self._read_col_from_path(path)
-        return pd.DataFrame.from_dict(ret)
+            vals = self._read_col_from_path(path)
+            if just_one_col:
+                return sdf.SimpleSeries(vals)
+                # return vals
+            ret[col] = vals
+        return ret
+        # return pd.DataFrame.from_dict(ret)
+        # return sdf.SimpleDataFrame.from_dict(ret)
 
     # def __setitem__(self, dfid_and_maybe_cols, df_or_array):
     #     if isinstance(dfid_and_maybe_cols, tuple):
@@ -114,12 +128,64 @@ class BaseDfSet(abc.ABC):
     #     if cols is None:
     #         cols = df.columns
 
-    def __setitem__(self, dfid, df):
+    def _normalize_idx_and_val(self, dfid_and_maybe_cols, df_or_array):
+        df = df_or_array
+        if isinstance(dfid_and_maybe_cols, tuple):
+            assert len(dfid_and_maybe_cols) == 2  # dfid and cols
+            dfid, cols = dfid_and_maybe_cols
+            # wipe_others = False
+
+            if isinstance(cols, str):
+                cols = [cols]  # just a single col
+                if not hasattr(df_or_array, 'columns'):
+                    tmp = sdf.SimpleDataFrame()
+                    tmp[cols[0]] = df_or_array
+                    df = tmp
+            else:
+                # multiple columns passed, so df needs to actually
+                # be a df and not just an array or series
+                assert set(cols) == set(df.columns)
+
+            wipe_cols = []
+        else:
+            dfid = dfid_and_maybe_cols
+            cols = df.columns  # no cols passed, so requires df, not array
+            # wipe_others = True
+            wipe_cols = list(
+                (set(self._cols_stored_for_dfid(dfid)) - set(cols)))
+
+        assert list(df.columns) == list(cols)
+        assert (set(wipe_cols) & set(cols)) == set()
+
+        return dfid, cols, wipe_cols, df
+
+    def __setitem__(self, dfid_and_maybe_cols, df_or_array):
+        dfid, cols, wipe_cols, df = self._normalize_idx_and_val(
+            dfid_and_maybe_cols, df_or_array)
+
         dfid_path = self._path(dfid)
         if not os.path.exists(dfid_path):
             os.mkdir(dfid_path)
-        for col in df:
-            self._write_col_to_path(self._path(dfid, col), df[col])
+        for col in cols:
+            vals = df[col].values
+
+            # print("setting dfid, col, vals: ", dfid, col, vals, vals.dtype)
+            self._write_col_to_path(self._path(dfid, col), vals)
+
+        # if we got dfs[dfid] = df, wipe all cols not in df
+        self.remove(dfid, wipe_cols)
+
+    def remove(self, dfid, cols=None):
+        if cols is None:
+            os.rmdir(self._path(dfid))
+            return
+        if isinstance(cols, str):
+            cols = [cols]
+        for col in cols:
+            self._remove_col_at_path(self._path(dfid, col))
+
+    def _remove_col_at_path(self, path):
+        os.remove(path)  # separate method in case not one file <=> one col
 
     @abc.abstractmethod
     def _read_col_from_path(self, path):
@@ -165,7 +231,7 @@ class BaseDfSet(abc.ABC):
                     our_vals = self[dfid, col]
                     other_vals = other[dfid, col]
                     assert len(our_vals) == len(other_vals)
-                    # if col == 'c':
+                    # if col == 'a':
                     #     print("dfid, col = ", dfid, col)
                     #     print("our vals:", our_vals)
                     #     print("other vals:", other_vals)
@@ -262,7 +328,13 @@ class ParquetDfSet(BaseDfSet):
         # print("writing to path: ", path)
         # df = pd.Series.from_array(values)
         # df = pd.DataFrame([pd.Series.from_array(values)])
-        # print("values shape", values.shape)
+        # print("parquet write: values shape", values.shape)
+        # print("parquet write: values dtype", values.dtype)
+        # print("parqetdfset: writing values:\n", values, type(values))
+
+        # try:
+        #     df = pd.DataFrame.from_dict({'_': values})
+        # except ValueError:  # happens if values is a
         df = pd.DataFrame.from_dict({'_': values})
         return df.to_parquet(path, **self.write_kwargs)
 

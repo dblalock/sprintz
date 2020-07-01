@@ -190,6 +190,8 @@ class TestCodecs(DfsetTest):
         self._test_codecs_many_filetypes(encs, filetypes=filetypes)
 
     def test_delta(self):
+        # encs = [codec.Delta(cols='a')]
+        # self._test_codecs_many_filetypes(encs, filetypes=['npy'])
         self._test_simple_codec(codec.Delta)
 
     def test_double_delta(self):
@@ -231,6 +233,10 @@ class TestCodecs(DfsetTest):
 
     def test_byteshuf(self):
         self._test_simple_codec(codec.ByteShuffle)
+
+    def test_bzip2(self):
+        filetypes = ('npy', 'parquet', 'h5')  # csv breaks bz2 bytestreams
+        self._test_simple_codec(codec.Bzip2, filetypes=filetypes)
 
     def test_codecsearch(self):
         pipelines = [[codec.Delta(cols='a')]]

@@ -49,6 +49,11 @@ def _rm_mock_input_files():
 def main():
     _populate_mock_input_dir()
 
+    pipelines = []
+    pipelines.append([codec.Delta()])
+    pipelines.append([codec.Delta(), codec.Zigzag()])
+    pipelines.append([codec.Delta(), codec.Zigzag(), codec.Quantize()])
+
 
     # TODO construct a bunch of pipelines of preprocs and formats/compressors,
     # get the sizes for every (dfid, col) combo, dump to a file, and then
