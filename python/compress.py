@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import bz2
 import numpy as np
 
 import numba
@@ -114,16 +115,42 @@ def quantize(X, nbits=16, minval=None, maxval=None):
 
 # ================================================================
 
-def zstd_compress(buff, comp=None):
-    comp = zstd.ZstdCompressor() if comp is None else comp
+def _prep_buffer_for_compress(buff):
     if isinstance(buff, str):
         buff = bytes(buff, encoding='utf8')
-    return comp.compress(buff)
+    else:
+        try:
+            buff = buff.tobytes()
+        except AttributeError:
+            pass
+    return buff
 
 
-def zstd_decompress(buff, decomp=None):
+def zstd_compress(buff, comp=None):
+    comp = zstd.ZstdCompressor() if comp is None else comp
+    buff = _prep_buffer_for_compress(buff)
+    return np.frombuffer(comp.compress(buff), dtype=np.uint8)
+
+
+def zstd_decompress(buff, decomp=None, dtype=np.uint8):
     decomp = zstd.ZstdDecompressor() if decomp is None else decomp
-    return decomp.decompress(buff)
+    buff = _prep_buffer_for_compress(buff)
+    ret = decomp.decompress(buff)
+    ret = np.frombuffer(ret, dtype=dtype)
+    return ret
+
+
+def bzip2_compress(buff):
+    buff = _prep_buffer_for_compress(buff)
+    ret = bz2.compress(buff)
+    return np.frombuffer(ret, dtype=np.uint8)
+
+
+def bzip2_decompress(buff, dtype=np.uint8):
+    buff = _prep_buffer_for_compress(buff)
+    ret = bz2.decompress(buff)
+    return np.frombuffer(ret, dtype=dtype)
+
 
 # ============================================================== sprintz
 # except without the predictive coding part because we do that manually;

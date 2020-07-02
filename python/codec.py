@@ -443,33 +443,36 @@ class Bzip2(BaseCodec):
     # need to save it as a header
 
     def encode_col(self, vals, col_unused):
-        ret = bz2.compress(vals)
-        # print("bz2 enc ret type: ", type(ret))
-        ret = np.frombuffer(ret, dtype=np.uint8)
-        # print("bz2 enc ret type: ", type(ret))
-        # print("bz2 enc ret type: ", type(ret), ret.dtype)
-        return ret, vals.dtype
-        # return bz2.compress(vals), None
+        return compress.bzip2_compress(vals), vals.dtype
+        # ret = bz2.compress(vals)
+        # # print("bz2 enc ret type: ", type(ret))
+        # ret = np.frombuffer(ret, dtype=np.uint8)
+        # # print("bz2 enc ret type: ", type(ret))
+        # # print("bz2 enc ret type: ", type(ret), ret.dtype)
+        # return ret, vals.dtype
+        # # return bz2.compress(vals), None
 
     def decode_col(self, vals, col_unused, header):
         orig_dtype = header
-        # print("bz2 dec vals type, dtype: ", type(vals), vals.dtype)
-        ret = bz2.decompress(vals.tobytes())
-        ret = np.frombuffer(ret, dtype=orig_dtype)
-        # print("bz2 ret type: ", type(ret))
-        # print("bz2 ret type: ", type(ret), ret.dtype)
-        return ret
+        return compress.bzip2_decompress(vals, dtype=orig_dtype)
+        # # print("bz2 dec vals type, dtype: ", type(vals), vals.dtype)
+        # ret = bz2.decompress(vals.tobytes())
+        # ret = np.frombuffer(ret, dtype=orig_dtype)
+        # # print("bz2 ret type: ", type(ret))
+        # # print("bz2 ret type: ", type(ret), ret.dtype)
+        # return ret
 
 
 class Zstd(BaseCodec):
 
     def encode_col(self, vals, col_unused):
-        ret = compress.zstd_compress(vals)
-        ret = np.frombuffer(ret, dtype=np.uint8)
-        return ret, vals.dtype
+        # ret = compress.zstd_compress(vals)
+        # ret = np.frombuffer(ret, dtype=np.uint8)
+        return compress.zstd_compress(vals), vals.dtype
 
     def decode_col(self, vals, col_unused, header):
         orig_dtype = header
-        ret = compress.zstd_decompress(vals)
-        ret = np.frombuffer(ret, dtype=orig_dtype)
-        return ret
+        return compress.zstd_decompress(vals, dtype=orig_dtype)
+        # ret = compress.zstd_decompress(vals)
+        # ret = np.frombuffer(ret, dtype=orig_dtype)
+        # return ret
