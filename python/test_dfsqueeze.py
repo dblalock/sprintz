@@ -238,6 +238,10 @@ class TestCodecs(DfsetTest):
         filetypes = ('npy', 'parquet', 'h5')  # csv breaks bz2 bytestreams
         self._test_simple_codec(codec.Bzip2, filetypes=filetypes)
 
+    def test_zstd(self):
+        filetypes = ('npy', 'parquet', 'h5')  # csv breaks bz2 bytestreams
+        self._test_simple_codec(codec.Zstd, filetypes=filetypes)
+
     def test_codecsearch(self):
         pipelines = [[codec.Delta(cols='a')]]
         encs = [codec.CodecSearch(pipelines=pipelines)]

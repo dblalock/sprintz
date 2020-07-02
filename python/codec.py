@@ -459,3 +459,17 @@ class Bzip2(BaseCodec):
         # print("bz2 ret type: ", type(ret))
         # print("bz2 ret type: ", type(ret), ret.dtype)
         return ret
+
+
+class Zstd(BaseCodec):
+
+    def encode_col(self, vals, col_unused):
+        ret = compress.zstd_compress(vals)
+        ret = np.frombuffer(ret, dtype=np.uint8)
+        return ret, vals.dtype
+
+    def decode_col(self, vals, col_unused, header):
+        orig_dtype = header
+        ret = compress.zstd_decompress(vals)
+        ret = np.frombuffer(ret, dtype=orig_dtype)
+        return ret

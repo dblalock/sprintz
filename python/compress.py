@@ -123,7 +123,7 @@ def zstd_compress(buff, comp=None):
 
 def zstd_decompress(buff, decomp=None):
     decomp = zstd.ZstdDecompressor() if decomp is None else decomp
-    return decomp.decompress(decomp)
+    return decomp.decompress(buff)
 
 # ============================================================== sprintz
 # except without the predictive coding part because we do that manually;
