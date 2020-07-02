@@ -155,77 +155,143 @@ class DynamicDelta(BaseCodec):
         assert loss in ('l1', 'l2', 'linf', 'logabs')
         self._loss = loss
 
-    def encode(self, df):
-        use_cols = self.cols_to_use(df)
-        trailing_len = df.shape[0] % self._block_len
-        # n = df.shape[0]
-        # nblocks = n // self._block_len
-        if df.shape[0] < self._block_len:  # no blocks
-            return df[use_cols], None
+    # def encode(self, df):
+    #     use_cols = self.cols_to_use(df)
+    #     print("dyndelta using cols: ", use_cols)
+    #     trailing_len = df.shape[0] % self._block_len
+    #     # n = df.shape[0]
+    #     # nblocks = n // self._block_len
+    #     if df.shape[0] < self._block_len:  # no blocks
+    #         return df[use_cols], None
 
-        col2mask = {}
-        for col in use_cols:
-            # construct delta coded and double-delta coded versions
-            vals_delta = df[col].values
-            vals_delta[1:] -= vals_delta[:-1]
-            vals_double = vals_delta.copy()
-            vals_double[1:] -= vals_double[:-1]
+    #     col2mask = {}
+    #     for col in use_cols:
+    #         # construct delta coded and double-delta coded versions
+    #         vals_delta = df[col].values
+    #         vals_delta[1:] -= vals_delta[:-1]
+    #         vals_double = vals_delta.copy()
+    #         vals_double[1:] -= vals_double[:-1]
 
-            orig_vals_delta = vals_delta.copy()
-            if trailing_len > 0:
-                vals_delta = vals_delta[:-trailing_len]
-                vals_double = vals_double[:-trailing_len]
-            X_delta = vals_delta.reshape(-1, self._block_len)
-            X_double = vals_double.reshape(-1, self._block_len)
+    #         orig_vals_delta = vals_delta.copy()
+    #         if trailing_len > 0:
+    #             vals_delta = vals_delta[:-trailing_len]
+    #             vals_double = vals_double[:-trailing_len]
+    #         X_delta = vals_delta.reshape(-1, self._block_len)
+    #         X_double = vals_double.reshape(-1, self._block_len)
 
-            losses_delta = learning.compute_loss(X_delta, loss=self._loss)
-            losses_double = learning.compute_loss(X_delta, loss=self._loss)
-            # X_out = X_delta.copy()
-            X_out = X_delta
-            mask = losses_double < losses_delta
-            X_out[mask] = X_double
-            col2mask[col] = np.packbits(mask)
+    #         losses_delta = learning.compute_loss(X_delta, loss=self._loss)
+    #         losses_double = learning.compute_loss(X_delta, loss=self._loss)
+    #         # X_out = X_delta.copy()
+    #         X_out = X_delta
+    #         mask = losses_double < losses_delta
+    #         X_out[mask] = X_double
+    #         col2mask[col] = np.packbits(mask)
 
-            ret = orig_vals_delta
-            if trailing_len > 0:
-                ret[:-trailing_len] = X_out.ravel()
-            else:
-                ret = X_out.ravel()
-            df[col] = ret
+    #         ret = orig_vals_delta
+    #         if trailing_len > 0:
+    #             ret[:-trailing_len] = X_out.ravel()
+    #         else:
+    #             ret = X_out.ravel()
+    #         df[col] = ret
 
-        return df[use_cols], col2mask
+    #     return df[use_cols], col2mask
 
-    def decode(self, df, header):
-        use_cols = self.cols_to_use(df)
-        trailing_len = df.shape[0] % self._block_len
-        nblocks = df.shape[0] // self._block_len
-        if nblocks < 1:  # no blocks
-            return df[use_cols]
+    def encode_col(self, vals, col_unused):
+        length = len(vals)
+        trailing_len = length % self._block_len
+        if length < self._block_len:  # no blocks
+            return vals, None
 
-        col2mask = header
-        for col in use_cols:
-            vals_delta = np.cumsum(df[col].values)
-            vals_double = np.cumsum(vals_delta)
+        # construct delta coded and double-delta coded versions
+        vals_delta = vals
+        vals_delta[1:] -= vals_delta[:-1]
+        vals_double = vals_delta.copy()
+        vals_double[1:] -= vals_double[:-1]
 
-            orig_vals_delta = vals_delta.copy()
-            if trailing_len > 0:
-                vals_delta = vals_delta[:-trailing_len]
-                vals_double = vals_double[:-trailing_len]
+        orig_vals_delta = vals_delta.copy()
+        if trailing_len > 0:
+            vals_delta = vals_delta[:-trailing_len]
+            vals_double = vals_double[:-trailing_len]
+        X_delta = vals_delta.reshape(-1, self._block_len)
+        X_double = vals_double.reshape(-1, self._block_len)
 
-            X_delta = vals_delta.reshape(-1, self._block_len)
-            X_double = vals_double.reshape(-1, self._block_len)
-            mask = np.unpackbits(col2mask[col], count=nblocks).astype(np.bool)
-            X_out = X_delta
-            X_out[mask] = X_double
+        losses_delta = learning.compute_loss(X_delta, loss=self._loss)
+        losses_double = learning.compute_loss(X_delta, loss=self._loss)
+        # X_out = X_delta.copy()
+        X_out = X_delta
+        mask = losses_double < losses_delta
+        X_out[mask] = X_double
+        header = np.packbits(mask)
 
-            ret = orig_vals_delta
-            if trailing_len > 0:
-                ret[:-trailing_len] = X_out.ravel()
-            else:
-                ret = X_out.ravel()
-            df[col] = ret
+        ret = orig_vals_delta
+        if trailing_len > 0:
+            ret[:-trailing_len] = X_out.ravel()
+        else:
+            ret = X_out.ravel()
 
-        return df[use_cols]
+        return ret, header
+
+    def decode_col(self, vals, col_unused, header):
+        length = len(vals)
+        trailing_len = length % self._block_len
+        nblocks = length // self._block_len
+        if nblocks < 1:
+            return vals, None
+
+        vals_delta = _cumsum_1d(vals)
+        vals_double = _cumsum_1d(vals_delta)
+
+        orig_vals_delta = vals_delta.copy()
+        if trailing_len > 0:
+            vals_delta = vals_delta[:-trailing_len]
+            vals_double = vals_double[:-trailing_len]
+
+        X_delta = vals_delta.reshape(-1, self._block_len)
+        X_double = vals_double.reshape(-1, self._block_len)
+        mask = np.unpackbits(header, count=nblocks).astype(np.bool)
+        X_out = X_delta
+        X_out[mask] = X_double
+
+        ret = orig_vals_delta
+        if trailing_len > 0:
+            ret[:-trailing_len] = X_out.ravel()
+        else:
+            ret = X_out.ravel()
+
+        return ret
+
+    # def decode(self, df, header):
+    #     use_cols = self.cols_to_use(df)
+    #     trailing_len = df.shape[0] % self._block_len
+    #     nblocks = df.shape[0] // self._block_len
+    #     if nblocks < 1:  # no blocks
+    #         return df[use_cols]
+
+    #     col2mask = header
+    #     for col in use_cols:
+    #         # vals_delta = np.cumsum(df[col].values)
+    #         vals_delta = _cumsum_1d(df[col].values)
+    #         vals_double = _cumsum_1d(vals_delta)
+
+    #         orig_vals_delta = vals_delta.copy()
+    #         if trailing_len > 0:
+    #             vals_delta = vals_delta[:-trailing_len]
+    #             vals_double = vals_double[:-trailing_len]
+
+    #         X_delta = vals_delta.reshape(-1, self._block_len)
+    #         X_double = vals_double.reshape(-1, self._block_len)
+    #         mask = np.unpackbits(col2mask[col], count=nblocks).astype(np.bool)
+    #         X_out = X_delta
+    #         X_out[mask] = X_double
+
+    #         ret = orig_vals_delta
+    #         if trailing_len > 0:
+    #             ret[:-trailing_len] = X_out.ravel()
+    #         else:
+    #             ret = X_out.ravel()
+    #         df[col] = ret
+
+    #     return df[use_cols]
 
 
 class ByteShuffle(BaseCodec):
@@ -277,11 +343,11 @@ class CodecSearch(BaseCodec):
                 # skip codecs that don't think they're supposed to run on
                 # this columns
                 enc_cols = enc.write_cols()
-                # print("encode: col, enc_cols, cls = ", col, enc_cols, enc.__class__)
                 if enc_cols is not None and col not in enc_cols:
                     continue
                 # print("not skipping!")
 
+                # print("encode: col, enc_cols, cls = ", col, enc_cols, enc.__class__)
                 vals, header = enc.encode_col(vals, col)
 
                 # if col == 'c':
@@ -426,10 +492,18 @@ class Quantize(BaseCodec):
 
 class Zigzag(BaseCodec):
 
+    def __init__(self, *args, safe=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._safe = safe
+
     def encode_col(self, vals, col_unused):
+        if self._safe and vals.dtype not in dfq.INT_TYPES:
+            return vals, None  # just ignore non-int cols instead of failing
         return compress.zigzag_encode(vals), None
 
     def decode_col(self, vals, col_unused, header_unused):
+        if self._safe and vals.dtype not in dfq.INT_TYPES:
+            return vals
         # print(f"zigzag decoding col: {col_unused} with dtype {vals.dtype}")
         # print("zigzag dec got vals: ", vals, vals.dtype)
         return compress.zigzag_decode(vals)

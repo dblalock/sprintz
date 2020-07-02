@@ -36,7 +36,11 @@ def _debug_df1():
     return pd.DataFrame.from_dict(dict(a=a, b=b, d=d))
 
 
-def _populate_mock_input_dir(df0, df1):
+def _populate_mock_input_dir(df0=None, df1=None):
+    if df0 is None:
+        df0 = _debug_df0()
+    if df1 is None:
+        df1 = _debug_df1()
     df0.to_csv(os.path.join(MOCK_IN_DIR, 'df0.csv'), index=False)
     df1.to_csv(os.path.join(MOCK_IN_DIR, 'df1.csv'), index=False)
 
@@ -50,9 +54,30 @@ def main():
     _populate_mock_input_dir()
 
     pipelines = []
-    pipelines.append([codec.Delta()])
-    pipelines.append([codec.Delta(), codec.Zigzag()])
-    pipelines.append([codec.Delta(), codec.Zigzag(), codec.Quantize()])
+    # pipelines.append([codec.Delta()])
+    # pipelines.append([codec.Delta(), codec.Zigzag()])
+
+    # just quantize
+    pipelines.append([])
+    # quantize and bz2
+    pipelines.append([codec.Bzip2()])
+    # quantize, byteshuf, bz2
+    pipelines.append([codec.ByteShuffle(), codec.Bzip2()])
+    # quantize + {dynamic,double,plain}-delta code, with and without byteshuf
+    pipelines.append([codec.Delta(), codec.Zigzag(), codec.Bzip2()])  # noqa
+    pipelines.append([codec.DoubleDelta(), codec.Zigzag(), codec.Bzip2()])  # noqa
+    pipelines.append([codec.DynamicDelta(), codec.Zigzag(), codec.Bzip2()])  # noqa
+    pipelines.append([codec.Delta(), codec.Zigzag(), codec.ByteShuffle(), codec.Bzip2()])  # noqa
+    pipelines.append([codec.DoubleDelta(), codec.Zigzag(), codec.ByteShuffle(), codec.Bzip2()])  # noqa
+    pipelines.append([codec.DynamicDelta(), codec.Zigzag(), codec.ByteShuffle(), codec.Bzip2()])  # noqa
+
+    csearch = codec.CodecSearch(pipelines=pipelines, loss='nbytes')
+
+    codeclist = [codec.Quantize(), csearch]
+
+    dfs = dfset.make_dfset(filetype='parquet', csvsdir=MOCK_IN_DIR)
+    sizes_df_orig, sizes_df_comp = sq.encode_measure_decode(
+            dfs, codeclist)
 
 
     # TODO construct a bunch of pipelines of preprocs and formats/compressors,

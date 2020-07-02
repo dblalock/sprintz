@@ -7,6 +7,11 @@ import numba
 import pandas as pd
 
 
+UNSIGNED_INT_TYPES = [np.uint8, np.uint16, np.uint32, np.uint64]
+SIGNED_INT_TYPES = [np.int8, np.int16, np.int32, np.int64]
+INT_TYPES = UNSIGNED_INT_TYPES + SIGNED_INT_TYPES
+
+
 class QuantizeParams(collections.namedtuple(
         'QuantizeParams', 'dtype offset scale orig_dtype'.split())):
     pass
