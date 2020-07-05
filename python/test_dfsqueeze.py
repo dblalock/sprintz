@@ -211,6 +211,46 @@ class TestCodecs(DfsetTest):
         #     self._test_codecs_for_filetype(ftype, encs)
         # self._test_codecs_many_filetypes(encs)
 
+        def _test_array(a, compr_dtype=None):
+            a = a.copy()
+            enc = codec.Quantize()
+            # print("a:\n", a)
+            a_comp, qparams = enc.encode_col(a, 'foo')
+            # print("qparams: ", qparams)
+            # print("out:\n", out)
+            a_hat = enc.decode_col(a_comp, 'foo', qparams)
+            # print("a_hat: ", a_hat)
+            # assert np.array_equal(a, a_hat)
+            assert a.dtype == a_hat.dtype
+            if compr_dtype is not None:
+                # print("a_comp.dtype:", a_comp.dtype)
+                assert compr_dtype == a_comp.dtype
+            # assert np.array_equal(a, a_hat, equal_nan=True)
+            assert np.allclose(a, a_hat, equal_nan=True)
+
+        a = np.arange(4, dtype=np.float32)
+        a[0] = np.nan
+        _test_array(a, compr_dtype=np.uint8)
+        a[-1] = np.nan
+        _test_array(a, compr_dtype=np.uint8)
+        a[:] = np.nan
+        _test_array(a, compr_dtype=np.uint8)
+
+        a = np.arange(4, dtype=np.int16)
+        _test_array(a, compr_dtype=np.uint8)
+        _test_array(a.astype(np.int32), compr_dtype=np.uint8)
+        _test_array(a.astype(np.int64), compr_dtype=np.uint8)
+        maxval = (1 << 32) + ((1 << 32) - 1)
+        a = np.arange(maxval - 5, maxval + 1, dtype=np.uint64)
+        _test_array(a, compr_dtype=np.uint8)
+        a = np.array([0, maxval], dtype=np.uint64)
+        _test_array(a)
+
+        a = np.array([0, 255, np.nan], dtype=np.float32)
+        _test_array(a, compr_dtype=np.uint16)  # since 255 and nan, needs u16
+        a = np.array([0, 254, np.nan], dtype=np.float32)
+        _test_array(a, compr_dtype=np.uint8)  # just 254 and nan, can do u8
+
         ftypes = ('npy', 'parquet', 'h5')  # csv doesn't preserve dtype
         self._test_simple_codec(codec.Quantize, filetypes=ftypes)
 

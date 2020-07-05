@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+# NOTE: dfquantize has been replaced by dfquantize2; we therefore don't care
+# about any of these tests
+
 from __future__ import absolute_import
 
 import os
