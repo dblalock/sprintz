@@ -127,8 +127,6 @@ class TestDfSet(DfsetTest):
         self._test_dfs(filetype='h5')
 
     def test_santize_cols(self):
-        # print("os.listdir: ", os.listdir(MOCK_IN_DIR))
-        # return
         _rm_mock_input_files()  # just want df2 here
         df = _debug_df2()
         dfpath = os.path.join(MOCK_IN_DIR, 'df2.csv')
@@ -141,8 +139,6 @@ class TestDfSet(DfsetTest):
         df_hat = dfs['df2']
         assert set(df.columns) == set(df_hat.columns)
         assert df.shape == df_hat.shape
-        print("df dtypes: ", df.dtypes)
-        print("df hat dtypes: ", df_hat.dtypes)
         assert set(df.dtypes) == set(df_hat.dtypes)
 
         for col in df:
