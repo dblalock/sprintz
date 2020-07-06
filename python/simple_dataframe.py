@@ -36,6 +36,9 @@ class SimpleSeries(object):
     def __iter__(self):
         return self.values.__iter__()
 
+    def __str__(self):
+        return str(self.values)
+
 
 class SimpleDataFrame(object):
     __slots__ = '_col2array'

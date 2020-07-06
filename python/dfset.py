@@ -13,7 +13,8 @@ from python import simple_dataframe as sdf
 class BaseDfSet(abc.ABC):
 
     def __init__(self, dfsdir, filetype='csv',
-                 read_kwargs=None, write_kwargs=None):
+                 read_kwargs=None, write_kwargs=None,
+                 convert_slash_to='||'):
         self._dfsdir = dfsdir
         assert filetype in ('csv', 'npy', 'parquet', 'h5')
         self._filetype = filetype
@@ -21,6 +22,7 @@ class BaseDfSet(abc.ABC):
         self.write_kwargs = write_kwargs or {}
         self._endswith = '.' + filetype
         self._ids = None
+        self._convert_slash_to = convert_slash_to
 
     def _rm_endswith(self, fname):
         if self._endswith and fname.endswith(self._endswith):
@@ -31,10 +33,17 @@ class BaseDfSet(abc.ABC):
         # print(f"id = {self._rm_endswith(fname)} from dirname {fname}")
         return self._rm_endswith(fname)
 
+    def _colname_from_fname(self, fname):
+        fname = self._rm_endswith(fname)
+        return fname.replace(self._convert_slash_to, '/')
+
+    def _basename_for_col(self, col):
+        return col.replace('/', self._convert_slash_to)
+
     def _path(self, dfid, col=None):
         if col is None:
-            os.path.join(self._dfsdir, dfid)
-        fname = col + self._endswith if col is not None else ''
+            return os.path.join(self._dfsdir, dfid)
+        fname = self._basename_for_col(col) + self._endswith
         return os.path.join(self._dfsdir, dfid, fname)
 
     def _find_ids(self):
@@ -85,7 +94,7 @@ class BaseDfSet(abc.ABC):
         dirname = self._path(dfid)
         if not os.path.exists(dirname):
             return []
-        return [self._rm_endswith(fname)
+        return [self._colname_from_fname(fname)
                 for fname in os.listdir(dirname)]
 
     # def __getitem__(self, dfid, cols=None):

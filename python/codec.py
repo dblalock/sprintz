@@ -9,12 +9,33 @@ from scipy import signal
 import numba
 
 from python import dfquantize2 as dfq
-from python import learning  # for compute_loss
+# from python import learning  # for compute_loss
 from python import compress
 
 
 def _wrap_in_list_if_str(obj):
     return ([obj] if isinstance(obj, str) else obj)
+
+
+def compute_loss(errs, loss='l2', axis=-1):
+    """sums along last axis; errs should be y - y_hat"""
+    if loss == 'l2':
+        return (errs * errs).sum(axis=axis)
+    elif loss == 'l1':
+        return np.abs(errs).sum(axis=axis)
+    elif loss == 'linf':
+        return np.max(np.abs(errs), axis=axis)
+    elif loss == 'logabs':
+        errs = errs.astype(np.float32)  # ints yield div by 0 warnings
+        return np.log(1 + np.abs(errs)).sum(axis=axis)
+    elif loss == 'zstd':
+        assert axis in (-1, None)  # Zstd only supported for whole array
+        byte_ar = compress.zstd_compress(errs.ravel())
+        return len(byte_ar)
+    elif loss == 'nbytes':
+        return errs.nbytes
+    else:
+        raise ValueError("Unrecognized loss function '{}'".format(loss))
 
 
 class BaseCodec(abc.ABC):
@@ -179,8 +200,8 @@ class DynamicDelta(BaseCodec):
     #         X_delta = vals_delta.reshape(-1, self._block_len)
     #         X_double = vals_double.reshape(-1, self._block_len)
 
-    #         losses_delta = learning.compute_loss(X_delta, loss=self._loss)
-    #         losses_double = learning.compute_loss(X_delta, loss=self._loss)
+    #         losses_delta = compute_loss(X_delta, loss=self._loss)
+    #         losses_double = compute_loss(X_delta, loss=self._loss)
     #         # X_out = X_delta.copy()
     #         X_out = X_delta
     #         mask = losses_double < losses_delta
@@ -215,8 +236,8 @@ class DynamicDelta(BaseCodec):
         X_delta = vals_delta.reshape(-1, self._block_len)
         X_double = vals_double.reshape(-1, self._block_len)
 
-        losses_delta = learning.compute_loss(X_delta, loss=self._loss)
-        losses_double = learning.compute_loss(X_delta, loss=self._loss)
+        losses_delta = compute_loss(X_delta, loss=self._loss)
+        losses_double = compute_loss(X_delta, loss=self._loss)
         # X_out = X_delta.copy()
         X_out = X_delta
         mask = losses_double < losses_delta
@@ -355,7 +376,7 @@ class CodecSearch(BaseCodec):
 
                 headers.append(header)
             # print(f"enc col {col}, headers={headers} list with type {type(headers[0])}")
-            loss = learning.compute_loss(vals, loss=self._loss)
+            loss = compute_loss(vals, loss=self._loss)
             if loss < best_loss:
                 # print("got new best loss: ", loss)
                 best_loss = loss

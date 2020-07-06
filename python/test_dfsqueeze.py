@@ -38,14 +38,28 @@ def _debug_df1():
     return pd.DataFrame.from_dict(dict(a=a, b=b, d=d))
 
 
+def _debug_df2():
+    # float32 not preserved when written to csv; and since we write to csv
+    # at the start of the associated tests to initialize the dfs, using float32
+    # just makes tests fail cuz f32 gets turned to f64
+    a = np.arange(4, dtype=np.float64)
+    a[2] = np.nan
+    b = a[::-1].copy()
+    c = np.array([-1, 1, -2, 2])
+    return pd.DataFrame.from_dict({'foo/a': a, 'bar/b/b': b, '/c': c})
+
+
 def _populate_mock_input_dir(df0, df1):
     df0.to_csv(os.path.join(MOCK_IN_DIR, 'df0.csv'), index=False)
     df1.to_csv(os.path.join(MOCK_IN_DIR, 'df1.csv'), index=False)
 
 
 def _rm_mock_input_files():
-    os.remove(os.path.join(MOCK_IN_DIR, 'df0.csv'))
-    os.remove(os.path.join(MOCK_IN_DIR, 'df1.csv'))
+    for basename in os.listdir(MOCK_IN_DIR):
+        path = os.path.join(MOCK_IN_DIR, basename)
+        os.remove(path)
+    # os.remove(os.path.join(MOCK_IN_DIR, 'df0.csv'))
+    # os.remove(os.path.join(MOCK_IN_DIR, 'df1.csv'))
 
 
 class DfsetTest(unittest.TestCase):
@@ -95,32 +109,10 @@ class TestDfSet(DfsetTest):
         assert set(self.df1.columns) == set(df1_hat.columns)
         for col in self.df0:
             assert np.array_equal(self.df0[col], df0_hat[col])
+            assert np.allclose(self.df0[col], df0_hat[col], equal_nan=True)
         for col in self.df1:
             assert np.array_equal(self.df1[col], df1_hat[col])
-
-        # assert np.allclose(self.df0['a'], df0_hat['a'])
-        # assert np.allclose(self.df0['b'], df0_hat['b'])
-        # assert np.allclose(self.df0['c'], df0_hat['c'])
-        # assert np.allclose(self.df1['a'], df1_hat['a'])
-        # assert np.allclose(self.df1['b'], df1_hat['b'])
-        # assert np.allclose(self.df1['d'], df1_hat['d'])
-        # assert np.array_equal(self.df1['a'], df1_hat['a'])
-        # assert np.array_equal(self.df1['b'], df1_hat['b'])
-        # assert np.array_equal(self.df1['d'], df1_hat['d'])
-        # if filetype != 'csv':
-            # print(self.df1.dtypes)
-            # print(df1_hat.dtypes)
-            # # print(df1_hat.columns)
-            # # print(self.df1.columns)
-            # print(self.df1['a'])
-            # print(df1_hat['a'])
-
-            # this function doesn't seem reliable; returns false for two
-            # dfs with same cols, dtypes, and all values pass allclose;
-            # maybe related to weird warnings about ufunc size changing
-            # and latest numpy being broken for me
-            # assert self.df0.equals(df0_hat)
-            # assert self.df1.equals(df1_hat)
+            assert np.allclose(self.df1[col], df1_hat[col], equal_nan=True)
 
     def test_csv_dfs(self):
         self._test_dfs(filetype='csv')
@@ -133,6 +125,30 @@ class TestDfSet(DfsetTest):
 
     def test_h5_dfs(self):
         self._test_dfs(filetype='h5')
+
+    def test_santize_cols(self):
+        # print("os.listdir: ", os.listdir(MOCK_IN_DIR))
+        # return
+        _rm_mock_input_files()  # just want df2 here
+        df = _debug_df2()
+        dfpath = os.path.join(MOCK_IN_DIR, 'df2.csv')
+        df.to_csv(dfpath, index=False)
+
+        dfs = dfset.make_dfset(filetype='parquet', csvsdir=MOCK_IN_DIR)
+
+        assert sorted(dfs.ids) == ['df2']
+        assert set(dfs._cols_stored_for_dfid('df2')) == set(df.columns)
+        df_hat = dfs['df2']
+        assert set(df.columns) == set(df_hat.columns)
+        assert df.shape == df_hat.shape
+        print("df dtypes: ", df.dtypes)
+        print("df hat dtypes: ", df_hat.dtypes)
+        assert set(df.dtypes) == set(df_hat.dtypes)
+
+        for col in df:
+            assert np.allclose(df[col], df_hat[col], equal_nan=True)
+
+        os.remove(dfpath)
 
 
 class TestEncodeDecode(DfsetTest):
