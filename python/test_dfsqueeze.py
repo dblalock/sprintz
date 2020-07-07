@@ -146,6 +146,22 @@ class TestDfSet(DfsetTest):
 
         os.remove(dfpath)
 
+    def test_copy_from_csv_once(self):
+        """We'd rather just convert csv to parquet or whatever one time;
+        this test makes sure that that works"""
+        dfsdir = 'dfs_test_copy_once'
+        dfs_orig = dfset.make_dfset(dfsdir=dfsdir, filetype='parquet',
+                                    csvsdir=MOCK_IN_DIR)
+        dfs2 = dfset.make_dfset(dfsdir=dfsdir, filetype='parquet')
+        assert dfs2.equals(dfs_orig)
+
+        del dfs_orig
+        dfs3 = dfset.make_dfset(dfsdir=dfsdir, filetype='parquet')
+        assert dfs2.equals(dfs3)
+        del dfs2
+        dfs4 = dfset.make_dfset(dfsdir=dfsdir, filetype='parquet')
+        assert dfs3.equals(dfs4)
+
 
 class TestEncodeDecode(DfsetTest):
 

@@ -24,6 +24,9 @@ class BaseDfSet(abc.ABC):
         self._ids = None
         self._convert_slash_to = convert_slash_to
 
+        if not os.path.exists(self._dfsdir):
+            os.makedirs(self._dfsdir)
+
     def _rm_endswith(self, fname):
         if self._endswith and fname.endswith(self._endswith):
             fname = fname[:-len(self._endswith)]
