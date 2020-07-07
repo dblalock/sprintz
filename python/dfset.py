@@ -51,7 +51,8 @@ class BaseDfSet(abc.ABC):
 
     def _find_ids(self):
         return [self._id_from_dirname(fname)
-                for fname in os.listdir(self._dfsdir)]
+                for fname in os.listdir(self._dfsdir)
+                if os.path.isdir(os.path.join(self._dfsdir, fname))]
 
     @property
     def filetype(self):
@@ -98,7 +99,8 @@ class BaseDfSet(abc.ABC):
         if not os.path.exists(dirname):
             return []
         return [self._colname_from_fname(fname)
-                for fname in os.listdir(dirname)]
+                for fname in os.listdir(dirname)
+                if fname.endswith(self._endswith)]
 
     # def __getitem__(self, dfid, cols=None):
     def __getitem__(self, dfid_and_maybe_cols):
@@ -258,8 +260,9 @@ class BaseDfSet(abc.ABC):
         return True
 
     def clone_into(self, other):
-        for dfid in self.ids:
-            # print(f"cloning dfid: '{dfid}'")
+        # assert len(self.ids) == 1000 # TODO rm
+        for i, dfid in enumerate(self.ids):
+            print(f"cloning dfid: '{dfid}' ({i+1}/{len(self.ids)})")
             other[dfid] = self[dfid]
             # print(f"cloning dfid: '{dfid}'")
             # import time; time.sleep(1)
