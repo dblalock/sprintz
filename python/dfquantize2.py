@@ -21,6 +21,8 @@ def infer_qparams(x, offset=None, scale='lossless_base10', dtype=None,
                   allow_nan_inf=True):
     orig_dtype = x.dtype
 
+    print("qparams: orig type(x), x.dtype", type(x), x.dtype)
+
     u8_max = 255
     u16_max = 65535
     u32_max = (1 << 32) - 1
@@ -48,6 +50,7 @@ def infer_qparams(x, offset=None, scale='lossless_base10', dtype=None,
         u32_max -= 1
         u64_max -= 1
 
+    print("qparams: type(x), x.dtype", type(x), x.dtype)
     offset = x.min() if offset is None else offset
     x_offset = x - offset
 

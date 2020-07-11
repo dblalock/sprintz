@@ -2,6 +2,7 @@
 
 import abc
 import os
+import shutil
 import tempfile
 
 import numpy as np
@@ -14,8 +15,9 @@ class BaseDfSet(abc.ABC):
 
     def __init__(self, dfsdir, filetype='csv',
                  read_kwargs=None, write_kwargs=None,
-                 convert_slash_to='||'):
+                 convert_slash_to='||', verbose=0):
         self._dfsdir = dfsdir
+        assert dfsdir  # can't be empty or none
         assert filetype in ('csv', 'npy', 'parquet', 'h5')
         self._filetype = filetype
         self.read_kwargs = read_kwargs or {}
@@ -23,6 +25,7 @@ class BaseDfSet(abc.ABC):
         self._endswith = '.' + filetype
         self._ids = None
         self._convert_slash_to = convert_slash_to
+        self.verbose = verbose
 
         if not os.path.exists(self._dfsdir):
             os.makedirs(self._dfsdir)
@@ -75,12 +78,13 @@ class BaseDfSet(abc.ABC):
     def __len__(self):
         return len(self.ids)
 
-    def copy_from_csvs_dir(self, dirpath, endswith='.csv', **read_kwargs):
+    def copy_from_csvs_dir(self, dirpath, endswith='.csv', dtypes=None,
+                           **read_kwargs):
         fnames = [fname for fname in os.listdir(dirpath)
                   if fname.endswith(endswith)]
         for fname in fnames:
             path = os.path.join(dirpath, fname)
-            df = pd.read_csv(path, **read_kwargs)
+            df = pd.read_csv(path, dtype=dtypes, **read_kwargs)
             if fname.endswith('.csv'):
                 fname = fname[:-4]
             self[self._id_from_dirname(fname)] = df
@@ -112,23 +116,34 @@ class BaseDfSet(abc.ABC):
 
         if cols is None:
             cols = self._cols_stored_for_dfid(dfid)
-        # print("cols: ", cols)
+
+
         # ret = {}
         ret = sdf.SimpleDataFrame()
         just_one_col = False
         if isinstance(cols, str):
             cols = [cols]  # was actually just one col
             just_one_col = True
+
+        # print("getitem() cols: ", cols)
+
         for col in cols:
             path = self._path(dfid, col)
             if not os.path.exists(path):
                 # TODO add option to throw here if path not found
                 continue  # just omit instead of crashing
             vals = self._read_col_from_path(path)
+
+            # if col == 'accel_valid':
+            #     print("getitem: accel_valid: ", vals, type(vals), vals.dtype)
+
             if just_one_col:
-                return sdf.SimpleSeries(vals)
+                # return sdf.SimpleSeries(vals)
+                return pd.Series(vals)
                 # return vals
             ret[col] = vals
+        # if 'accel_valid' in ret:
+        #     print("getitem: accel_valid info", type(ret['accel_valid']), ret['accel_valid'].dtype)
         return ret
         # return pd.DataFrame.from_dict(ret)
         # return sdf.SimpleDataFrame.from_dict(ret)
@@ -181,7 +196,15 @@ class BaseDfSet(abc.ABC):
         if not os.path.exists(dfid_path):
             os.mkdir(dfid_path)
         for col in cols:
-            vals = df[col].values
+            # don't extract the numpy array because the series might have
+            # dtype that numpy lacks (in particular, the nullable int and
+            # string types)
+            vals = df[col]
+
+            if self.verbose > 0:
+                # print("dfid, col, vals type, vals dtype: ",
+                #     dfid, col, type(vals), vals.dtype)
+                print("dfid, col, vals dtype: ", dfid, col, vals.dtype)
 
             # print("setting dfid, col, vals: ", dfid, col, vals, vals.dtype)
             self._write_col_to_path(self._path(dfid, col), vals)
@@ -270,11 +293,12 @@ class BaseDfSet(abc.ABC):
             #     print(f"col: '{col}'")
             #     other[dfid, col] = self[dfid, col]
 
-    def copy(self, dfsdir=None):
-        other = make_dfset(
-            dfsdir=dfsdir, filetype=self.filetype,
-            read_kwargs=self.read_kwargs.copy(),
-            write_kwargs=self.write_kwargs.copy())
+    def copy(self, dfsdir=None, **kwargs):
+        kwargs.setdefault('filetype', self.filetype)
+        if kwargs['filetype'] == self.filetype:
+            kwargs.setdefault('read_kwargs', self.read_kwargs.copy())
+            kwargs.setdefault('write_kwargs', self.write_kwargs.copy())
+        other = make_dfset(dfsdir=dfsdir, **kwargs)
         self.clone_into(other)
         return other
 
@@ -340,18 +364,30 @@ class ParquetDfSet(BaseDfSet):
         return pd.read_parquet(path, **self.read_kwargs)['_']
 
     def _write_col_to_path(self, path, values):
-        # print("writing to path: ", path)
-        # df = pd.Series.from_array(values)
-        # df = pd.DataFrame([pd.Series.from_array(values)])
+        # # print("parquet write: path =", path)
+        # # # df = pd.Series.from_array(values)
+        # # # df = pd.DataFrame([pd.Series.from_array(values)])
         # print("parquet write: values shape", values.shape)
+        # print("parquet write: values type", type(values))
+        # # # values.foo()
+        # # # assert hasattr(values, 'dtype')
         # print("parquet write: values dtype", values.dtype)
-        # print("parqetdfset: writing values:\n", values, type(values))
+        # # # print("parquet write: uniq values", np.unique(values))
+        # # # print("parqetdfset: writing values:\n", values, type(values))
+        # print("parqetdfset: writing head values:\n", values[:20])
+        # print("parqetdfset: writing tail values:\n", values[-20:])
 
         # try:
         #     df = pd.DataFrame.from_dict({'_': values})
         # except ValueError:  # happens if values is a
-        df = pd.DataFrame.from_dict({'_': values})
-        return df.to_parquet(path, **self.write_kwargs)
+        s = pd.Series(values, dtype=values.dtype, name='_')
+        s.to_frame().to_parquet(path, **self.write_kwargs)
+        # print("s shape: ", s.shape)
+        # df = s.to_frame()
+        # print("df shape: ", df.shape)
+        # df = pd.DataFrame.from_dict({'_': values}, dtype=values.dtype)
+        # df = pd.DataFrame.from_dict({'_': s})
+        # return df.to_parquet(path, **self.write_kwargs)
 
 
 class H5DfSet(BaseDfSet):
@@ -378,7 +414,7 @@ class H5DfSet(BaseDfSet):
         return df.to_hdf(path, key='_', mode='w', **self.write_kwargs)
 
 
-def make_dfset(filetype, dfsdir=None, csvsdir=None, **kwargs):
+def make_dfset(filetype, dfsdir=None, csvsdir=None, dtypes=None, **kwargs):
     if dfsdir is None:
         dfsdir = tempfile.mkdtemp()
 
@@ -394,7 +430,7 @@ def make_dfset(filetype, dfsdir=None, csvsdir=None, **kwargs):
         raise ValueError(f"unrecognized filetype: '{filetype}'")
 
     if csvsdir is not None:
-        dfs.copy_from_csvs_dir(csvsdir)
+        dfs.copy_from_csvs_dir(csvsdir, dtypes=dtypes)
     return dfs
 
     # def __getitem__(self, dfid, cols=None):

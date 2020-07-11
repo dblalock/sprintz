@@ -15,14 +15,15 @@ import pandas as pd
 
 # this just exists so calling df[col].values works like with a regular
 # pandas df
+#
+# EDIT: actually, this is unused now; can just create a pd.Series, and
+# this is actually necessary to handle some edge cases where arrow gets
+# confused by everything else when the dtype is a nullable string
 class SimpleSeries(object):
-    __slots__ = 'values dtype'.split()
+    __slots__ = '_values'.split()
 
     def __init__(self, vals):
-        try:
-            self.values = np.asarray(vals.values)  # handle pd series
-        except AttributeError:
-            self.values = np.asarray(vals)
+        self._values = vals  # could be series or numpy array
 
     def __len__(self):
         return len(self.values)
@@ -38,6 +39,21 @@ class SimpleSeries(object):
 
     def __str__(self):
         return str(self.values)
+
+    @property
+    def shape(self):
+        return len(self)
+
+    @property
+    def dtype(self):
+        return self._values.dtype
+
+    @property
+    def values(self):
+        try:
+            return np.asarray(self._values.values)  # handle pd series
+        except AttributeError:
+            return np.asarray(self._values)
 
 
 class SimpleDataFrame(object):
@@ -80,7 +96,8 @@ class SimpleDataFrame(object):
     def dtypes(self):
         # return {col: self._col2array[col].values.dtype
         #         for col in self._col2array.keys()}
-        return SimpleSeries([self._col2array[col].values.dtype
+        # return SimpleSeries([self._col2array[col].values.dtype
+        return pd.Series([self._col2array[col].values.dtype
                              for col in self.columns])
 
     def __getitem__(self, col_or_cols):
@@ -92,7 +109,8 @@ class SimpleDataFrame(object):
         return self._col2array[col_or_cols]
 
     def __setitem__(self, col, vals):
-        self._col2array[col] = SimpleSeries(vals)
+        # self._col2array[col] = SimpleSeries(vals)
+        self._col2array[col] = pd.Series(vals)
 
     def __iter__(self):
         return SimpleDataFrameIterator(self)

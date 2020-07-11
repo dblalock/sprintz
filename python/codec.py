@@ -4,9 +4,10 @@ import abc
 # import copy
 import bz2
 
-import numpy as np
-from scipy import signal
 import numba
+import numpy as np
+import pandas as pd
+from scipy import signal
 
 from python import dfquantize2 as dfq
 # from python import learning  # for compute_loss
@@ -99,7 +100,8 @@ class BaseCodec(abc.ABC):
         # print("basecodec use cols: ", use_cols)
         col2header = {}
         for col in use_cols:
-            df[col], header = self.encode_col(df[col].values, col)
+            # df[col], header = self.encode_col(df[col].values, col)
+            df[col], header = self.encode_col(df[col], col)
             if header is not None:
                 col2header[col] = header
         return df[use_cols], col2header or None  # no headers -> None
@@ -109,7 +111,8 @@ class BaseCodec(abc.ABC):
         use_cols = self.cols_to_use(df)
         for col in use_cols:
             df[col] = self.decode_col(
-                df[col].values, col, col2header.get(col))
+                # df[col].values, col, col2header.get(col))
+                df[col], col, col2header.get(col))
         return df[use_cols]
 
     def encode_col(self, values, col):
@@ -147,24 +150,46 @@ def _cumsum_1d(x):
     return out
 
 
+# _NULLABLE_INT_DTYPES = (
+#     # 'boolean',  # sort of an int...
+#     'Int8', 'UInt8',
+#     'Int16', 'UInt16',
+#     'Int32', 'UInt32',
+#     'Int64', 'UInt64')
+
+def _extract_values_array(vals):
+    # print("vals type, dtype: ", type(vals), vals.dtype)
+    # assert vals.dtype not in _NULLABLE_INT_DTYPES
+    if pd.api.types.is_integer_dtype(vals.dtype):
+        assert not pd.isnull(vals).any()
+    try:
+        return vals.values
+    except AttributeError:
+        return vals
+
+
 class Delta(BaseCodec):
 
     def encode_col(self, vals, col_unused):
+        vals = _extract_values_array(vals)
         vals[1:] -= vals[:-1]
         return vals, None
 
     def decode_col(self, vals, col_unused, header_unused):
+        vals = _extract_values_array(vals)
         return _cumsum_1d(vals)
 
 
 class DoubleDelta(BaseCodec):
 
     def encode_col(self, vals, col_unused):
+        vals = _extract_values_array(vals)
         vals[1:] -= vals[:-1]
         vals[1:] -= vals[:-1]
         return vals, None
 
     def decode_col(self, vals, col_unused, header_unused):
+        vals = _extract_values_array(vals)
         return _cumsum_1d(_cumsum_1d(vals))
 
 
@@ -218,6 +243,7 @@ class DynamicDelta(BaseCodec):
     #     return df[use_cols], col2mask
 
     def encode_col(self, vals, col_unused):
+        vals = _extract_values_array(vals)
         length = len(vals)
         trailing_len = length % self._block_len
         if length < self._block_len:  # no blocks
@@ -253,6 +279,7 @@ class DynamicDelta(BaseCodec):
         return ret, header
 
     def decode_col(self, vals, col_unused, header):
+        vals = _extract_values_array(vals)
         length = len(vals)
         trailing_len = length % self._block_len
         nblocks = length // self._block_len
@@ -318,12 +345,14 @@ class DynamicDelta(BaseCodec):
 class ByteShuffle(BaseCodec):
 
     def encode_col(self, vals, col_unused):
+        vals = _extract_values_array(vals)
         if vals.itemsize == 1:
             return vals  # shuffling is no-op for 1B dtypes
         X = vals.view(np.uint8).reshape(-1, vals.itemsize)
         return np.asfortranarray(X).ravel().view(vals.dtype), None
 
     def decode_col(self, vals, col_unused, header_unused):
+        vals = _extract_values_array(vals)
         if vals.itemsize == 1:
             return vals  # shuffling is no-op for 1B dtypes
         X = vals.view(np.uint8).reshape(vals.itemsize, -1)
@@ -430,7 +459,8 @@ class CodecSearch(BaseCodec):
 class ColSumPredictor(BaseCodec):
     """predicts a column as the (weighted) sum of one or more other columns"""
 
-    def __init__(self, cols_to_sum, col_to_predict, weights=None):
+    def __init__(self, cols_to_sum, col_to_predict, padding='same',
+                 weights=None):
         super().__init__()
         self.cols_to_sum = _wrap_in_list_if_str(cols_to_sum)
         self.col_to_predict = col_to_predict
@@ -441,6 +471,7 @@ class ColSumPredictor(BaseCodec):
             assert self._weights.shape[-1] == len(self.cols_to_sum)
             if len(cols_to_sum) == 1:
                 self._weights = self._weights.reshape(-1, 1)
+        self._padding = padding
 
     def readonly_cols(self):
         return self.cols_to_sum
@@ -452,14 +483,14 @@ class ColSumPredictor(BaseCodec):
         predictions = df[self.cols_to_sum[0]].values
         if self._weights is not None:
             predictions = signal.correlate(
-                predictions, self._weights[:, 0], padding='valid')
+                predictions, self._weights[:, 0], padding=self._padding)
         if len(self.cols_to_sum) > 1:
             for i, col in enumerate(self.cols_to_sum[1:]):
                 # predictions += df[col].values
                 vals = df[col].values
                 if self._weights is not None:
                     vals = signal.correlate(
-                        vals, self._weights[:, i + 1], padding='valid')
+                        vals, self._weights[:, i + 1], padding=self._padding)
                 predictions += vals
         return predictions
 
@@ -490,7 +521,7 @@ class Quantize(BaseCodec):
         # TODO support just going from f64 to f32 (as opposed outputing ints)?
 
     def encode_col(self, vals, col):
-        # print("quantize encoding col", col)
+        print("quantize encoding col", col, vals.dtype)
         if col in self._col2qparams:
             qparams = self._col2qparams[col]
             return_qparams = False
@@ -511,6 +542,21 @@ class Quantize(BaseCodec):
         return dfq.unquantize(vals, qparams)
 
 
+
+class Lambda(BaseCodec):
+
+    def __init__(self, f_enc, f_dec, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._f_enc = f_enc
+        self._f_dec = f_dec
+
+    def encode_col(self, vals, col_unused):
+        return self._f_enc(vals), None
+
+    def decode_col(self, vals, col_unused, header_unused):
+        return self._f_dec(vals)
+
+
 class Zigzag(BaseCodec):
 
     def __init__(self, *args, safe=True, **kwargs):
@@ -518,11 +564,13 @@ class Zigzag(BaseCodec):
         self._safe = safe
 
     def encode_col(self, vals, col_unused):
+        vals = _extract_values_array(vals)
         if self._safe and vals.dtype not in dfq.INT_TYPES:
             return vals, None  # just ignore non-int cols instead of failing
         return compress.zigzag_encode(vals), None
 
     def decode_col(self, vals, col_unused, header_unused):
+        vals = _extract_values_array(vals)
         if self._safe and vals.dtype not in dfq.INT_TYPES:
             return vals
         # print(f"zigzag decoding col: {col_unused} with dtype {vals.dtype}")
@@ -538,6 +586,7 @@ class Bzip2(BaseCodec):
     # need to save it as a header
 
     def encode_col(self, vals, col_unused):
+        vals = _extract_values_array(vals)
         return compress.bzip2_compress(vals), vals.dtype
         # ret = bz2.compress(vals)
         # # print("bz2 enc ret type: ", type(ret))
@@ -549,6 +598,7 @@ class Bzip2(BaseCodec):
 
     def decode_col(self, vals, col_unused, header):
         orig_dtype = header
+        vals = _extract_values_array(vals)
         return compress.bzip2_decompress(vals, dtype=orig_dtype)
         # # print("bz2 dec vals type, dtype: ", type(vals), vals.dtype)
         # ret = bz2.decompress(vals.tobytes())
@@ -563,10 +613,12 @@ class Zstd(BaseCodec):
     def encode_col(self, vals, col_unused):
         # ret = compress.zstd_compress(vals)
         # ret = np.frombuffer(ret, dtype=np.uint8)
+        vals = _extract_values_array(vals)
         return compress.zstd_compress(vals), vals.dtype
 
     def decode_col(self, vals, col_unused, header):
         orig_dtype = header
+        vals = _extract_values_array(vals)
         return compress.zstd_decompress(vals, dtype=orig_dtype)
         # ret = compress.zstd_decompress(vals)
         # ret = np.frombuffer(ret, dtype=orig_dtype)

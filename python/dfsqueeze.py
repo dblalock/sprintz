@@ -59,15 +59,27 @@ def encode(dfs, codeclist):
     else:
         for dfid in dfids:
             headerlist = []
+            # df = dfs[dfid]
+            # print("dfid: ", dfid)
+            # import sys; sys.exit()
             for est in codeclist:
-                # print("est cols: ", est.cols())
+                # print("encode: est class, cols: ", type(est), est.cols())
+
+                # print("col vals: ")
+                # print("gps_speed_unreliable: ")
+                # s = dfs[dfid, 'gps_speed_unreliable']
+                # print(s, type(s), s.dtype)
+
                 # cols = est.cols_to_use(df)
-                df = dfs[dfid, est.cols()]
+                subdf = dfs[dfid, est.cols()]
                 # print("about to encode df with cols: ", df.columns)
-                dirty_df, header = est.encode(df)
+                dirty_df, header = est.encode(subdf)
                 headerlist.append(header)
+                # for col in dirty_df.columns:
+                #     df[col] = dirty_df[col]
                 dfs[dfid, dirty_df.columns] = dirty_df
             headers[dfid] = headerlist
+            # dfs[dfid] = df
 
     return headers
 
@@ -126,9 +138,9 @@ def encode_measure_decode(dfs, codeclist, check_correct=True):
 
         # dfs_orig = dfset.make_dfset(
         #     dfsdir=dirpath, filetype=dfs.filetype)
-        dfs_orig = dfs.copy(dfsdir=dirpath)
         if check_correct:
-            dfs.clone_into(dfs_orig)
+            dfs_orig = dfs.copy(dfsdir=dirpath)
+            # dfs.clone_into(dfs_orig)
         # dfs_orig = dfset.make_dfset(csvdir, dfsdir.rstrip('/') + '_orig',
         #                             filetype=filetype, **dfset_kwargs)
 
