@@ -6,14 +6,11 @@ import numpy as np
 import numba
 import pandas as pd
 
-
-UNSIGNED_INT_TYPES = [np.uint8, np.uint16, np.uint32, np.uint64]
-SIGNED_INT_TYPES = [np.int8, np.int16, np.int32, np.int64]
-INT_TYPES = UNSIGNED_INT_TYPES + SIGNED_INT_TYPES
+from python import dtypes
 
 
 class QuantizeParams(collections.namedtuple(
-        'QuantizeParams', 'dtype offset scale orig_dtype'.split())):
+        'QuantizeParams', 'dtype offset scale orig_dtype allfinite'.split())):
     pass
 
 
@@ -21,34 +18,49 @@ def infer_qparams(x, offset=None, scale='lossless_base10', dtype=None,
                   allow_nan_inf=True):
     orig_dtype = x.dtype
 
-    print("qparams: orig type(x), x.dtype", type(x), x.dtype)
+    # print("x dtype, is_boolean, is_nullable", x.dtype, dtypes.is_boolean(x.dtype), dtypes.is_nullable(x.dtype))
+    if dtypes.is_boolean(x.dtype):
+        allfinite = dtypes.is_nullable(x.dtype)
+        return QuantizeParams(dtype=np.uint8, offset=0, scale=1,
+                              orig_dtype=orig_dtype, allfinite=allfinite)
 
     u8_max = 255
     u16_max = 65535
     u32_max = (1 << 32) - 1
     u64_max = (1 << 63) + ((1 << 63) - 1)  # not a float since too large
     if not allow_nan_inf:
-        assert not np.any(np.isnan(x))
+        # assert not np.any(np.isnan(x))
         assert not np.any(np.isinf(x))
+        assert not np.any(pd.isna(x))
+        allfinite = True
     else:
-        mask = np.isfinite(x)
-        if not np.all(mask):
+        # mask = np.isfinite(x)
+        # mask = pd.notna(x)
+        # mask = np.isfinite(x)
+        # if not np.all(mask):
             # dtype could also be object, but in that case we'll fail
             # at quantizing it anyway, so might as well fail fast here
             # print("x dtype: ", x.dtype)
-            assert x.dtype.type in (np.float32, np.float64)  # nans in int ar?
+            # assert x.dtype.type in (np.float32, np.float64)  # nans in int ar?
+
+        mask = pd.notna(x)
         x = x[mask]
         if len(x) < 1:
             # all values are nan or inf; might as well encode them
             # with just one byte each
-            return QuantizeParams(dtype=np.uint8, offset=np.nan,
-                                  scale=np.nan, orig_dtype=orig_dtype)
+            # XXX this conflates nan, inf, and -inf
+            return QuantizeParams(
+                dtype=np.uint8, offset=np.nan, allfinite=False,
+                scale=np.nan, orig_dtype=orig_dtype)
             # raise ValueError("input contained no finite values. "
             #                  "Cannot infer parameters")
-        u8_max -= 1
-        u16_max -= 1
-        u32_max -= 1
-        u64_max -= 1
+        allfinite = len(x) == len(mask)
+        if not allfinite: # at least one nan or inf
+            allfinite = False
+            u8_max -= 1
+            u16_max -= 1
+            u32_max -= 1
+            u64_max -= 1
 
     print("qparams: type(x), x.dtype", type(x), x.dtype)
     offset = x.min() if offset is None else offset
@@ -72,13 +84,15 @@ def infer_qparams(x, offset=None, scale='lossless_base10', dtype=None,
             x_scaled = x_offset * scale
             x_scaled_ints = np.round(x_scaled).astype(np.int64)
             diffs = x_scaled - x_scaled_ints
-            if np.abs(diffs).max() < 10 ** (-shift - 2):
+            # less than 1% unexplained
+            if np.log10(np.abs(diffs).max() + 1e-20) < -2:
                 break
         scale = int(scale)
     else:
         raise ValueError(
             f"Scale must be a number or valid string; got '{scale}'")
 
+    print("x maxval, shift, scale: ", x.max(), shift, scale)
     if dtype is None:
         maxval = (x_offset * scale).max()
         if maxval <= u8_max:
@@ -91,13 +105,14 @@ def infer_qparams(x, offset=None, scale='lossless_base10', dtype=None,
             dtype = np.uint64
         else:
             raise ValueError(f"offset and scaled maximum value {maxval} is "
-                             "large to quantize")
+                             "too large to quantize (originally "
+                             f"~{maxval / scale + offset}")
 
     # return QuantizeParams(dtype=dtype, offset=offset, scale=scale,
     #                       orig_dtype=orig_dtype)
 
     ret = QuantizeParams(dtype=dtype, offset=offset, scale=scale,
-                         orig_dtype=orig_dtype)
+                         orig_dtype=orig_dtype, allfinite=allfinite)
     # print("inferred qparams: ", ret)
     return ret
 
@@ -106,19 +121,37 @@ def _naninf_val_for_dtype(dtype):
     if isinstance(dtype, np.dtype):
         # print("got dtype: ", dtype, type(dtype))
         dtype = dtype.type  # handle dtype object vs its type
-    return {np.uint8: 255, np.uint16: 65535,
+    return {np.uint8: 255,
+            np.uint16: 65535,
             np.uint32: ((1 << 32) - 1),
             np.uint64: (1 << 63) + ((1 << 63) - 1),
+            np.float16: np.nan,
+            np.float32: np.nan,
+            np.float64: np.nan,
             }.get(dtype)
 
 
 def quantize(x, qparams):
     x = x - qparams.offset
     x = x * qparams.scale  # not in place so that float scale works on int x
-    mask = ~np.isfinite(x)
-    x = np.round(x).astype(qparams.dtype)
-    x[mask] = _naninf_val_for_dtype(qparams.dtype)
-    return x
+    mask = pd.notna(x)
+    ret = np.empty(x.shape, dtype=qparams.dtype)
+    # if pd.api.types.is_integer_dtype(qparams.dtype):
+    #     # print("mask: ", mask, type(mask), mask.dtype, pd.isna(mask).sum())
+    #     # print("x[mask]: ", x[mask], type(x[mask]), x[mask].dtype, pd.isna(x[mask]).sum())
+    #     if dtypes.is_float(x.dtype):
+    #         x = np.round(x[mask])
+        # ret[mask] = x[mask]
+        # print("x[mask]: ", x[mask])
+    # else:
+        # ret[mask] = x[mask]
+    # x = np.round(x).astype(qparams.dtype)
+    if dtypes.is_int(qparams.dtype) and dtypes.is_float(x.dtype):
+            x = np.round(x[mask])
+    ret[mask] = x[mask]
+    ret[~mask] = _naninf_val_for_dtype(qparams.dtype)
+    print("quantize: using nanval: ", _naninf_val_for_dtype(qparams.dtype))
+    return ret
 
 
 def unquantize(x, qparams):
@@ -126,7 +159,12 @@ def unquantize(x, qparams):
     ret *= (1. / qparams.scale)
     ret = ret.astype(qparams.orig_dtype)
     ret += qparams.offset
-    if ret.dtype.type in (np.float32, np.float64):
+
+    # print("unquantize: using nanval: ", _naninf_val_for_dtype(qparams.dtype))
+
+    ret = pd.Series(ret)
+    if dtypes.is_nullable(qparams.orig_dtype) and not qparams.allfinite:
+        # print("yep, need to replace nans!")
         # no nan values for ints
         naninf_mask = x == _naninf_val_for_dtype(qparams.dtype)
         # print("naninf_mask: ", naninf_mask)

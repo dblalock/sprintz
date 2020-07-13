@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
 import abc
+from distutils.dir_util import copy_tree  # shutil.copytree fails if dir exists
 import os
 import shutil
 import tempfile
+
 
 import numpy as np
 import pandas as pd
@@ -20,8 +22,8 @@ class BaseDfSet(abc.ABC):
         assert dfsdir  # can't be empty or none
         assert filetype in ('csv', 'npy', 'parquet', 'h5')
         self._filetype = filetype
-        self.read_kwargs = read_kwargs or {}
-        self.write_kwargs = write_kwargs or {}
+        self._read_kwargs = read_kwargs or {}
+        self._write_kwargs = write_kwargs or {}
         self._endswith = '.' + filetype
         self._ids = None
         self._convert_slash_to = convert_slash_to
@@ -66,6 +68,11 @@ class BaseDfSet(abc.ABC):
         if self._ids is None or len(self._ids) == 0:
             self._ids = self._find_ids()
         return self._ids
+
+    @property
+    def dir(self):
+        return self._dfsdir
+
 
     def _all_paths(self):
         ret = []
@@ -268,11 +275,27 @@ class BaseDfSet(abc.ABC):
                     our_vals = self[dfid, col]
                     other_vals = other[dfid, col]
                     assert len(our_vals) == len(other_vals)
-                    # if col == 'a':
+                    # print("col: ", col)
+                    # if col == 'lon':
                     #     print("dfid, col = ", dfid, col)
                     #     print("our vals:", our_vals)
                     #     print("other vals:", other_vals)
-                    assert np.allclose(our_vals, other_vals)
+                    # noteq = our_vals != other_vals
+                    # print("number of neq vals: ", noteq.sum())
+                    # print("some not eq vals: ")
+                    # print(our_vals[noteq][:10], other_vals[noteq][:10])
+                    # print("some not eq idxs: ")
+                    # print(np.arange(len(our_vals))[noteq][:10])
+
+                    our_mask = pd.notna(our_vals)
+                    other_mask = pd.notna(other_vals)
+                    assert np.array_equal(our_mask, other_mask)
+                    our_nonnans = our_vals[our_mask]
+                    other_nonnans = other_vals[other_mask]
+                    # assert np.array_equal(our_nonnans, other_nonnans)
+                    assert np.allclose(our_nonnans, other_nonnans)
+
+                    # assert np.allclose(our_vals, other_vals, equal_nan=True)
                     # assert np.allclose(
                     #     np.sort(our_vals), np.sort(other_vals))
         except AssertionError as e:
@@ -293,13 +316,29 @@ class BaseDfSet(abc.ABC):
             #     print(f"col: '{col}'")
             #     other[dfid, col] = self[dfid, col]
 
-    def copy(self, dfsdir=None, **kwargs):
+    def copy(self, dfsdir, clobberdir=True, **kwargs):
+        nokwargs = not kwargs
         kwargs.setdefault('filetype', self.filetype)
+        kwargs.setdefault('convert_slash_to', self._convert_slash_to)
         if kwargs['filetype'] == self.filetype:
-            kwargs.setdefault('read_kwargs', self.read_kwargs.copy())
-            kwargs.setdefault('write_kwargs', self.write_kwargs.copy())
+            kwargs.setdefault('read_kwargs', self._read_kwargs.copy())
+            kwargs.setdefault('write_kwargs', self._write_kwargs.copy())
+
+        # TODO have a well-defined params() method instead of just
+        # looking at which args in init need to be copied
+
+        print(f"copying from {self.dir} to {dfsdir}")
+
+        if nokwargs:  # same format, so can just copy files
+            if clobberdir and os.path.exists(dfsdir):
+                shutil.rmtree(dfsdir)
+            # this line needs python 3.8 to get the dirs_exist_ok param
+            # shutil.copytree(self.dir, dfsdir, dirs_exist_ok=not clobberdir)
+            copy_tree(self.dir, dfsdir)
+            return make_dfset(dfsdir=dfsdir, **kwargs)
+
         other = make_dfset(dfsdir=dfsdir, **kwargs)
-        self.clone_into(other)
+        self.clone_into(other)  # maybe different fmt, so need to read + write
         return other
 
     # def nfiles(self):
@@ -308,12 +347,12 @@ class BaseDfSet(abc.ABC):
     # def __getitem__(self, dfid, cols=None):
     #     path = self._path_from_id(dfid)
     #     if self._filetype == 'csv':
-    #         df = pd.read_csv(path, **self.read_kwargs)
+    #         df = pd.read_csv(path, **self._read_kwargs)
     #         if cols is not None:
     #             return df[cols]
     #         return df
     #     elif self._filetype == 'parquet':
-    #         return pd.read_parquet(path, columns=cols, **self.read_kwargs)
+    #         return pd.read_parquet(path, columns=cols, **self._read_kwargs)
 
 
 class CsvDfSet(BaseDfSet):
@@ -322,16 +361,16 @@ class CsvDfSet(BaseDfSet):
     def __init__(self, *args, **kwargs):
         kwargs['filetype'] = 'csv'
         super().__init__(*args, **kwargs)
-        self.read_kwargs.setdefault('delimiter', ',')
-        self.write_kwargs.setdefault('delimiter', ',')
+        self._read_kwargs.setdefault('delimiter', ',')
+        self._write_kwargs.setdefault('delimiter', ',')
 
     def _read_col_from_path(self, path):
         # print("reading from path: ", path)
-        return np.loadtxt(path, **self.read_kwargs)
+        return np.loadtxt(path, **self._read_kwargs)
 
     def _write_col_to_path(self, path, values):
         # print("writing to path: ", path)
-        np.savetxt(path, np.asarray(values), **self.write_kwargs)
+        np.savetxt(path, np.asarray(values), **self._write_kwargs)
 
 
 class NpyDfSet(BaseDfSet):
@@ -340,15 +379,15 @@ class NpyDfSet(BaseDfSet):
         kwargs['filetype'] = 'npy'
         super().__init__(*args, **kwargs)
         # compression is a good idea, but messes up file size measurements
-        # self.write_kwargs.setdefault('compression', None)
+        # self._write_kwargs.setdefault('compression', None)
 
     def _read_col_from_path(self, path):
         # print("reading from path: ", path)
-        return np.load(path, **self.read_kwargs)
+        return np.load(path, **self._read_kwargs)
 
     def _write_col_to_path(self, path, values):
         # print("writing to path: ", path)
-        np.save(path, np.asarray(values), **self.write_kwargs)
+        np.save(path, np.asarray(values), **self._write_kwargs)
 
 
 class ParquetDfSet(BaseDfSet):
@@ -356,12 +395,15 @@ class ParquetDfSet(BaseDfSet):
     def __init__(self, *args, **kwargs):
         kwargs['filetype'] = 'parquet'
         super().__init__(*args, **kwargs)
-        self.write_kwargs.setdefault('compression', 'snappy')
-        self.write_kwargs.setdefault('index', False)
+        # self._write_kwargs.setdefault('compression', 'Zstd')
+        # self._write_kwargs.setdefault('compression', 'gzip')
+        # self._write_kwargs.setdefault('compression', 'snappy')
+        self._write_kwargs.setdefault('compression', None)
+        self._write_kwargs.setdefault('index', False)
 
     def _read_col_from_path(self, path):
         # print("reading from path: ", path)
-        return pd.read_parquet(path, **self.read_kwargs)['_']
+        return pd.read_parquet(path, **self._read_kwargs)['_']
 
     def _write_col_to_path(self, path, values):
         # # print("parquet write: path =", path)
@@ -381,13 +423,13 @@ class ParquetDfSet(BaseDfSet):
         #     df = pd.DataFrame.from_dict({'_': values})
         # except ValueError:  # happens if values is a
         s = pd.Series(values, dtype=values.dtype, name='_')
-        s.to_frame().to_parquet(path, **self.write_kwargs)
+        s.to_frame().to_parquet(path, **self._write_kwargs)
         # print("s shape: ", s.shape)
         # df = s.to_frame()
         # print("df shape: ", df.shape)
         # df = pd.DataFrame.from_dict({'_': values}, dtype=values.dtype)
         # df = pd.DataFrame.from_dict({'_': s})
-        # return df.to_parquet(path, **self.write_kwargs)
+        # return df.to_parquet(path, **self._write_kwargs)
 
 
 class H5DfSet(BaseDfSet):
@@ -399,19 +441,19 @@ class H5DfSet(BaseDfSet):
         kwargs['filetype'] = 'h5'
         super().__init__(*args, **kwargs)
         # we're mostly using h5 as a way to get bzip2
-        self.write_kwargs.setdefault('complib', 'bzip2')
-        self.write_kwargs.setdefault('complevel', 9)
+        self._write_kwargs.setdefault('complib', 'bzip2')
+        self._write_kwargs.setdefault('complevel', 9)
 
     def _read_col_from_path(self, path):
         # print("reading from path: ", path)
-        # return pd.from_parquet(path, **self.read_kwargs)
-        return pd.read_hdf(path, mode='r', **self.read_kwargs)['_']
+        # return pd.from_parquet(path, **self._read_kwargs)
+        return pd.read_hdf(path, mode='r', **self._read_kwargs)['_']
 
     def _write_col_to_path(self, path, values):
         # print("writing to path: ", path)
         # df = pd.Series.from_array(values)
         df = pd.DataFrame.from_dict({'_': values})
-        return df.to_hdf(path, key='_', mode='w', **self.write_kwargs)
+        return df.to_hdf(path, key='_', mode='w', **self._write_kwargs)
 
 
 def make_dfset(filetype, dfsdir=None, csvsdir=None, dtypes=None, **kwargs):

@@ -521,7 +521,7 @@ class Quantize(BaseCodec):
         # TODO support just going from f64 to f32 (as opposed outputing ints)?
 
     def encode_col(self, vals, col):
-        print("quantize encoding col", col, vals.dtype)
+        # print("quantize encoding col with dtype", col, vals.dtype)
         if col in self._col2qparams:
             qparams = self._col2qparams[col]
             return_qparams = False
@@ -530,7 +530,10 @@ class Quantize(BaseCodec):
             qparams = dfq.infer_qparams(vals)
             return_qparams = True
 
+        # print("quantize: col, dtype, qdtype, orig_dtype", col, vals.dtype, qparams.dtype, qparams.orig_dtype)
         ret = dfq.quantize(vals, qparams)
+        # print("ret dtype, qparams dtype: ", ret.dtype, qparams.dtype)
+        # print("qparams: ", qparams)
         # print("returning quantized vals:\n", ret, ret.dtype)
         assert ret.dtype == qparams.dtype
         return ret, qparams if return_qparams else None

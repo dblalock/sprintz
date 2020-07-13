@@ -60,7 +60,7 @@ def encode(dfs, codeclist):
         for dfid in dfids:
             headerlist = []
             # df = dfs[dfid]
-            # print("dfid: ", dfid)
+            print("dfid: ", dfid)
             # import sys; sys.exit()
             for est in codeclist:
                 # print("encode: est class, cols: ", type(est), est.cols())
@@ -129,7 +129,8 @@ def decode(dfs, codeclist, headers):
 
 # def encode_measure_decode(csvdir, dfsdir, codeclist, filetype='h5', **dfset_kwargs):
 # def encode_measure_decode(dfs, codeclist, check_correct=True, **dfset_kwargs):
-def encode_measure_decode(dfs, codeclist, check_correct=True):
+def encode_measure_decode(dfs, codeclist, check_correct=True,
+                          check_correct_inplace=False, check_file_sizes=False):
     # dfs = dfset.make_dfset(csvdir, dfsdir, filetype=filetype, **dfset_kwargs)
 
     with tempfile.TemporaryDirectory() as dirpath:
@@ -153,46 +154,71 @@ def encode_measure_decode(dfs, codeclist, check_correct=True):
 
         if check_correct:
 
-            # print("a orig:\n", dfs_orig['df0', 'a'])
-            # print("c orig:\n", dfs_orig['df0', 'c'])
-            # print(dfs_orig['df0', 'c'].dtypes)
-            # print("a comp: ", dfs['df0', 'a'])
-            # print(dfs['df0', 'a'].dtypes)
-            # print(dfs['df0', 'a'].dtypes)
-            # print("c comp:\n", dfs['df0', 'c'])
-            # print(dfs['df0', 'c'].dtypes)
-            decode(dfs, codeclist, headerlist)
-            # print("a hat:\n", dfs['df0', 'a'])
-            # print(dfs['df0', 'a'].dtypes)
-            # print("c hat:\n", dfs['df0', 'c'])
-            # print(dfs['df0', 'c'].dtypes)
-            # print("------------------------")
-            sizes_df_decomp = dfs.file_sizes()
+            with tempfile.TemporaryDirectory() as checkdir:
+                if check_correct_inplace:
+                    dfs_hat = dfs
+                else:
+                    dfs_hat = dfs.copy(dfsdir=checkdir)
 
-            # dfid = 'df1'
-            # a_orig = dfs_orig[dfid, 'a']
-            # a_hat = dfs[dfid, 'a']
-            # assert np.allclose(a_orig, a_hat)
+                # print("a orig:\n", dfs_orig['df0', 'a'])
+                # print("c orig:\n", dfs_orig['df0', 'c'])
+                # print(dfs_orig['df0', 'c'].dtypes)
+                # print("a comp: ", dfs['df0', 'a'])
+                # print(dfs['df0', 'a'].dtypes)
+                # print(dfs['df0', 'a'].dtypes)
+                # print("c comp:\n", dfs['df0', 'c'])
+                # print(dfs['df0', 'c'].dtypes)
+                decode(dfs_hat, codeclist, headerlist)
+                # print("a hat:\n", dfs['df0', 'a'])
+                # print(dfs['df0', 'a'].dtypes)
+                # print("c hat:\n", dfs['df0', 'c'])
+                # print(dfs['df0', 'c'].dtypes)
+                # print("------------------------")
+                sizes_df_decomp = dfs.file_sizes()
 
-            sizes_df_orig.sort_values(['dfid', 'col'], axis=0, inplace=True)
-            sizes_df_decomp.sort_values(['dfid', 'col'], axis=0, inplace=True)
-            sizes_orig = sizes_df_orig['nbytes'].values
-            sizes_decomp = sizes_df_decomp['nbytes'].values
+                # dfid = 'df1'
+                # a_orig = dfs_orig[dfid, 'a']
+                # a_hat = dfs[dfid, 'a']
+                # assert np.allclose(a_orig, a_hat)
 
-            # print("sizes dfs:")
-            # print(sizes_df_orig)
-            # print(sizes_df_decomp)
-            # print('sizes_orig', sizes_orig)
-            # # print('sizes_comp', sizes_comp)
-            # print('sizes_decomp', sizes_decomp)
+                sizes_df_orig.sort_values(
+                    ['dfid', 'col'], axis=0, inplace=True)
+                sizes_df_decomp.sort_values(
+                    ['dfid', 'col'], axis=0, inplace=True)
+                sizes_orig = sizes_df_orig['nbytes'].values
+                sizes_decomp = sizes_df_decomp['nbytes'].values
 
-            # full equality comparison
-            dfs_orig.equals(dfs, raise_error=True)
+                # print("sizes dfs:")
+                # print(sizes_df_orig)
+                # print(sizes_df_decomp)
+                # print('sizes_orig', sizes_orig)
+                # # print('sizes_comp', sizes_comp)
+                # print('sizes_decomp', sizes_decomp)
 
-            # first sanity check file sizes
-            assert np.array_equal(sizes_orig, sizes_decomp)
-            # full equality comparison
-            dfs_orig.equals(dfs, raise_error=True)
+                # full equality comparison
+                dfs_orig.equals(dfs_hat, raise_error=True)
+
+                # check file sizes
+                # print("sizes orig, decomp:")
+                # print(sizes_orig)
+                # print(sizes_decomp)
+                # vals0 = dfs['2137141111', 'lon']
+                # vals1 = dfs_hat['2137141111', 'lon']
+                # print(vals0.shape, vals0.values.itemsize)
+                # print(vals1.shape, vals1.values.itemsize)
+                if check_file_sizes:
+                    # this only makes sense if the data for the dfs passed in
+                    # was created with the same compression-related params as
+                    # the dfs itself; this might be true, eg, if it got its
+                    # data from a parquet dfset with no compression, while
+                    # it was initialized to used compression; it will
+                    # succesfully read those files, but their sizes won't match
+                    # what it would have written itself (and by extension, what
+                    # our dfs_hat writes)
+                    assert np.array_equal(sizes_orig, sizes_decomp)
+
+            #     print("does checkdir still exist?", os.path.exists(checkdir))
+            # print("does dirpath still exist?", os.path.exists(dirpath))
 
     return sizes_df_orig, sizes_df_comp
 
