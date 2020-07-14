@@ -11,7 +11,7 @@ from scipy import signal
 
 from python import dfquantize2 as dfq
 # from python import learning  # for compute_loss
-from python import compress
+from python import compress, dtypes
 
 
 def _wrap_in_list_if_str(obj):
@@ -41,9 +41,32 @@ def compute_loss(errs, loss='l2', axis=-1):
 
 class BaseCodec(abc.ABC):
 
-    def __init__(self, cols=None):
+    def __init__(self, cols=None, whitelist_types=None, blacklist_types=None):
         self._cols = _wrap_in_list_if_str(cols)  # None = all
         self._needs_training = False
+
+        self._whitelist_types = (self._whitelist_types()
+            if whitelist_types is None else whitelist_types)
+        self._blacklist_types = (self._blacklist_types()
+            if blacklist_types is None else blacklist_types)
+        self._whitelist_types = _wrap_in_list_if_str(self._whitelist_types)
+        self._blacklist_types = _wrap_in_list_if_str(self._blacklist_types)
+
+
+        # self._disallow_types = []
+        # if disallowed_types is not None and len(disallowed_types):
+        #     self.disallowed_types = disallowed_types
+        #     if 'numeric':
+
+        # self._disallow_numeric = False
+        # self._allow_boolean = True
+        # self._allow_boolean = True
+
+    def _blacklist_types(self):
+        return []
+
+    def _whitelist_types(self):
+        return []
 
     # @property
     def cols(self):
@@ -71,8 +94,17 @@ class BaseCodec(abc.ABC):
     def cols_to_use(self, df):
         cols = self.cols()
         if cols is not None:
-            return sorted(set(cols) & set(df.columns))
-        return sorted(df.columns)
+            cols = sorted(set(cols) & set(df.columns))
+        else:
+            cols = sorted(df.columns)
+        if self._blacklist_types:
+            cols = [col for col in cols if not dtypes.dtype_in_list(
+                dtype, self._blacklist_types)]
+        if self._blacklist_types:
+            cols = [col for col in cols if dtypes.dtype_in_list(
+                dtype, self._whitelist_types)]
+
+        return cols
 
     # @property
     def needs_training(self):
@@ -122,6 +154,12 @@ class BaseCodec(abc.ABC):
         pass  # either overwrite this or decode()
 
 
+class NumericCodec(BaseCodec):
+
+    def _whitelist_types(self):
+        return 'numeric'
+
+
 class Debug(BaseCodec):
 
     def encode(self, df):
@@ -168,7 +206,11 @@ def _extract_values_array(vals):
         return vals
 
 
-class Delta(BaseCodec):
+class BoolDelta(BaseCodec):
+    pass  # TODO; can't just uint8 because -1 and +1 delta are the same
+
+
+class Delta(NumericCodec):
 
     def encode_col(self, vals, col_unused):
         vals = _extract_values_array(vals)
@@ -180,7 +222,7 @@ class Delta(BaseCodec):
         return _cumsum_1d(vals)
 
 
-class DoubleDelta(BaseCodec):
+class DoubleDelta(NumericCodec):
 
     def encode_col(self, vals, col_unused):
         vals = _extract_values_array(vals)
@@ -193,7 +235,7 @@ class DoubleDelta(BaseCodec):
         return _cumsum_1d(_cumsum_1d(vals))
 
 
-class DynamicDelta(BaseCodec):
+class DynamicDelta(NumericCodec):
 
     def __init__(self, *args, block_len=3, loss='logabs', **kwargs):
         super().__init__(*args, **kwargs)
@@ -344,6 +386,9 @@ class DynamicDelta(BaseCodec):
 
 class ByteShuffle(BaseCodec):
 
+    def _whitelist_types(self):
+        return [dtypes.is_fixed_size]
+
     def encode_col(self, vals, col_unused):
         vals = _extract_values_array(vals)
         if vals.itemsize == 1:
@@ -456,7 +501,7 @@ class CodecSearch(BaseCodec):
         return df[use_cols]
 
 
-class ColSumPredictor(BaseCodec):
+class ColSumPredictor(NumericCodec):
     """predicts a column as the (weighted) sum of one or more other columns"""
 
     def __init__(self, cols_to_sum, col_to_predict, padding='same',
@@ -568,13 +613,13 @@ class Zigzag(BaseCodec):
 
     def encode_col(self, vals, col_unused):
         vals = _extract_values_array(vals)
-        if self._safe and vals.dtype not in dfq.INT_TYPES:
+        if self._safe and not dtypes.is_int(vals.dtype):
             return vals, None  # just ignore non-int cols instead of failing
         return compress.zigzag_encode(vals), None
 
     def decode_col(self, vals, col_unused, header_unused):
         vals = _extract_values_array(vals)
-        if self._safe and vals.dtype not in dfq.INT_TYPES:
+        if self._safe and not dtypes.is_int(vals.dtype):
             return vals
         # print(f"zigzag decoding col: {col_unused} with dtype {vals.dtype}")
         # print("zigzag dec got vals: ", vals, vals.dtype)

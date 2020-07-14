@@ -39,16 +39,62 @@ def nullable_equivalent(dtype):
     return NULLABLE_TO_NONNULLABLE_INT_DTYPE[dtype]
 
 
+def is_complex(dtype):
+    return pd.api.types.is_complex_dtype(dtype)
+
+
 def is_float(dtype):
     return pd.api.types.is_float_dtype(dtype)
     # return _canonicalize(dtype) in FLOAT_TYPES
 
 
+def is_numeric(dtype):
+    return pd.api.types.is_float_dtype(dtype)
+
+
 def is_boolean(dtype):
     return _canonicalize(dtype) in BOOLEAN_DTYPES
 
+
 def is_int(dtype):
     return pd.api.types.is_integer_dtype(dtype)
+
+
+def is_signed_int(dtype):
+    return pd.api.types.is_signed_integer_dtype(dtype)
+
+
+def is_unsigned_int(dtype):
+    return pd.api.types.is_unsigned_integer_dtype(dtype)
+
+
+def is_object(dtype):
+    return pd.api.types.is_object_dtype(dtype)
+
+
+def is_pandas_extension_type(dtype):
+    return api.types.is_extension_array_dtype(dtype)
+
+
+def is_fixed_size(dtype):
+    if is_object(dtype):
+        return False
+    return True
+
+    # # try:
+    # #     ar = np.array([], dtype=dtype)
+    # #     _ = ar.itemsize
+    # # # dtype = _canonicalize(dtype)
+
+    # if is_float(dtype):
+    #     return True
+    # if is_complex(dtype):
+    #     return True
+
+
+    # # XXX string and byte dtypes can be fixed size
+    # return not np.is_nullable(dtype)
+
 
 def is_nullable(dtype):
     dtype = _canonicalize(dtype)
@@ -60,5 +106,51 @@ def is_nullable(dtype):
     # XXX include other nullable dtypes
 
     return False
+
+
+# used for codec type whitelists/blacklists
+# note that typelist can contain types, unary functions of types, and
+# keywords like "numeric"
+# note that this is an OR of whether it matches each one, not AND
+def dtype_in_list(dtype, typelist):
+    dtype = _canonicalize(dtype)
+    typelist = [_canonicalize(dtype_or_func) for dtype_or_func in typelist]
+
+    if dtype in typelist:
+        return True  # easy case; dtype is in typelist
+
+    for typ_or_func in typelist:
+        if callable(type_or_func):
+            f = type_or_func
+            if f(dtype):
+                return True
+        else:  # not callable
+            typ = type_or_func
+            if typ == 'numeric' and is_numeric(dtype):
+                return True
+            if typ == 'anyint' and is_int(dtype):
+                return True
+            if typ == 'signedint' and is_signed_int(dtype):
+                return True
+            if typ == 'unsignedint' and is_unsigned_int(dtype):
+                return True
+            if typ == 'complex' and is_complex(dtype):
+                return True
+            if typ == 'anyfloat' and is_float(dtype):
+                return True
+            if typ == 'anybool' and is_boolean(dtype):
+                return True
+            if typ == 'nullable' and is_nullable(dtype):
+                return True
+            if typ == 'nonnullable' and not is_nullable(dtype):
+                return True
+            if typ == np.object and is_object(dtype):
+                return True
+
+    return False
+
+
+
+        # f = to_func()
 
 

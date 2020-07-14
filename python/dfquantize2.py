@@ -62,7 +62,7 @@ def infer_qparams(x, offset=None, scale='lossless_base10', dtype=None,
             u32_max -= 1
             u64_max -= 1
 
-    print("qparams: type(x), x.dtype", type(x), x.dtype)
+    # print("qparams: type(x), x.dtype", type(x), x.dtype)
     offset = x.min() if offset is None else offset
     x_offset = x - offset
 
@@ -92,7 +92,7 @@ def infer_qparams(x, offset=None, scale='lossless_base10', dtype=None,
         raise ValueError(
             f"Scale must be a number or valid string; got '{scale}'")
 
-    print("x maxval, shift, scale: ", x.max(), shift, scale)
+    # print("x maxval, shift, scale: ", x.max(), shift, scale)
     if dtype is None:
         maxval = (x_offset * scale).max()
         if maxval <= u8_max:
@@ -147,10 +147,11 @@ def quantize(x, qparams):
         # ret[mask] = x[mask]
     # x = np.round(x).astype(qparams.dtype)
     if dtypes.is_int(qparams.dtype) and dtypes.is_float(x.dtype):
-            x = np.round(x[mask])
-    ret[mask] = x[mask]
+        ret[mask] = np.round(x[mask])
+    else:
+        ret[mask] = x[mask]
     ret[~mask] = _naninf_val_for_dtype(qparams.dtype)
-    print("quantize: using nanval: ", _naninf_val_for_dtype(qparams.dtype))
+    # print("quantize: using nanval: ", _naninf_val_for_dtype(qparams.dtype))
     return ret
 
 

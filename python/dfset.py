@@ -327,7 +327,7 @@ class BaseDfSet(abc.ABC):
         # TODO have a well-defined params() method instead of just
         # looking at which args in init need to be copied
 
-        print(f"copying from {self.dir} to {dfsdir}")
+        # print(f"copying from {self.dir} to {dfsdir}")
 
         if nokwargs:  # same format, so can just copy files
             if clobberdir and os.path.exists(dfsdir):

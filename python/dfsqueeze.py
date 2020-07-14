@@ -60,7 +60,7 @@ def encode(dfs, codeclist):
         for dfid in dfids:
             headerlist = []
             # df = dfs[dfid]
-            print("dfid: ", dfid)
+            # print("dfid: ", dfid)
             # import sys; sys.exit()
             for est in codeclist:
                 # print("encode: est class, cols: ", type(est), est.cols())
