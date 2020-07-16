@@ -20,7 +20,8 @@ def infer_qparams(x, offset=None, scale='lossless_base10', dtype=None,
 
     # print("x dtype, is_boolean, is_nullable", x.dtype, dtypes.is_boolean(x.dtype), dtypes.is_nullable(x.dtype))
     if dtypes.is_boolean(x.dtype):
-        allfinite = dtypes.is_nullable(x.dtype)
+        # allfinite = dtypes.is_nullable(x.dtype)
+        allfinite = (not np.any(pd.isna(x))) and (not np.any(pd.isinf(x)))
         return QuantizeParams(dtype=np.uint8, offset=0, scale=1,
                               orig_dtype=orig_dtype, allfinite=allfinite)
 
@@ -56,7 +57,6 @@ def infer_qparams(x, offset=None, scale='lossless_base10', dtype=None,
             #                  "Cannot infer parameters")
         allfinite = len(x) == len(mask)
         if not allfinite: # at least one nan or inf
-            allfinite = False
             u8_max -= 1
             u16_max -= 1
             u32_max -= 1
@@ -199,34 +199,30 @@ def unquantize(x, qparams):
     #
     # observe that, for original type of int, scale <= 1
 
-    if dtypes.is_nullable(qparams.orig_dtype) and not qparams.allfinite:
-        naninf_mask = x == _naninf_val_for_dtype(qparams.dtype)
-        x_nan = x[naninf_mask]
-        x_notnan = x[~naninf_mask]
-    else:
+    # if not qparams.allfinite and dtypes.is_nullable(qparams.orig_dtype):
+    if qparams.allfinite:
+        # print("no naninfs!")
         naninf_mask = np.zeros(len(x)) != 0  # all False
         x_nan = np.array([], dtype=x.dtype)
         x_notnan = x
+    else:
+        naninf_mask = x == _naninf_val_for_dtype(qparams.dtype)
+        # print("computed naninf_mask: ", naninf_mask)
+        x_nan = x[naninf_mask]
+        x_notnan = x[~naninf_mask]
 
     if qparams.scale != 1:
         x_notnan = x_notnan.astype(np.float64)
         x_notnan *= (1. / qparams.scale)
 
-
-    # scale_power_of_two = dtypes.is_int(qparams.scale) and _is_power_of_2(qparams.scale)
-    # scale_power_of_two =
     # print("unquantize: qparams: ", qparams)
+    # print("unquantize: orig dtype nullable: ", dtypes.is_nullable(qparams.orig_dtype))
+    # print("unquantize: naninf val:   ", _naninf_val_for_dtype(qparams.dtype))
+    # print("unquantize: naninf mask:  ", naninf_mask)
+    # print("unquantize: ~naninf mask: ", ~naninf_mask)
+    # print("unquantize: x before unquantize: ", x, x.dtype)
     # print("unquantize: x type, dtype", type(x), x.dtype)
     # print("unquantize: scale power of two?: ", _is_power_of_2(qparams.scale))
-    # if _is_power_of_2(qparams.scale):
-    #     if dtypes.is_int(qparams.orig_dtype):
-    #     shift = int(np.log2(int(qparams.scale)))
-    #     # ret = x / int(qparams.scale)
-    # if qparams.scale == 1:
-    #     ret = x
-    # else:
-    #     ret = x.astype(np.float64)
-    #     ret *= (1. / qparams.scale)
 
     # pandas series astype() lacks unsafe casting, so we have to create
     # numpy array first, and then insert it into the series we return
@@ -236,8 +232,24 @@ def unquantize(x, qparams):
 
     ret = pd.Series(np.empty(len(x), dtype=cast_dtype), dtype=qparams.orig_dtype)
     # print("unquantize: initial ret dtype: ", ret.dtype)
-    ret[~naninf_mask] = x_notnan
-    ret[naninf_mask] = pd.NA
+
+    # # print("naninf_mask: ", naninf_mask)
+    # print("x notnan: ", x_notnan)
+    # print("ret notnan: ", ret[~naninf_mask])
+    # # print("x notnan: ", x_notnan)
+
+    ret.iloc[~naninf_mask] = x_notnan
+    # print("ret before naninf assign: ", ret)
+
+    # EDIT: even when naninf mask is all zeros, this turns int-valued ret
+    # into floats
+    if not qparams.allfinite:
+        # works even for pd nullable ints; pd.NA fails on floats
+        ret.iloc[naninf_mask] = np.nan
+
+    # print("ret: ", ret)
+
+    assert ret.dtype == qparams.orig_dtype
 
     # print("unquantize: cast_dtype: ", cast_dtype)
     # print("unquantize: ret dtype: ", ret.dtype)
@@ -257,12 +269,12 @@ def unquantize(x, qparams):
     # return x.astype(qparams.orig_dtype)
 
 
-def mask_for_dtype(dtype):
-    if not isinstance(dtype, np.dtype):
-        dtype = dtype.type  # handle dtype object vs its type
-    return {np.uint8: 0xff, np.uint16: 0xffff,
-            np.uint32: 0xffffffff}.get(dtype)
-    # d = {np.dtype(k): v for k, v in d.items()}
-    # return d.get(dtype)
+# def mask_for_dtype(dtype):
+#     if not isinstance(dtype, np.dtype):
+#         dtype = dtype.type  # handle dtype object vs its type
+#     return {np.uint8: 0xff, np.uint16: 0xffff,
+#             np.uint32: 0xffffffff}.get(dtype)
+#     # d = {np.dtype(k): v for k, v in d.items()}
+#     # return d.get(dtype)
 
-# def test_quantize_unquantize
+# # def test_quantize_unquantize

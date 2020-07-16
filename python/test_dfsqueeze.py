@@ -10,6 +10,7 @@ import unittest
 from python import dfset
 from python import dfsqueeze as sq
 from python import codec
+from python import utils
 
 
 MOCK_IN_DIR = 'debug_in'
@@ -247,14 +248,19 @@ class TestCodecs(DfsetTest):
             # print("qparams: ", qparams)
             # print("out:\n", out)
             a_hat = enc.decode_col(a_comp, 'foo', qparams)
-            # print("a_hat: ", a_hat)
+            # print("a_hat:\n", a_hat)
             # assert np.array_equal(a, a_hat)
             assert a.dtype == a_hat.dtype
             if compr_dtype is not None:
                 # print("a_comp.dtype:", a_comp.dtype)
                 assert compr_dtype == a_comp.dtype
             # assert np.array_equal(a, a_hat, equal_nan=True)
-            assert np.allclose(a, a_hat, equal_nan=True)
+            # assert np.allclose(a, a_hat, equal_nan=True)
+            assert utils.allclose(a, a_hat, equal_nan=True)
+
+        s = pd.Series([pd.NA, 0], dtype='Int8')  # nullable int
+        _test_array(s, compr_dtype=np.uint8)
+        # return  # TODO rm
 
         a = np.arange(4, dtype=np.float32)
         a[0] = np.nan
@@ -266,6 +272,7 @@ class TestCodecs(DfsetTest):
 
         a = np.arange(4, dtype=np.int16)
         _test_array(a, compr_dtype=np.uint8)
+        # return
         _test_array(a.astype(np.int32), compr_dtype=np.uint8)
         _test_array(a.astype(np.int64), compr_dtype=np.uint8)
         maxval = (1 << 32) + ((1 << 32) - 1)
@@ -326,19 +333,6 @@ class TestCodecs(DfsetTest):
         pipelines += [[codec.DoubleDelta()]]
         encs = [codec.CodecSearch(pipelines=pipelines)]
         self._test_codecs_many_filetypes(encs)
-
-        # pipelines += [[codec.Quantize(), codec.DoubleDelta()]]
-        # pipelines = [[codec.Quantize(), codec.Delta()]]
-        # pipelines = [[codec.Delta()]]
-        # pipelines = [[codec.Quantize(cols='a'), codec.Delta(cols='a')]]
-        # pipelines = [[codec.Quantize(cols='a'), codec.DoubleDelta(cols='a')]]
-        # pipelines = [[codec.Quantize()]]
-        # pipelines = [[codec.Quantize(cols='a')]]
-        # pipelines = [[codec.Delta(cols='a')]]
-        # pipelines = [[codec.Quantize(cols='a'), codec.Delta(cols='a')]]
-        # pipelines += [[codec.Quantize(cols='c'), codec.Delta(cols='c')]]
-        # pipelines += [[codec.Quantize(cols='c'), codec.DoubleDelta(cols='c')]]
-        # pipelines += [[codec.Quantize(cols='c'), codec.Delta(cols='c'),
 
         pipelines = [[codec.Delta(cols='c'), codec.Zigzag(cols='c')]]  # works
         encs = [codec.CodecSearch(pipelines=pipelines)]

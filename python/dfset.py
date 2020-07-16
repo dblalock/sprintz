@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from python import simple_dataframe as sdf
+from python import utils  # for pd-compatible array comparisons
 
 
 class BaseDfSet(abc.ABC):
@@ -274,31 +275,35 @@ class BaseDfSet(abc.ABC):
                 for col in our_cols:
                     our_vals = self[dfid, col]
                     other_vals = other[dfid, col]
-                    assert len(our_vals) == len(other_vals)
-                    # print("col: ", col)
-                    # if col == 'lon':
-                    # if col == 'c':
-                    #     print("dfid, col = ", dfid, col)
-                    #     print("our vals:", our_vals)
-                    #     print("other vals:", other_vals)
-                    # noteq = our_vals != other_vals
-                    # print("number of neq vals: ", noteq.sum())
-                    # print("some not eq vals: ")
-                    # print(our_vals[noteq][:10], other_vals[noteq][:10])
-                    # print("some not eq idxs: ")
-                    # print(np.arange(len(our_vals))[noteq][:10])
 
-                    our_mask = pd.notna(our_vals)
-                    other_mask = pd.notna(other_vals)
-                    # if col == 'lon':
-                    #     print("dfid, col = ", dfid, col)
-                    #     print("our vals:", our_vals)
-                    #     print("other vals:", other_vals)
-                    assert np.array_equal(our_mask, other_mask)
-                    our_nonnans = our_vals[our_mask]
-                    other_nonnans = other_vals[other_mask]
-                    # assert np.array_equal(our_nonnans, other_nonnans)
-                    assert np.allclose(our_nonnans, other_nonnans)
+                    assert utils.allclose(our_vals, other_vals)
+
+                    # assert len(our_vals) == len(other_vals)
+                    # # print("col: ", col)
+                    # # if col == 'lon':
+                    # # if col == 'c':
+                    # # if col == 'gyro_valid':
+                    # #     print("dfid, col = ", dfid, col)
+                    # #     print("our vals:", our_vals)
+                    # #     print("other vals:", other_vals)
+                    # # noteq = our_vals != other_vals
+                    # # print("number of neq vals: ", noteq.sum())
+                    # # print("some not eq vals: ")
+                    # # print(our_vals[noteq][:10], other_vals[noteq][:10])
+                    # # print("some not eq idxs: ")
+                    # # print(np.arange(len(our_vals))[noteq][:10])
+
+                    # our_mask = pd.notna(our_vals)
+                    # other_mask = pd.notna(other_vals)
+                    # # if col == 'lon':
+                    # #     print("dfid, col = ", dfid, col)
+                    # #     print("our vals:", our_vals)
+                    # #     print("other vals:", other_vals)
+                    # assert np.array_equal(our_mask, other_mask)
+                    # our_nonnans = our_vals[our_mask]
+                    # other_nonnans = other_vals[other_mask]
+                    # # assert np.array_equal(our_nonnans, other_nonnans)
+                    # assert np.allclose(our_nonnans, other_nonnans)
 
                     # assert np.allclose(our_vals, other_vals, equal_nan=True)
                     # assert np.allclose(

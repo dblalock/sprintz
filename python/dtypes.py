@@ -5,26 +5,27 @@ import pandas as pd
 
 FLOAT_TYPES = [np.float16, np.float32, np.float64]
 
-UNSIGNED_INT_TYPES = [np.uint8, np.uint16, np.uint32, np.uint64]
-SIGNED_INT_TYPES = [np.int8, np.int16, np.int32, np.int64]
-NONNULLABLE_INT_TYPES = UNSIGNED_INT_TYPES + SIGNED_INT_TYPES
+_UNSIGNED_INT_TYPES = [np.uint8, np.uint16, np.uint32, np.uint64]
+_SIGNED_INT_TYPES = [np.int8, np.int16, np.int32, np.int64]
+_NONNULLABLE_INT_TYPES = _UNSIGNED_INT_TYPES + _SIGNED_INT_TYPES
 
-NULLABLE_SIGNED_INT_TYPES = [
+_NULLABLE_SIGNED_INT_TYPES = [
     pd.Int8Dtype, pd.Int16Dtype, pd.Int32Dtype, pd.Int64Dtype]
-NULLABLE_UNSIGNED_INT_TYPES = [
+_NULLABLE_UNSIGNED_INT_TYPES = [
     pd.UInt8Dtype, pd.UInt16Dtype, pd.UInt32Dtype, pd.UInt64Dtype]
-NULLABLE_INT_TYPES = NULLABLE_UNSIGNED_INT_TYPES + NULLABLE_SIGNED_INT_TYPES
+_NULLABLE_INT_TYPES = _NULLABLE_UNSIGNED_INT_TYPES + _NULLABLE_SIGNED_INT_TYPES
 
-NULLABLE_TO_NONNULLABLE_INT_DTYPE = dict(zip(
-    NULLABLE_INT_TYPES, NONNULLABLE_INT_TYPES))
-NONNULLABLE_TO_NULLABLE_INT_DTYPE = dict(zip(
-    NONNULLABLE_INT_TYPES, NULLABLE_INT_TYPES))
+_NULLABLE_TO_NONNULLABLE_INT_DTYPE = dict(zip(
+    _NULLABLE_INT_TYPES, _NONNULLABLE_INT_TYPES))
+_NONNULLABLE_TO_NULLABLE_INT_DTYPE = dict(zip(
+    _NONNULLABLE_INT_TYPES, _NULLABLE_INT_TYPES))
 
-NUMERIC_DTYPES = NONNULLABLE_INT_TYPES + NULLABLE_INT_TYPES + FLOAT_TYPES
+_NUMERIC_DTYPES = _NONNULLABLE_INT_TYPES + _NULLABLE_INT_TYPES + FLOAT_TYPES
 
 # NOTE: np.bool is alias of python bool, while np.bool_ is custom a numpy type
-BOOLEAN_DTYPES = [np.bool, np.bool_, pd.BooleanDtype]
+_BOOLEAN_DTYPES = [np.bool, np.bool_, pd.BooleanDtype]
 
+# _PANDAS_NULLABLE_DTYPES_INSTANTIATED = [t() for t in _NULLABLE_INT_TYPES] +
 
 def _canonicalize(dtype):
     try:
@@ -38,18 +39,18 @@ def nullable_equivalent(dtype):
     dtype = _canonicalize(dtype)
     if dtype in FLOAT_TYPES:
         return dtype
-    if dtype in NULLABLE_INT_TYPES:
+    if dtype in _NULLABLE_INT_TYPES:
         return dtype
-    return NULLABLE_TO_NONNULLABLE_INT_DTYPE[dtype]
+    return _NULLABLE_TO_NONNULLABLE_INT_DTYPE[dtype]
 
 
 def nonnullable_equivalent(dtype):
     dtype = _canonicalize(dtype)
     if dtype in FLOAT_TYPES:
         return dtype
-    if dtype in NONNULLABLE_INT_TYPES:
+    if dtype in _NONNULLABLE_INT_TYPES:
         return dtype
-    return NULLABLE_TO_NONNULLABLE_INT_DTYPE[dtype]
+    return _NULLABLE_TO_NONNULLABLE_INT_DTYPE[dtype]
 
 
 def signed_equivalent(dtype):
@@ -92,7 +93,7 @@ def is_numeric(dtype):
 
 
 def is_boolean(dtype):
-    return _canonicalize(dtype) in BOOLEAN_DTYPES
+    return _canonicalize(dtype) in _BOOLEAN_DTYPES
 
 
 def is_int(dtype):
@@ -136,15 +137,58 @@ def is_fixed_size(dtype):
 
 
 def is_nullable(dtype):
-    dtype = _canonicalize(dtype)
-    if dtype in NULLABLE_INT_TYPES:
-        return True
-    if dtype in FLOAT_TYPES:
-        return True
+    # dtype = _canonicalize(dtype)
+    # if dtype in _NULLABLE_INT_TYPES:
+    #     return True
+    # if dtype in FLOAT_TYPES:
+    #     return True
 
-    # XXX include other nullable dtypes
+    # you'd think there would be a nice way to check whether a dtype is
+    # in a list of known nullable dtypes, but for pandas nullable dtypes,
+    # there basically just isn't; you get madness like:
+    #   s = pd.Series(data=[1, 0, pd.NA], dtype=pd.Int8Dtype)
+    # throwing a ValueError for this being an invalid dtype, while
+    #   s = pd.Series(data=[1, 0, pd.NA], dtype='Int8') is fine
+    # and then
+    #   print(s.dtype in [pd.Int8Dtype])  # false
+    #   print(s.dtype.type in [pd.Int8Dtype])  # false
+    #   print(s.dtype, s.dtype.type)  # Int8 <class 'numpy.int8'>
+    # also
+    #   print(pd.Int8Dtype.type)  # <class 'numpy.int8'>
+    # The only thing that works is checking whether the dtype is in
+    # [pd.Int8Dtype()] (instantiated), but this doesn't work if we get
+    # passed in a the class pd.Int8Dtype; I suppose you could try both
+    # a master list of the nullable dtype classes and their instantiations,
+    # but at this point I only trust actually trying to put nans in it
+
+    # if _canonicalize(dtype) in FLOAT_TYPES:
+    #     return True  # below tests fail for float dtypes
+
+    try:
+        # NOTE: pd.NA will make this throw for floats, but np.nan always works
+        s = pd.Series(data=[np.nan], dtype=dtype)
+        return True
+    except (TypeError, ValueError):
+        pass
+
+    try:
+        # try instatiating the dtype (eg, pd.Int8Dtype -> pd.Int8Dtype() )
+        # NOTE: pd.NA will make this throw for floats, but np.nan always works
+        s = pd.Series(data=[np.nan], dtype=dtype())
+        return True
+    except (TypeError, ValueError):
+        pass
 
     return False
+    # dtype = _canonicalize(dtype)
+    # if dtype in _NULLABLE_INT_TYPES:
+    #     return True
+    # if dtype in FLOAT_TYPES:
+    #     return True
+
+    # # XXX include other nullable dtypes
+
+    # return False
 
 
 # used for codec type whitelists/blacklists
