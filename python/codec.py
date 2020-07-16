@@ -97,12 +97,25 @@ class BaseCodec(abc.ABC):
             cols = sorted(set(cols) & set(df.columns))
         else:
             cols = sorted(df.columns)
+
+        # TODO allow different whitelists and blacklists for encode
+        # and decode; might be needed for boolean delta
+
+        # print("cols to use before blacklist: ", cols)
+
         if self._blacklist_types:
             cols = [col for col in cols if not dtypes.dtype_in_list(
-                dtype, self._blacklist_types)]
-        if self._blacklist_types:
+                df[col].dtype, self._blacklist_types)]
+        # print("cols to use before whitelist: ", cols)
+        if self._whitelist_types:
             cols = [col for col in cols if dtypes.dtype_in_list(
-                dtype, self._whitelist_types)]
+                df[col].dtype, self._whitelist_types)]
+        # print("cols to use, final: ", cols)
+        # dtype = df['lon'].dtype
+        # print("lon dtype: ", dtype)
+        # print("whitelist types: ", self._whitelist_types)
+        # dtypes.dtype_in_list(
+        #         dtype, self._whitelist_types)
 
         return cols
 
@@ -129,7 +142,7 @@ class BaseCodec(abc.ABC):
 
     def encode(self, df):
         use_cols = self.cols_to_use(df)
-        # print("basecodec use cols: ", use_cols)
+        # print("basecodec encode: using cols: ", use_cols)
         col2header = {}
         for col in use_cols:
             # df[col], header = self.encode_col(df[col].values, col)
@@ -140,7 +153,9 @@ class BaseCodec(abc.ABC):
 
     def decode(self, df, header):
         col2header = header or {}
+        # print("basecodec decode: about to compute use_cols")
         use_cols = self.cols_to_use(df)
+        # print("basecodec decode: using cols: ", use_cols)
         for col in use_cols:
             df[col] = self.decode_col(
                 # df[col].values, col, col2header.get(col))
@@ -215,10 +230,12 @@ class Delta(NumericCodec):
     def encode_col(self, vals, col_unused):
         vals = _extract_values_array(vals)
         vals[1:] -= vals[:-1]
+        # return vals.view(dtypes.signed_equivalent(vals.dtype)), None
         return vals, None
 
     def decode_col(self, vals, col_unused, header_unused):
         vals = _extract_values_array(vals)
+        # return _cumsum_1d(vals).view(dtypes.unsigned_equivalent(vals.dtype))
         return _cumsum_1d(vals)
 
 
@@ -557,7 +574,7 @@ class ColSumPredictor(NumericCodec):
         return df[[self.col_to_predict]]
 
 
-class Quantize(BaseCodec):
+class Quantize(NumericCodec):
 
     def __init__(self, *args, col2qparams=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -566,7 +583,9 @@ class Quantize(BaseCodec):
         # TODO support just going from f64 to f32 (as opposed outputing ints)?
 
     def encode_col(self, vals, col):
-        # print("quantize encoding col with dtype", col, vals.dtype)
+        # print("quantize: encoding col with dtype", col, vals.dtype)
+        # print("whitelist types: ", self._whitelist_types)
+
         if col in self._col2qparams:
             qparams = self._col2qparams[col]
             return_qparams = False
@@ -584,6 +603,7 @@ class Quantize(BaseCodec):
         return ret, qparams if return_qparams else None
 
     def decode_col(self, vals, col, qparams):
+        # print("quantize: decoding col with dtype", col, vals.dtype)
         if qparams is None:
             qparams = self._col2qparams[col]  # None because defined a priori
         # print("quantize decoding col using qparams", col, qparams)

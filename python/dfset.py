@@ -277,6 +277,7 @@ class BaseDfSet(abc.ABC):
                     assert len(our_vals) == len(other_vals)
                     # print("col: ", col)
                     # if col == 'lon':
+                    # if col == 'c':
                     #     print("dfid, col = ", dfid, col)
                     #     print("our vals:", our_vals)
                     #     print("other vals:", other_vals)
@@ -289,6 +290,10 @@ class BaseDfSet(abc.ABC):
 
                     our_mask = pd.notna(our_vals)
                     other_mask = pd.notna(other_vals)
+                    # if col == 'lon':
+                    #     print("dfid, col = ", dfid, col)
+                    #     print("our vals:", our_vals)
+                    #     print("other vals:", other_vals)
                     assert np.array_equal(our_mask, other_mask)
                     our_nonnans = our_vals[our_mask]
                     other_nonnans = other_vals[other_mask]

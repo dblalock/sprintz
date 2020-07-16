@@ -6,6 +6,8 @@ import numpy as np
 import numba
 import zstandard as zstd  # pip install zstandard
 
+from python import dtypes
+
 
 # ================================================================ Funcs
 
@@ -80,21 +82,53 @@ def zigzag_encode(x):
         dtype = x.dtype
     except AttributeError:
         dtype = np.int32
+    orig_dtype = dtype
     x = np.asarray(x, dtype=dtype)
-    dtype = {np.uint8:  np.int8,  np.int8:   np.int8,
-             np.uint16: np.int16, np.int16:  np.int16,
-             np.uint32: np.int32, np.uint32: np.int32,
-             np.uint64: np.int64, np.int64:  np.int64}[x.dtype.type]
-    x = x.view(dtype)  # must view as signed type to get arithmetic shifts
+    signed_dtype = dtypes.signed_equivalent(x.dtype)
+    # unsigned_dtype = dtypes.unsigned_equivalent(x.dtype)
+
+    # print("zigzag_encode: x orig:  ", x)
+    x = x.view(signed_dtype)  # need signed type to get arithmetic shifts
+    # print("zigzag_encode: x signed:", x)
 
     shift = (x.itemsize * 8) - 1
-    return (x << 1) ^ (x >> shift)
-    # return _zigzag_encode(x)
+    # return ((x << 1) ^ (x >> shift)).astype(orig_dtype)
+    ret = ((x << 1) ^ (x >> shift))
+    # print("zigzag_encode: ret orig:  ", ret)
+    ret = ret.astype(orig_dtype)
+    # print("zigzag_encode: ret as orig type:  ", ret)
+
+    return ret
+    # return ((x << 1) ^ (x >> shift))
 
 
 @numba.njit(fastmath=True)
+def _zigzag_decode(x, dtype):
+# def _zigzag_decode(x):
+    return np.bitwise_xor(x >> 1, -np.bitwise_and(x, 1)).astype(dtype)
+    # return np.bitwise_xor(x >> 1, -np.bitwise_and(x, 1))
+    # ret = np.empty(x.shape, x.dtype)
+    # ret = np.empty(x.shape, dtype)
+    # for i in range(len(x)):
+    #     ret[i] = (x[i] >> 1) ^ (-x[i] & 1)
+    # return ret
+
+
 def zigzag_decode(x):
-    return np.bitwise_xor(x >> 1, -np.bitwise_and(x, 1)).astype(x.dtype)
+    # dtype = dtypes.unsigned_equivalent(x.dtype)
+    orig_dtype = x.dtype
+    # print("zigzag_encode: x orig:  ", x)
+    x = x.view(dtypes.signed_equivalent(x.dtype))  # for arithmetic shifts
+    # print("zigzag_encode: x signed:", x)
+    # return _zigzag_decode(x, orig_dtype)
+    ret = _zigzag_decode(x, orig_dtype)
+    # print("zigzag_decode: ret = ", ret)
+    return ret
+    # return _zigzag_decode(x)
+    # ret = _zigzag_decode(x).view()
+    # print(f"zigzag decode mapped type {orig_dtype} -> {ret.dtype}")
+    # return ret
+    # return np.bitwise_xor(x >> 1, -np.bitwise_and(x, 1)).astype(x.dtype)
 
 
 def quantize(X, nbits=16, minval=None, maxval=None):

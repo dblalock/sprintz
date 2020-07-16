@@ -146,6 +146,7 @@ def quantize(x, qparams):
     # else:
         # ret[mask] = x[mask]
     # x = np.round(x).astype(qparams.dtype)
+
     if dtypes.is_int(qparams.dtype) and dtypes.is_float(x.dtype):
         ret[mask] = np.round(x[mask])
     else:
@@ -155,22 +156,104 @@ def quantize(x, qparams):
     return ret
 
 
+def _is_power_of_2(x):
+    try:
+        n = int(x)
+        if n != x:
+            return False
+        return (n & (n - 1) == 0) and (n != 0)
+    except ValueError:
+        return False
+
+
 def unquantize(x, qparams):
-    ret = x.astype(np.float64)
-    ret *= (1. / qparams.scale)
-    ret = ret.astype(qparams.orig_dtype)
-    ret += qparams.offset
+    # unpack series into np array; series astype() is inadquate, and
+    # if input has been quantized, guaranteed to be a numpy type (not a
+    # nullable int) so no info loss
+    try:
+        x = x.values
+    except AttributeError:
+        pass
 
-    # print("unquantize: using nanval: ", _naninf_val_for_dtype(qparams.dtype))
+    assert x.dtype == qparams.dtype
+    if dtypes.is_int(qparams.orig_dtype):
+        assert qparams.scale <= 1  # no reason to expand ints
+    # if dtypes.is_float(qparams.scale):
+    #     ret = x.astype(np.float64)
+    #     ret *= (1. / qparams.scale)
+    # else:
+    #     ret
 
-    ret = pd.Series(ret)
+    # if dtypes.is_int(qparams.orig_dtype) and dtypes.is_int(x.dtype):
+
+
+    # if dtypes.scale(qparams.scale) != 1:
+    #     ret = x.astype(np.float64)
+    #     ret *= (1. / qparams.scale)
+
+    # three vars to think about:
+    #   -quantized dtype is int
+    #   -orig dtype is int
+    #   -scale is 1
+    #   -scale is power of 2
+    #
+    # observe that, for original type of int, scale <= 1
+
     if dtypes.is_nullable(qparams.orig_dtype) and not qparams.allfinite:
-        # print("yep, need to replace nans!")
-        # no nan values for ints
         naninf_mask = x == _naninf_val_for_dtype(qparams.dtype)
-        # print("naninf_mask: ", naninf_mask)
-        ret[naninf_mask] = np.nan
+        x_nan = x[naninf_mask]
+        x_notnan = x[~naninf_mask]
+    else:
+        naninf_mask = np.zeros(len(x)) != 0  # all False
+        x_nan = np.array([], dtype=x.dtype)
+        x_notnan = x
+
+    if qparams.scale != 1:
+        x_notnan = x_notnan.astype(np.float64)
+        x_notnan *= (1. / qparams.scale)
+
+
+    # scale_power_of_two = dtypes.is_int(qparams.scale) and _is_power_of_2(qparams.scale)
+    # scale_power_of_two =
+    # print("unquantize: qparams: ", qparams)
+    # print("unquantize: x type, dtype", type(x), x.dtype)
+    # print("unquantize: scale power of two?: ", _is_power_of_2(qparams.scale))
+    # if _is_power_of_2(qparams.scale):
+    #     if dtypes.is_int(qparams.orig_dtype):
+    #     shift = int(np.log2(int(qparams.scale)))
+    #     # ret = x / int(qparams.scale)
+    # if qparams.scale == 1:
+    #     ret = x
+    # else:
+    #     ret = x.astype(np.float64)
+    #     ret *= (1. / qparams.scale)
+
+    # pandas series astype() lacks unsafe casting, so we have to create
+    # numpy array first, and then insert it into the series we return
+    cast_dtype = dtypes.nonnullable_equivalent(qparams.orig_dtype)
+    x_notnan = x_notnan.astype(cast_dtype, casting='unsafe')
+    x_notnan += qparams.offset
+
+    ret = pd.Series(np.empty(len(x), dtype=cast_dtype), dtype=qparams.orig_dtype)
+    # print("unquantize: initial ret dtype: ", ret.dtype)
+    ret[~naninf_mask] = x_notnan
+    ret[naninf_mask] = pd.NA
+
+    # print("unquantize: cast_dtype: ", cast_dtype)
+    # print("unquantize: ret dtype: ", ret.dtype)
+
     return ret
+
+    # # print("unquantize: using nanval: ", _naninf_val_for_dtype(qparams.dtype))
+
+    # ret = pd.Series(ret)
+    # if dtypes.is_nullable(qparams.orig_dtype) and not qparams.allfinite:
+    #     # print("yep, need to replace nans!")
+    #     # no nan values for ints
+    #     naninf_mask = x == _naninf_val_for_dtype(qparams.dtype)
+    #     # print("naninf_mask: ", naninf_mask)
+    #     ret[naninf_mask] = np.nan
+    # return ret
     # return x.astype(qparams.orig_dtype)
 
 

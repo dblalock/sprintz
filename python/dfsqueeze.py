@@ -70,7 +70,6 @@ def encode(dfs, codeclist):
                 # s = dfs[dfid, 'gps_speed_unreliable']
                 # print(s, type(s), s.dtype)
 
-                # cols = est.cols_to_use(df)
                 subdf = dfs[dfid, est.cols()]
                 # print("about to encode df with cols: ", df.columns)
                 dirty_df, header = est.encode(subdf)
@@ -112,9 +111,9 @@ def decode(dfs, codeclist, headers):
             # cols = est.cols()
             # if cols is not None:
             #     cols = sorted(list(set(cols) & set(df.columns)))
-            cols = est.cols_to_use(df)
-
-            dirty_df = est.decode(df[cols], header)  # writes inplace
+            # cols = est.cols_to_use(df)
+            # dirty_df = est.decode(df[cols], header)  # writes inplace
+            dirty_df = est.decode(df, header)  # writes inplace
             dirty_cols = dirty_df.columns
             for col in dirty_cols:
                 df[col] = dirty_df[col]
@@ -148,6 +147,7 @@ def encode_measure_decode(dfs, codeclist, check_correct=True,
         # print("about to measure file sizes")
         sizes_df_orig = dfs.file_sizes()
         # print("about to encode")
+        print("================================ encode")
         headerlist = encode(dfs, codeclist)
         # print("about to re-measure file sizes")
         sizes_df_comp = dfs.file_sizes()
@@ -159,6 +159,7 @@ def encode_measure_decode(dfs, codeclist, check_correct=True,
                     dfs_hat = dfs
                 else:
                     dfs_hat = dfs.copy(dfsdir=checkdir)
+                    print("copying dfs to dfs_hat")
 
                 # print("a orig:\n", dfs_orig['df0', 'a'])
                 # print("c orig:\n", dfs_orig['df0', 'c'])
@@ -168,7 +169,10 @@ def encode_measure_decode(dfs, codeclist, check_correct=True,
                 # print(dfs['df0', 'a'].dtypes)
                 # print("c comp:\n", dfs['df0', 'c'])
                 # print(dfs['df0', 'c'].dtypes)
+
+                print("================================ decode")
                 decode(dfs_hat, codeclist, headerlist)
+                print("================================ evaluate")
                 # print("a hat:\n", dfs['df0', 'a'])
                 # print(dfs['df0', 'a'].dtypes)
                 # print("c hat:\n", dfs['df0', 'c'])
