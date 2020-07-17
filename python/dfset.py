@@ -6,9 +6,10 @@ import os
 import shutil
 import tempfile
 
-
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 from python import simple_dataframe as sdf
 from python import utils  # for pd-compatible array comparisons
@@ -209,13 +210,41 @@ class BaseDfSet(abc.ABC):
             # string types)
             vals = df[col]
 
-            if self.verbose > 0:
+            # if col == 'gps_lon':
+
+
+            # if self.verbose > 0:
+            if self.verbose > -1:  # TODO rm
                 # print("dfid, col, vals type, vals dtype: ",
                 #     dfid, col, type(vals), vals.dtype)
                 print("dfid, col, vals dtype: ", dfid, col, vals.dtype)
 
             # print("setting dfid, col, vals: ", dfid, col, vals, vals.dtype)
             self._write_col_to_path(self._path(dfid, col), vals)
+
+            # TODO rm
+            vals_hat = self._read_col_from_path(self._path(dfid, col))
+
+
+
+
+
+
+
+            # SELF: issue is here; for some reason parquet is writing and/or
+            # retrieving stuff as a different type than what it was originally
+
+
+
+
+
+
+
+
+
+
+            print("orig dtype, retrieved dtype: ", vals.dtype, vals_hat.dtype)
+            assert vals_hat.dtype == vals.dtype
 
         # if we got dfs[dfid] = df, wipe all cols not in df
         self.remove(dfid, wipe_cols)
@@ -413,7 +442,19 @@ class ParquetDfSet(BaseDfSet):
 
     def _read_col_from_path(self, path):
         # print("reading from path: ", path)
-        return pd.read_parquet(path, **self._read_kwargs)['_']
+        # return pd.read_parquet(path, **self._read_kwargs)['_']
+        return pq.read_table(path, columns=['_']).to_pandas()['_']
+
+        # print(f"parquet read: read back tbl with schema:\n{tbl.schema}\n")
+
+        # # df = tbl.to_pandas()
+        # s = tbl.to_pandas()['_']
+        # print("parquet read: read series dtype: ", s.dtype)
+        # return s
+        # print("parquet: read df type: ", type(df))
+        # print("parquet: read df dtypes: ", df.dtypes)
+        # return df['_']
+
 
     def _write_col_to_path(self, path, values):
         # # print("parquet write: path =", path)
@@ -432,8 +473,33 @@ class ParquetDfSet(BaseDfSet):
         # try:
         #     df = pd.DataFrame.from_dict({'_': values})
         # except ValueError:  # happens if values is a
+        # s = values
+        # if not isinstance(s, pd.Series):
         s = pd.Series(values, dtype=values.dtype, name='_')
-        s.to_frame().to_parquet(path, **self._write_kwargs)
+
+        # else if :
+        # print("parquet: writing series with dtype: ", s.dtype)
+        # s.to_frame().to_parquet(path, **self._write_kwargs)
+
+        # import pyarrow.parquet as pq
+        # df = s.to_frame()
+        # print("parquet df dtypes: ", df.dtypes)
+
+        tbl = pa.Table.from_pandas(s.to_frame(), preserve_index=False)
+        # print("tbl schema: ", tbl.schema)  # u32
+        # print(f"parquet write: tbl has schema:\n{tbl.schema}\n")
+
+        # setting version 2 lets it write out 8-bit and 32-bit ints, instead
+        # of just 60bit; however, 16-bit still gets upcast to 32-bit for
+        # unclear reasons
+        pq.write_table(tbl, path, version='2.0')
+        print("s size: ", s.nbytes)
+        print("wrote out size: ", os.path.getsize(path))  # u32 + big overhead
+
+        # s_hat = self._read_col_from_path(path)
+        # print("parquet: read back dtype: ", s_hat.dtype)
+        # print("s_hat size: ", s_hat.nbytes)
+
         # print("s shape: ", s.shape)
         # df = s.to_frame()
         # print("df shape: ", df.shape)

@@ -21,7 +21,7 @@ def infer_qparams(x, offset=None, scale='lossless_base10', dtype=None,
     # print("x dtype, is_boolean, is_nullable", x.dtype, dtypes.is_boolean(x.dtype), dtypes.is_nullable(x.dtype))
     if dtypes.is_boolean(x.dtype):
         # allfinite = dtypes.is_nullable(x.dtype)
-        allfinite = (not np.any(pd.isna(x))) and (not np.any(pd.isinf(x)))
+        allfinite = (not np.any(pd.isna(x))) and (not np.any(np.isinf(x)))
         return QuantizeParams(dtype=np.uint8, offset=0, scale=1,
                               orig_dtype=orig_dtype, allfinite=allfinite)
 
@@ -175,6 +175,7 @@ def unquantize(x, qparams):
     except AttributeError:
         pass
 
+    print("got x dtype, qparams", x.dtype, qparams)
     assert x.dtype == qparams.dtype
     if dtypes.is_int(qparams.orig_dtype):
         assert qparams.scale <= 1  # no reason to expand ints

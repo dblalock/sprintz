@@ -147,6 +147,8 @@ class BaseCodec(abc.ABC):
         for col in use_cols:
             # df[col], header = self.encode_col(df[col].values, col)
             df[col], header = self.encode_col(df[col], col)
+            if col == 'gps_lon':
+                print("codec: dtype retrieved right after encoding: ", df[col].dtype)
             if header is not None:
                 col2header[col] = header
         return df[use_cols], col2header or None  # no headers -> None
@@ -583,10 +585,14 @@ class Quantize(NumericCodec):
         # TODO support just going from f64 to f32 (as opposed outputing ints)?
 
     def encode_col(self, vals, col):
-        # print("quantize: encoding col with dtype", col, vals.dtype)
+        print("quantize: encoding col with dtype", col, vals.dtype)
         # print("whitelist types: ", self._whitelist_types)
 
         if col in self._col2qparams:
+
+            # TODO allow specifying just some of the qparams; eg,
+            # scale and dtypes might be known a priori, while offset isn't
+
             qparams = self._col2qparams[col]
             return_qparams = False
         else:
@@ -596,17 +602,17 @@ class Quantize(NumericCodec):
 
         # print("quantize: col, dtype, qdtype, orig_dtype", col, vals.dtype, qparams.dtype, qparams.orig_dtype)
         ret = dfq.quantize(vals, qparams)
-        # print("ret dtype, qparams dtype: ", ret.dtype, qparams.dtype)
+        print("ret dtype, qparams: ", ret.dtype, qparams)
         # print("qparams: ", qparams)
         # print("returning quantized vals:\n", ret, ret.dtype)
         assert ret.dtype == qparams.dtype
-        return ret, qparams if return_qparams else None
+        return ret, (qparams if return_qparams else None)
 
     def decode_col(self, vals, col, qparams):
         # print("quantize: decoding col with dtype", col, vals.dtype)
         if qparams is None:
             qparams = self._col2qparams[col]  # None because defined a priori
-        # print("quantize decoding col using qparams", col, qparams)
+        print("quantize decoding col using qparams", col, qparams)
         return dfq.unquantize(vals, qparams)
 
 

@@ -76,7 +76,13 @@ def encode(dfs, codeclist):
                 headerlist.append(header)
                 # for col in dirty_df.columns:
                 #     df[col] = dirty_df[col]
+
+                print("encode: dtype in df right before writing: ", dirty_df['gps_lon'].dtype)
+
                 dfs[dfid, dirty_df.columns] = dirty_df
+
+                print("encode: dtype retrieved right after writing: ", dfs[dfid, 'gps_lon'].dtype)
+
             headers[dfid] = headerlist
             # dfs[dfid] = df
 
@@ -169,6 +175,8 @@ def encode_measure_decode(dfs, codeclist, check_correct=True,
                 # print(dfs['df0', 'a'].dtypes)
                 # print("c comp:\n", dfs['df0', 'c'])
                 # print(dfs['df0', 'c'].dtypes)
+                s = dfs['2137141111', 'gps_lon']
+                print("gps_lon compressed dtype: ", s.dtype)
 
                 print("================================ decode")
                 decode(dfs_hat, codeclist, headerlist)
