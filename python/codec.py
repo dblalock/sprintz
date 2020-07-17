@@ -423,6 +423,50 @@ class ByteShuffle(BaseCodec):
         return np.asfortranarray(X).ravel().view(vals.dtype)
 
 
+class CatToInt(BaseCodec):
+
+    # def __init__(self, *args, out_dtype=np.uint8, **kwargs):
+    #     super().__init__(*args, **kwargs)
+    #     self._out_dtype = out_dtype
+
+    def encode_col(self, vals, col_unused):
+
+        uniqs, idxs, counts = np.unique(
+            vals, return_inverse=True, return_counts=True)
+
+        n = len(vals)
+        nuniq = len(uniqs)
+        assert idxs.max() < nuniq  # sanity check that this works how I think
+
+        # check whether it's actually worth doing the encoding
+        val_itemsize = vals.itemsize
+        dtype = dfq.cardinality_to_dtype(nuniq)
+        idx_itemsize = dtype().itemsize  # assumes type, not np.dtype
+        raw_sz = val_itemsize * n
+        compressed_sz = idx_itemsize * n + val_itemsize * nuniq
+        if raw_sz <= compressed_sz:
+            return vals, (None, False)  # don't bother encoding
+
+        idxs = idxs.astype(dtype)
+
+
+        # tricky part: give more frequently occurring stuff lower numbers
+        sortidxs = np.argsort(counts)
+
+
+        # TODO finish this function + test this codec
+
+
+
+        return vals, (idx2val, did_encode)
+
+    def decode_col(self, vals, col_unused, header):
+        idx2val, did_encode = header
+        if did_encode:
+            return idx2val[vals]
+        return vals
+
+
 class CodecSearch(BaseCodec):
 
     def __init__(self, pipelines, loss='zstd', *args, **kwargs):
