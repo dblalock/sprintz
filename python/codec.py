@@ -585,7 +585,7 @@ class Quantize(NumericCodec):
         # TODO support just going from f64 to f32 (as opposed outputing ints)?
 
     def encode_col(self, vals, col):
-        print("quantize: encoding col with dtype", col, vals.dtype)
+        # print("quantize: encoding col with dtype", col, vals.dtype)
         # print("whitelist types: ", self._whitelist_types)
 
         if col in self._col2qparams:
@@ -612,7 +612,7 @@ class Quantize(NumericCodec):
         # print("quantize: decoding col with dtype", col, vals.dtype)
         if qparams is None:
             qparams = self._col2qparams[col]  # None because defined a priori
-        print("quantize decoding col using qparams", col, qparams)
+        # print("quantize decoding col using qparams", col, qparams)
         return dfq.unquantize(vals, qparams)
 
 

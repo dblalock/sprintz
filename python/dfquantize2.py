@@ -175,7 +175,7 @@ def unquantize(x, qparams):
     except AttributeError:
         pass
 
-    print("got x dtype, qparams", x.dtype, qparams)
+    # print("got x dtype, qparams", x.dtype, qparams)
     assert x.dtype == qparams.dtype
     if dtypes.is_int(qparams.orig_dtype):
         assert qparams.scale <= 1  # no reason to expand ints

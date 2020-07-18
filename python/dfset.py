@@ -210,11 +210,8 @@ class BaseDfSet(abc.ABC):
             # string types)
             vals = df[col]
 
-            # if col == 'gps_lon':
-
-
-            # if self.verbose > 0:
-            if self.verbose > -1:  # TODO rm
+            # if self.verbose > -1:  # TODO rm
+            if self.verbose > 0:
                 # print("dfid, col, vals type, vals dtype: ",
                 #     dfid, col, type(vals), vals.dtype)
                 print("dfid, col, vals dtype: ", dfid, col, vals.dtype)
@@ -222,29 +219,12 @@ class BaseDfSet(abc.ABC):
             # print("setting dfid, col, vals: ", dfid, col, vals, vals.dtype)
             self._write_col_to_path(self._path(dfid, col), vals)
 
-            # TODO rm
-            vals_hat = self._read_col_from_path(self._path(dfid, col))
-
-
-
-
-
-
-
-            # SELF: issue is here; for some reason parquet is writing and/or
-            # retrieving stuff as a different type than what it was originally
-
-
-
-
-
-
-
-
-
-
-            print("orig dtype, retrieved dtype: ", vals.dtype, vals_hat.dtype)
-            assert vals_hat.dtype == vals.dtype
+            # # TODO rm
+            # print("vals:\n", vals)
+            # vals_hat = self._read_col_from_path(self._path(dfid, col))
+            # print("vals_hat:\n", vals_hat)
+            # print("orig dtype, retrieved dtype: ", vals.dtype, vals_hat.dtype)
+            # assert vals_hat.dtype == vals.dtype
 
         # if we got dfs[dfid] = df, wipe all cols not in df
         self.remove(dfid, wipe_cols)
@@ -402,9 +382,12 @@ class CsvDfSet(BaseDfSet):
         super().__init__(*args, **kwargs)
         self._read_kwargs.setdefault('delimiter', ',')
         self._write_kwargs.setdefault('delimiter', ',')
+        self._write_kwargs.setdefault('fmt', '%g')  # default is %.18e
 
     def _read_col_from_path(self, path):
         # print("reading from path: ", path)
+        # with open(path, 'r') as f:
+        #     print("contents:\n", f.read())
         return np.loadtxt(path, **self._read_kwargs)
 
     def _write_col_to_path(self, path, values):
@@ -457,6 +440,10 @@ class ParquetDfSet(BaseDfSet):
 
 
     def _write_col_to_path(self, path, values):
+        s = pd.Series(values, dtype=values.dtype, name='_')
+        tbl = pa.Table.from_pandas(s.to_frame(), preserve_index=False)
+        pq.write_table(tbl, path, version='2.0')
+
         # # print("parquet write: path =", path)
         # # # df = pd.Series.from_array(values)
         # # # df = pd.DataFrame([pd.Series.from_array(values)])
@@ -475,7 +462,7 @@ class ParquetDfSet(BaseDfSet):
         # except ValueError:  # happens if values is a
         # s = values
         # if not isinstance(s, pd.Series):
-        s = pd.Series(values, dtype=values.dtype, name='_')
+        # s = pd.Series(values, dtype=values.dtype, name='_')
 
         # else if :
         # print("parquet: writing series with dtype: ", s.dtype)
@@ -485,16 +472,16 @@ class ParquetDfSet(BaseDfSet):
         # df = s.to_frame()
         # print("parquet df dtypes: ", df.dtypes)
 
-        tbl = pa.Table.from_pandas(s.to_frame(), preserve_index=False)
+        # tbl = pa.Table.from_pandas(s.to_frame(), preserve_index=False)
         # print("tbl schema: ", tbl.schema)  # u32
         # print(f"parquet write: tbl has schema:\n{tbl.schema}\n")
 
         # setting version 2 lets it write out 8-bit and 32-bit ints, instead
         # of just 60bit; however, 16-bit still gets upcast to 32-bit for
         # unclear reasons
-        pq.write_table(tbl, path, version='2.0')
-        print("s size: ", s.nbytes)
-        print("wrote out size: ", os.path.getsize(path))  # u32 + big overhead
+        # pq.write_table(tbl, path, version='2.0')
+        # print("s size: ", s.nbytes)
+        # print("wrote out size: ", os.path.getsize(path))  # u32 + big overhead
 
         # s_hat = self._read_col_from_path(path)
         # print("parquet: read back dtype: ", s_hat.dtype)
