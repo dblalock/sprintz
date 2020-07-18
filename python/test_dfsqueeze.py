@@ -124,6 +124,9 @@ class TestDfSet(DfsetTest):
     def test_parquet_dfs(self):
         self._test_dfs(filetype='parquet')
 
+    def test_feather_dfs(self):
+        self._test_dfs(filetype='feather')
+
     def test_h5_dfs(self):
         self._test_dfs(filetype='h5')
 
@@ -193,7 +196,7 @@ class TestCodecs(DfsetTest):
 
     def _test_codecs_many_filetypes(self, codeclist, filetypes=None):
         if filetypes is None:
-            filetypes = ('csv', 'npy', 'parquet', 'h5')
+            filetypes = ('csv', 'npy', 'parquet', 'feather', 'h5')
         for ftype in filetypes:
             self._test_codecs_for_filetype(ftype, codeclist)
 
@@ -235,8 +238,8 @@ class TestCodecs(DfsetTest):
         # # encs = [codec.Quantize(cols='a')]
         # encs = [codec.Quantize(cols='c')]
         # # encs = [codec.Quantize()]
-        # for ftype in ['npy']:  # csv doesn't preserve dtype
-        # for ftype in ('npy', 'parquet', 'h5'):  # csv doesn't preserve dtype
+        # for ftype in ['npy']:  # csv drops dtype
+        # for ftype in ('npy', 'parquet', 'feather', 'h5'):  # csv drops dtype
         #     self._test_codecs_for_filetype(ftype, encs)
         # self._test_codecs_many_filetypes(encs)
 
@@ -286,11 +289,11 @@ class TestCodecs(DfsetTest):
         a = np.array([0, 254, np.nan], dtype=np.float32)
         _test_array(a, compr_dtype=np.uint8)  # just 254 and nan, can do u8
 
-        ftypes = ('npy', 'parquet', 'h5')  # csv doesn't preserve dtype
+        ftypes = ('npy', 'parquet', 'feather', 'h5')  # csv drops dtype
         self._test_simple_codec(codec.Quantize, filetypes=ftypes)
 
     def test_zigzag(self):
-        ftypes = ('npy', 'parquet', 'h5')  # csv doesn't preserve dtype
+        ftypes = ('npy', 'parquet', 'feather', 'h5')  # csv drops dtype
         encs = [codec.Delta(cols='c'), codec.Zigzag(cols='c')]
         self._test_codecs_many_filetypes(encs, ftypes)
         encs = [codec.Quantize(cols='c'), codec.Delta(cols='c'), codec.Zigzag(cols='c')]
@@ -310,11 +313,13 @@ class TestCodecs(DfsetTest):
         self._test_simple_codec(codec.ByteShuffle)
 
     def test_bzip2(self):
-        filetypes = ('npy', 'parquet', 'h5')  # csv breaks bz2 bytestreams
+        # csv breaks bz2 bytestreams
+        filetypes = ('npy', 'parquet', 'feather', 'h5')
         self._test_simple_codec(codec.Bzip2, filetypes=filetypes)
 
     def test_zstd(self):
-        filetypes = ('npy', 'parquet', 'h5')  # csv breaks bz2 bytestreams
+        # csv breaks zstd bytestreams (I think?)
+        filetypes = ('npy', 'parquet', 'feather', 'h5')
         self._test_simple_codec(codec.Zstd, filetypes=filetypes)
 
     def test_codecsearch(self):

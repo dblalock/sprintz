@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pyarrow.feather as pf
 
 from python import simple_dataframe as sdf
 from python import utils  # for pd-compatible array comparisons
@@ -17,12 +18,12 @@ from python import utils  # for pd-compatible array comparisons
 
 class BaseDfSet(abc.ABC):
 
-    def __init__(self, dfsdir, filetype='csv',
+    def __init__(self, dfsdir, filetype='feather',
                  read_kwargs=None, write_kwargs=None,
                  convert_slash_to='||', verbose=0):
         self._dfsdir = dfsdir
         assert dfsdir  # can't be empty or none
-        assert filetype in ('csv', 'npy', 'parquet', 'h5')
+        assert filetype in ('csv', 'npy', 'parquet', 'feather', 'h5')
         self._filetype = filetype
         self._read_kwargs = read_kwargs or {}
         self._write_kwargs = write_kwargs or {}
@@ -412,6 +413,25 @@ class NpyDfSet(BaseDfSet):
         np.save(path, np.asarray(values), **self._write_kwargs)
 
 
+class FeatherDfSet(BaseDfSet):
+
+    def __init__(self, *args, **kwargs):
+        kwargs['filetype'] = 'feather'
+        super().__init__(*args, **kwargs)
+        self._write_kwargs.setdefault('compression', 'uncompressed')
+
+    def _read_col_from_path(self, path):
+        df = pf.read_table(path).to_pandas()
+        # print("df dtypes:\n", df.dtypes)
+        # print("df:\n", df)
+        return df[df.columns[0]]
+
+    def _write_col_to_path(self, path, values):
+        s = pd.Series(values, dtype=values.dtype)
+        tbl = pa.Table.from_pandas(s.to_frame(), preserve_index=False)
+        pf.write_feather(tbl, path, **self._write_kwargs)
+
+
 class ParquetDfSet(BaseDfSet):
 
     def __init__(self, *args, **kwargs):
@@ -421,7 +441,7 @@ class ParquetDfSet(BaseDfSet):
         # self._write_kwargs.setdefault('compression', 'gzip')
         # self._write_kwargs.setdefault('compression', 'snappy')
         self._write_kwargs.setdefault('compression', None)
-        self._write_kwargs.setdefault('index', False)
+        self._write_kwargs.setdefault('version', '2.0')
 
     def _read_col_from_path(self, path):
         # print("reading from path: ", path)
@@ -438,11 +458,10 @@ class ParquetDfSet(BaseDfSet):
         # print("parquet: read df dtypes: ", df.dtypes)
         # return df['_']
 
-
     def _write_col_to_path(self, path, values):
         s = pd.Series(values, dtype=values.dtype, name='_')
         tbl = pa.Table.from_pandas(s.to_frame(), preserve_index=False)
-        pq.write_table(tbl, path, version='2.0')
+        pq.write_table(tbl, path, **self._write_kwargs)
 
         # # print("parquet write: path =", path)
         # # # df = pd.Series.from_array(values)
@@ -519,7 +538,8 @@ class H5DfSet(BaseDfSet):
         return df.to_hdf(path, key='_', mode='w', **self._write_kwargs)
 
 
-def make_dfset(filetype, dfsdir=None, csvsdir=None, dtypes=None, **kwargs):
+def make_dfset(filetype='feather', dfsdir=None, csvsdir=None, dtypes=None,
+               **kwargs):
     if dfsdir is None:
         dfsdir = tempfile.mkdtemp()
 
@@ -529,6 +549,8 @@ def make_dfset(filetype, dfsdir=None, csvsdir=None, dtypes=None, **kwargs):
         dfs = NpyDfSet(dfsdir, **kwargs)
     elif filetype == 'parquet':
         dfs = ParquetDfSet(dfsdir, **kwargs)
+    elif filetype == 'feather':
+        dfs = FeatherDfSet(dfsdir, **kwargs)
     elif filetype == 'h5':
         dfs = H5DfSet(dfsdir, **kwargs)
     else:

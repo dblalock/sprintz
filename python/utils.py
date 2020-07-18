@@ -13,7 +13,7 @@ _memory = Memory('.', verbose=0)
 
 # ================================================================ pandas
 
-# XXX TODO support complea numbers (in particular, handle nans)
+# XXX TODO support complex numbers (in particular, handle nans)
 def allclose(a, b, rtol=1e-5, atol=1e-5, equal_nan=True):
     """Like numpb allclose, but handles pandas nullable scalar types"""
     if isinstance(a, (tuple, list)):
