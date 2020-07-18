@@ -66,9 +66,9 @@ def encode(dfs, codeclist):
                 # print("encode: est class, cols: ", type(est), est.cols())
 
                 # print("col vals: ")
-                # print("gps_speed_unreliable: ")
-                # s = dfs[dfid, 'gps_speed_unreliable']
                 # print(s, type(s), s.dtype)
+
+                # print("encode: est cols: ", est.cols())
 
                 subdf = dfs[dfid, est.cols()]
                 # print("about to encode df with cols: ", df.columns)
@@ -77,11 +77,7 @@ def encode(dfs, codeclist):
                 # for col in dirty_df.columns:
                 #     df[col] = dirty_df[col]
 
-                # print("encode: dtype in df right before writing: ", dirty_df['gps_lon'].dtype)
-
                 dfs[dfid, dirty_df.columns] = dirty_df
-
-                # print("encode: dtype retrieved right after writing: ", dfs[dfid, 'gps_lon'].dtype)
 
             headers[dfid] = headerlist
             # dfs[dfid] = df
@@ -138,6 +134,10 @@ def encode_measure_decode(dfs, codeclist, check_correct=True,
                           check_correct_inplace=False, check_file_sizes=False):
     # dfs = dfset.make_dfset(csvdir, dfsdir, filetype=filetype, **dfset_kwargs)
 
+    # print("encode: dfs ids: ", dfs.ids)
+    # print("encode: dfs cols for df0: ", dfs['df0'].columns)
+    # print("encode: dfs cols for df1: ", dfs['df1'].columns)
+
     with tempfile.TemporaryDirectory() as dirpath:
 
         # print("dirpath: ", dirpath)
@@ -175,8 +175,6 @@ def encode_measure_decode(dfs, codeclist, check_correct=True,
                 # print(dfs['df0', 'a'].dtypes)
                 # print("c comp:\n", dfs['df0', 'c'])
                 # print(dfs['df0', 'c'].dtypes)
-                s = dfs['2137141111', 'gps_lon']
-                # print("gps_lon compressed dtype: ", s.dtype)
 
                 print("================================ decode")
                 decode(dfs_hat, codeclist, headerlist)
@@ -214,8 +212,6 @@ def encode_measure_decode(dfs, codeclist, check_correct=True,
                 # print("sizes orig, decomp:")
                 # print(sizes_orig)
                 # print(sizes_decomp)
-                # vals0 = dfs['2137141111', 'lon']
-                # vals1 = dfs_hat['2137141111', 'lon']
                 # print(vals0.shape, vals0.values.itemsize)
                 # print(vals1.shape, vals1.values.itemsize)
                 if check_file_sizes:

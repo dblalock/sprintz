@@ -16,6 +16,11 @@ from python import simple_dataframe as sdf
 from python import utils  # for pd-compatible array comparisons
 
 
+# TODO composition over inheritance for all the different formats; really just
+# need BaseDfSet to have some object that holds some configuration and knows
+# how to read and write files
+
+
 class BaseDfSet(abc.ABC):
 
     def __init__(self, dfsdir, filetype='feather',
@@ -23,7 +28,7 @@ class BaseDfSet(abc.ABC):
                  convert_slash_to='||', verbose=0):
         self._dfsdir = dfsdir
         assert dfsdir  # can't be empty or none
-        assert filetype in ('csv', 'npy', 'parquet', 'feather', 'h5')
+        assert filetype in ('csv', 'npy', 'parquet', 'feather', 'h5', 'smart')
         self._filetype = filetype
         self._read_kwargs = read_kwargs or {}
         self._write_kwargs = write_kwargs or {}
@@ -40,9 +45,10 @@ class BaseDfSet(abc.ABC):
             fname = fname[:-len(self._endswith)]
         return fname
 
-    def _id_from_dirname(self, fname):
+    def _id_from_dirname(self, dirname):
+        return dirname
         # print(f"id = {self._rm_endswith(fname)} from dirname {fname}")
-        return self._rm_endswith(fname)
+        # return self._rm_endswith(fname)
 
     def _colname_from_fname(self, fname):
         fname = self._rm_endswith(fname)
@@ -58,9 +64,9 @@ class BaseDfSet(abc.ABC):
         return os.path.join(self._dfsdir, dfid, fname)
 
     def _find_ids(self):
-        return [self._id_from_dirname(fname)
-                for fname in os.listdir(self._dfsdir)
-                if os.path.isdir(os.path.join(self._dfsdir, fname))]
+        return [self._id_from_dirname(dirname)
+                for dirname in os.listdir(self._dfsdir)
+                if os.path.isdir(os.path.join(self._dfsdir, dirname))]
 
     @property
     def filetype(self):
@@ -76,14 +82,13 @@ class BaseDfSet(abc.ABC):
     def dir(self):
         return self._dfsdir
 
-
-    def _all_paths(self):
-        ret = []
-        for dfid in self.ids:
-            idpath = self._path(dfid)
-            ret += [os.path.join(idpath, fname)
-                    for fname in os.listdir(idpath)]
-        return ret
+    # def _all_paths(self):
+    #     ret = []
+    #     for dfid in self.ids:
+    #         idpath = self._path(dfid)
+    #         ret += [os.path.join(idpath, fname)
+    #                 for fname in os.listdir(idpath)]
+    #     return ret
 
     def __len__(self):
         return len(self.ids)
@@ -114,7 +119,8 @@ class BaseDfSet(abc.ABC):
             return []
         return [self._colname_from_fname(fname)
                 for fname in os.listdir(dirname)
-                if fname.endswith(self._endswith)]
+                # if fname.endswith(self._endswith)]
+                if self._rm_endswith(fname) != fname]
 
     # def __getitem__(self, dfid, cols=None):
     def __getitem__(self, dfid_and_maybe_cols):
@@ -127,7 +133,6 @@ class BaseDfSet(abc.ABC):
         if cols is None:
             cols = self._cols_stored_for_dfid(dfid)
 
-
         # ret = {}
         ret = sdf.SimpleDataFrame()
         just_one_col = False
@@ -138,14 +143,22 @@ class BaseDfSet(abc.ABC):
         # print("getitem() cols: ", cols)
 
         for col in cols:
-            path = self._path(dfid, col)
-            if not os.path.exists(path):
-                # TODO add option to throw here if path not found
-                continue  # just omit instead of crashing
-            vals = self._read_col_from_path(path)
+            # path = self._path(dfid, col)
+
+            # print("getitem: dfid, col:", dfid, col)
+
+            # if not os.path.exists(path):
+            #     print("tried to access path that doens't exist: ")
+            #     # TODO add option to throw here if path not found
+            #     continue  # just omit instead of crashing
+            # vals = self._read_col_from_path(path)
 
             # if col == 'accel_valid':
             #     print("getitem: accel_valid: ", vals, type(vals), vals.dtype)
+
+            vals = self._read_col(dfid, col)
+            if vals is None:
+                continue
 
             if just_one_col:
                 # return sdf.SimpleSeries(vals)
@@ -166,6 +179,12 @@ class BaseDfSet(abc.ABC):
     #         cols = None
     #     if cols is None:
     #         cols = df.columns
+
+    def _read_col(self, dfid, col):
+        path = self._path(dfid, col)
+        if not os.path.exists(path):
+            return None
+        return self._read_col_from_path(path)
 
     def _normalize_idx_and_val(self, dfid_and_maybe_cols, df_or_array):
         df = df_or_array
@@ -215,7 +234,7 @@ class BaseDfSet(abc.ABC):
             if self.verbose > 0:
                 # print("dfid, col, vals type, vals dtype: ",
                 #     dfid, col, type(vals), vals.dtype)
-                print("dfid, col, vals dtype: ", dfid, col, vals.dtype)
+                print("setitem: dfid, col, dtype: ", dfid, col, vals.dtype)
 
             # print("setting dfid, col, vals: ", dfid, col, vals, vals.dtype)
             self._write_col_to_path(self._path(dfid, col), vals)
@@ -237,10 +256,10 @@ class BaseDfSet(abc.ABC):
         if isinstance(cols, str):
             cols = [cols]
         for col in cols:
-            self._remove_col_at_path(self._path(dfid, col))
+            self._remove_col(dfid, col)
 
-    def _remove_col_at_path(self, path):
-        os.remove(path)  # separate method in case not one file <=> one col
+    def _remove_col(self, dfid, col):
+        os.remove(self._path(dfid, col))
 
     @abc.abstractmethod
     def _read_col_from_path(self, path):
@@ -262,13 +281,16 @@ class BaseDfSet(abc.ABC):
             # import sys; sys.exit()
             for col in cols:
                 # print("reading size of col: ", col)
-                path = self._path(dfid, col)
-                sz = os.path.getsize(path)
+                sz = self._get_size(dfid, col)
                 all_dfids.append(dfid)
                 all_cols.append(col)
                 all_sizes.append(sz)
         return pd.DataFrame.from_dict({
             'dfid': all_dfids, 'col': all_cols, 'nbytes': all_sizes})
+
+    def _get_size(self, dfid, col):
+        path = self._path(dfid, col)
+        return os.path.getsize(path)
 
     def equals(self, other, raise_error=False):
         our_ids = self.ids
@@ -361,19 +383,6 @@ class BaseDfSet(abc.ABC):
         self.clone_into(other)  # maybe different fmt, so need to read + write
         return other
 
-    # def nfiles(self):
-    #     return len(self._all_paths())
-
-    # def __getitem__(self, dfid, cols=None):
-    #     path = self._path_from_id(dfid)
-    #     if self._filetype == 'csv':
-    #         df = pd.read_csv(path, **self._read_kwargs)
-    #         if cols is not None:
-    #             return df[cols]
-    #         return df
-    #     elif self._filetype == 'parquet':
-    #         return pd.read_parquet(path, columns=cols, **self._read_kwargs)
-
 
 class CsvDfSet(BaseDfSet):
     # XXX only supports float, since doesn't preserve dtype
@@ -401,8 +410,8 @@ class NpyDfSet(BaseDfSet):
     def __init__(self, *args, **kwargs):
         kwargs['filetype'] = 'npy'
         super().__init__(*args, **kwargs)
-        # compression is a good idea, but messes up file size measurements
-        # self._write_kwargs.setdefault('compression', None)
+        # pickle can run into compatibility issues
+        # self._write_kwargs.setdefault('allow_pickle', False)
 
     def _read_col_from_path(self, path):
         # print("reading from path: ", path)
@@ -422,14 +431,92 @@ class FeatherDfSet(BaseDfSet):
 
     def _read_col_from_path(self, path):
         df = pf.read_table(path).to_pandas()
-        # print("df dtypes:\n", df.dtypes)
-        # print("df:\n", df)
         return df[df.columns[0]]
 
     def _write_col_to_path(self, path, values):
         s = pd.Series(values, dtype=values.dtype)
         tbl = pa.Table.from_pandas(s.to_frame(), preserve_index=False)
         pf.write_feather(tbl, path, **self._write_kwargs)
+
+
+class SmartDfSet(BaseDfSet):
+
+    def __init__(self, *args, np_write_kwargs=None, feather_write_kwargs=None,
+                 **kwargs):
+        kwargs['filetype'] = 'smart'
+        super().__init__(*args, **kwargs)
+        self._np_write_kwargs = np_write_kwargs or {}
+        self._np_write_kwargs.setdefault('allow_pickle', False)
+        self._feather_write_kwargs = feather_write_kwargs or {}
+        self._feather_write_kwargs.setdefault('compression', 'uncompressed')
+
+    # override behavior that assumes fixed file extension
+    # def _cols_stored_for_dfid(self, dfid):
+    #     dirname = self._path(dfid)
+    #     if not os.path.exists(dirname):
+    #         return []
+    #     ret = [self._colname_from_fname(fname)
+    #            for fname in os.listdir(dirname)
+    #            if self._rm_endswith(fname) != fname]
+    #     return ret
+
+    def _rm_endswith(self, fname):
+        for endswith in ['.npy', '.feather', '.smart']:
+            if fname.endswith(endswith):
+                fname = fname[:-len(endswith)]
+        return fname
+
+    def _remove_col(self, dfid, col):
+        path = self._path(dfid, col)
+        for ext in ('.npy', '.feather'):
+            try:
+                os.remove(path + ext)
+            except IOError:
+                pass
+
+    def _get_size(self, dfid, col):
+        path = self._path(dfid, col)
+        for ext in ('.npy', '.feather'):
+            try:
+                return os.path.getsize(path + ext)
+            except IOError:
+                pass
+
+    def _read_col(self, dfid, col):
+        # omits fast fail if path doesn't exist
+        return self._read_col_from_path(self._path(dfid, col))
+
+    def _read_col_from_path(self, path):
+        # print("readcol: trying to read from path: ", path)
+
+        # df = pf.read_table(path).to_pandas()
+        np_path = path + '.npy'
+        feather_path = path + '.feather'
+        if os.path.exists(np_path):
+            return np.load(np_path)
+        elif os.path.exists(feather_path):
+            df = pf.read_table(feather_path).to_pandas()
+            return df[df.columns[0]]
+        print("neither path existed!", np_path, feather_path)
+        return None  # neither path exists
+
+    def _write_col_to_path(self, path, values):
+        try:
+            _ = np.array([], dtype=values.dtype)  # throws if not numpy dtype
+            vals = values.values  # pull out np array
+            path += '.npy'
+            np.save(path, vals, **self._np_write_kwargs)
+            altpath = path + '.feather'
+            if os.path.exists(altpath):
+                os.remove(altpath)
+        except TypeError:
+            # dtype numpy can't handle; write out a pandas series instead
+            tbl = pa.Table.from_pandas(values.to_frame(), preserve_index=False)
+            pf.write_feather(tbl, path, **self._feather_write_kwargs)
+
+            altpath = path + '.npy'
+            if os.path.exists(altpath):
+                os.remove(altpath)
 
 
 class ParquetDfSet(BaseDfSet):
@@ -448,70 +535,10 @@ class ParquetDfSet(BaseDfSet):
         # return pd.read_parquet(path, **self._read_kwargs)['_']
         return pq.read_table(path, columns=['_']).to_pandas()['_']
 
-        # print(f"parquet read: read back tbl with schema:\n{tbl.schema}\n")
-
-        # # df = tbl.to_pandas()
-        # s = tbl.to_pandas()['_']
-        # print("parquet read: read series dtype: ", s.dtype)
-        # return s
-        # print("parquet: read df type: ", type(df))
-        # print("parquet: read df dtypes: ", df.dtypes)
-        # return df['_']
-
     def _write_col_to_path(self, path, values):
         s = pd.Series(values, dtype=values.dtype, name='_')
         tbl = pa.Table.from_pandas(s.to_frame(), preserve_index=False)
         pq.write_table(tbl, path, **self._write_kwargs)
-
-        # # print("parquet write: path =", path)
-        # # # df = pd.Series.from_array(values)
-        # # # df = pd.DataFrame([pd.Series.from_array(values)])
-        # print("parquet write: values shape", values.shape)
-        # print("parquet write: values type", type(values))
-        # # # values.foo()
-        # # # assert hasattr(values, 'dtype')
-        # print("parquet write: values dtype", values.dtype)
-        # # # print("parquet write: uniq values", np.unique(values))
-        # # # print("parqetdfset: writing values:\n", values, type(values))
-        # print("parqetdfset: writing head values:\n", values[:20])
-        # print("parqetdfset: writing tail values:\n", values[-20:])
-
-        # try:
-        #     df = pd.DataFrame.from_dict({'_': values})
-        # except ValueError:  # happens if values is a
-        # s = values
-        # if not isinstance(s, pd.Series):
-        # s = pd.Series(values, dtype=values.dtype, name='_')
-
-        # else if :
-        # print("parquet: writing series with dtype: ", s.dtype)
-        # s.to_frame().to_parquet(path, **self._write_kwargs)
-
-        # import pyarrow.parquet as pq
-        # df = s.to_frame()
-        # print("parquet df dtypes: ", df.dtypes)
-
-        # tbl = pa.Table.from_pandas(s.to_frame(), preserve_index=False)
-        # print("tbl schema: ", tbl.schema)  # u32
-        # print(f"parquet write: tbl has schema:\n{tbl.schema}\n")
-
-        # setting version 2 lets it write out 8-bit and 32-bit ints, instead
-        # of just 60bit; however, 16-bit still gets upcast to 32-bit for
-        # unclear reasons
-        # pq.write_table(tbl, path, version='2.0')
-        # print("s size: ", s.nbytes)
-        # print("wrote out size: ", os.path.getsize(path))  # u32 + big overhead
-
-        # s_hat = self._read_col_from_path(path)
-        # print("parquet: read back dtype: ", s_hat.dtype)
-        # print("s_hat size: ", s_hat.nbytes)
-
-        # print("s shape: ", s.shape)
-        # df = s.to_frame()
-        # print("df shape: ", df.shape)
-        # df = pd.DataFrame.from_dict({'_': values}, dtype=values.dtype)
-        # df = pd.DataFrame.from_dict({'_': s})
-        # return df.to_parquet(path, **self._write_kwargs)
 
 
 class H5DfSet(BaseDfSet):
@@ -538,7 +565,7 @@ class H5DfSet(BaseDfSet):
         return df.to_hdf(path, key='_', mode='w', **self._write_kwargs)
 
 
-def make_dfset(filetype='feather', dfsdir=None, csvsdir=None, dtypes=None,
+def make_dfset(filetype='smart', dfsdir=None, csvsdir=None, dtypes=None,
                **kwargs):
     if dfsdir is None:
         dfsdir = tempfile.mkdtemp()
@@ -553,6 +580,8 @@ def make_dfset(filetype='feather', dfsdir=None, csvsdir=None, dtypes=None,
         dfs = FeatherDfSet(dfsdir, **kwargs)
     elif filetype == 'h5':
         dfs = H5DfSet(dfsdir, **kwargs)
+    elif filetype == 'smart':
+        dfs = SmartDfSet(dfsdir, **kwargs)
     else:
         raise ValueError(f"unrecognized filetype: '{filetype}'")
 
