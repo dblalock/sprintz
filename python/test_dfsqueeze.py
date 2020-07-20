@@ -88,6 +88,10 @@ class TestDfSet(DfsetTest):
         # print("dfs.ids:", dfs.ids)
         # print("dfs._find_ids():", dfs._find_ids())
 
+        # print(dfs._cols_stored_for_dfid('df0'))
+        # print(dfs['df0'].columns)
+        # import sys; sys.exit()
+
         assert sorted(dfs.ids) == ['df0', 'df1']
         # print(dfs._cols_stored_for_dfid('df0'))
         assert sorted(dfs._cols_stored_for_dfid('df0')) == 'a b c'.split()
@@ -95,6 +99,11 @@ class TestDfSet(DfsetTest):
 
         df0_hat = dfs['df0']
         df1_hat = dfs['df1']
+
+        # print("df0_hat: ", df0_hat)
+        # print("df0_hat cols: ", df0_hat.columns)
+        # print("df0_hat shape: ", df0_hat.shape)
+
         assert self.df0.shape == df0_hat.shape
         assert self.df1.shape == df1_hat.shape
         if filetype != 'csv':
@@ -124,8 +133,14 @@ class TestDfSet(DfsetTest):
     def test_parquet_dfs(self):
         self._test_dfs(filetype='parquet')
 
+    def test_feather_dfs(self):
+        self._test_dfs(filetype='feather')
+
     def test_h5_dfs(self):
         self._test_dfs(filetype='h5')
+
+    def test_smart_dfs(self):
+        self._test_dfs(filetype='smart')
 
     def test_santize_cols(self):
         _rm_mock_input_files()  # just want df2 here
@@ -179,7 +194,7 @@ class TestEncodeDecode(DfsetTest):
     def test_all_filetypes(self):
         # for ftype in ('csv', 'npy'):
         # for ftype in ('csv',):
-        for ftype in ('csv', 'npy', 'parquet', 'h5'):
+        for ftype in ('csv', 'npy', 'parquet', 'feather', 'h5', 'smart'):
             self._test_filetype(ftype)
 
 
@@ -193,7 +208,7 @@ class TestCodecs(DfsetTest):
 
     def _test_codecs_many_filetypes(self, codeclist, filetypes=None):
         if filetypes is None:
-            filetypes = ('csv', 'npy', 'parquet', 'h5')
+            filetypes = ('csv', 'npy', 'parquet', 'feather', 'h5', 'smart')
         for ftype in filetypes:
             self._test_codecs_for_filetype(ftype, codeclist)
 
@@ -235,8 +250,8 @@ class TestCodecs(DfsetTest):
         # # encs = [codec.Quantize(cols='a')]
         # encs = [codec.Quantize(cols='c')]
         # # encs = [codec.Quantize()]
-        # for ftype in ['npy']:  # csv doesn't preserve dtype
-        # for ftype in ('npy', 'parquet', 'h5'):  # csv doesn't preserve dtype
+        # for ftype in ['npy']:  # csv drops dtype
+        # for ftype in ('npy', 'parquet', 'feather', 'h5'):  # csv drops dtype
         #     self._test_codecs_for_filetype(ftype, encs)
         # self._test_codecs_many_filetypes(encs)
 
@@ -286,11 +301,12 @@ class TestCodecs(DfsetTest):
         a = np.array([0, 254, np.nan], dtype=np.float32)
         _test_array(a, compr_dtype=np.uint8)  # just 254 and nan, can do u8
 
-        ftypes = ('npy', 'parquet', 'h5')  # csv doesn't preserve dtype
+        ftypes = ('npy', 'parquet', 'feather', 'h5', 'smart')  # no csv
         self._test_simple_codec(codec.Quantize, filetypes=ftypes)
 
     def test_zigzag(self):
-        ftypes = ('npy', 'parquet', 'h5')  # csv doesn't preserve dtype
+        ftypes = ('npy', 'parquet', 'feather', 'h5', 'smart')  # no csv
+        # ftypes = ['npy']
         encs = [codec.Delta(cols='c'), codec.Zigzag(cols='c')]
         self._test_codecs_many_filetypes(encs, ftypes)
         encs = [codec.Quantize(cols='c'), codec.Delta(cols='c'), codec.Zigzag(cols='c')]
@@ -310,11 +326,13 @@ class TestCodecs(DfsetTest):
         self._test_simple_codec(codec.ByteShuffle)
 
     def test_bzip2(self):
-        filetypes = ('npy', 'parquet', 'h5')  # csv breaks bz2 bytestreams
+        # csv breaks bz2 bytestreams
+        filetypes = ('npy', 'parquet', 'feather', 'h5', 'smart')
         self._test_simple_codec(codec.Bzip2, filetypes=filetypes)
 
     def test_zstd(self):
-        filetypes = ('npy', 'parquet', 'h5')  # csv breaks bz2 bytestreams
+        # csv breaks zstd bytestreams (I think?)
+        filetypes = ('npy', 'parquet', 'feather', 'h5', 'smart')
         self._test_simple_codec(codec.Zstd, filetypes=filetypes)
 
     def test_codecsearch(self):

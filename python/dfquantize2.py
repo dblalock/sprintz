@@ -278,4 +278,15 @@ def unquantize(x, qparams):
 #     # d = {np.dtype(k): v for k, v in d.items()}
 #     # return d.get(dtype)
 
-# # def test_quantize_unquantize
+def cardinality_to_dtype(cardinality):
+    assert cardinality >= 0
+    assert int(cardinality) == cardinality
+    if cardinality <= 256:
+        return np.uint8
+    if cardinality <= 65536:
+        return np.uint16
+    if cardinality <= (1 << 32):
+        return np.uint32
+    if cardinality <= (1 << 64):
+        return np.uint64
+    raise ValueError(f"No valid dtype for cardinality: '{cardinality}'")
