@@ -60,7 +60,7 @@ def encode(dfs, codeclist):
         for dfid in dfids:
             headerlist = []
             # df = dfs[dfid]
-            # print("dfid: ", dfid)
+            print("================================ dfid: ", dfid)
             # import sys; sys.exit()
             for est in codeclist:
                 # print("encode: est class, cols: ", type(est), est.cols())
@@ -153,7 +153,7 @@ def encode_measure_decode(dfs, codeclist, check_correct=True,
         # print("about to measure file sizes")
         sizes_df_orig = dfs.file_sizes()
         # print("about to encode")
-        print("================================ encode")
+        print("------------------------------------------------ encode")
         headerlist = encode(dfs, codeclist)
         # print("about to re-measure file sizes")
         sizes_df_comp = dfs.file_sizes()
@@ -176,9 +176,9 @@ def encode_measure_decode(dfs, codeclist, check_correct=True,
                 # print("c comp:\n", dfs['df0', 'c'])
                 # print(dfs['df0', 'c'].dtypes)
 
-                print("================================ decode")
+                print("------------------------------------------------ decode") # noqa
                 decode(dfs_hat, codeclist, headerlist)
-                print("================================ evaluate")
+                print("------------------------------------------------ evaluate") # noqa
                 # print("a hat:\n", dfs['df0', 'a'])
                 # print(dfs['df0', 'a'].dtypes)
                 # print("c hat:\n", dfs['df0', 'c'])

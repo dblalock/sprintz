@@ -308,7 +308,28 @@ class BaseDfSet(abc.ABC):
                     our_vals = self[dfid, col]
                     other_vals = other[dfid, col]
 
-                    assert utils.allclose(our_vals, other_vals)
+                    # print(f"checking dfid={dfid}, col={col}")
+                    close, fail_idxs = utils.allclose(
+                        our_vals, other_vals, return_failing_idxs=True)
+                    if not close:
+                        print(f"failed for dfid={dfid}, col={col}")
+                        print("our vs other shape: ",
+                            our_vals.shape, other_vals.shape)
+                        print("our vs other dtype: ",
+                            our_vals.dtype, other_vals.dtype)
+                        # print("failing idxs min, max, count: ",
+                            # fail_idxs.min(), fail_idxs.max(), len(fail_idxs))
+                        if len(fail_idxs):
+                            print("initial failing our vals:\n",
+                                our_vals[fail_idxs[:10]])
+                            print("initial failing other vals:\n",
+                                other_vals[fail_idxs[:10]])
+                        else:
+                            print("failed because of overall array property, "
+                                  "not specific indices")
+                        # print("initial our vals:\n", our_vals[:10])
+                        # print("initial other vals:\n", other_vals[:10])
+                        assert close
 
                     # assert len(our_vals) == len(other_vals)
                     # # print("col: ", col)
@@ -497,7 +518,7 @@ class SmartDfSet(BaseDfSet):
         elif os.path.exists(feather_path):
             df = pf.read_table(feather_path).to_pandas()
             return df[df.columns[0]]
-        print("neither path existed!", np_path, feather_path)
+        # print("neither path existed!", np_path, feather_path)
         return None  # neither path exists
 
     def _write_col_to_path(self, path, values):

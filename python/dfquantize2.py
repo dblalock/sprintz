@@ -15,7 +15,7 @@ class QuantizeParams(collections.namedtuple(
 
 
 def infer_qparams(x, offset=None, scale='lossless_base10', dtype=None,
-                  allow_nan_inf=True):
+                  allow_nan_inf=True, maxndecimal_digits=6):
     orig_dtype = x.dtype
 
     # print("x dtype, is_boolean, is_nullable", x.dtype, dtypes.is_boolean(x.dtype), dtypes.is_nullable(x.dtype))
@@ -63,8 +63,15 @@ def infer_qparams(x, offset=None, scale='lossless_base10', dtype=None,
             u64_max -= 1
 
     # print("qparams: type(x), x.dtype", type(x), x.dtype)
+    x = x.astype(dtypes.nonnullable_equivalent(x.dtype))
     offset = x.min() if offset is None else offset
     x_offset = x - offset
+
+    x_uniq = np.unique(x)
+    # print("x_uniq: ", x_uniq, x_uniq.dtype)
+    if len(x_uniq) == 1:
+        return QuantizeParams(dtype=np.uint8, offset=offset, scale=1,
+                              orig_dtype=orig_dtype, allfinite=allfinite)
 
     if not isinstance(scale, str):
         pass  # scale to use is supplied directly
@@ -79,13 +86,90 @@ def infer_qparams(x, offset=None, scale='lossless_base10', dtype=None,
         # were recorded
         # for shift in range(64):
         # print("x_offset in lossless_base10:\n", x_offset)
-        for shift in range(20):
+
+        # x_sorted = np.sort(x)
+
+        # unique so all diffs positive; should be either positive or exactly
+        # zero without this, but I don't fully trust fp math without knowing
+        # the hw we're running on
+        # x_sorted = np.sort(x_uniq)  # should already be sorted, but play safe
+        # x_sorted = np.sort(np.unique(x_offset))
+        # diffs = x_sorted[1:] - x_sorted[:-1]
+
+        # print("diffs type, dtype", type(diffs), diffs.dtype)
+
+        # mindiff = np.min(diffs[diffs > 0])
+        # mindiff = diffs.min()
+
+        # here's what we want:
+        #
+        # mindiff > 100 -> can rshift 1 digit
+        # mindiff > 10 -> can rshift 1 digit
+        # mindiff > 1 -> can rshift 0 digits
+        # mindiff > .1 -> can rshift -1 digits (need lshift of 1)
+        # mindiff > .01 -> can rshift -2 digits (need lshift of 2)
+        #
+        # and this is the line that implements it:
+        #
+        # EDIT: no, consider uuids with big gaps; can't throw away any
+        # digits, even though gap between them might always be large
+        # can_rshift_ndigits = int(np.floor(np.log10(mindiff)))
+        # can_rshift_ndigits = min(can_rshift_ndigits, 0)
+        # # shift = -can_rshift_ndigits
+        # # shift =
+        # scale = int(10 ** shift)
+
+        # print("mindiff, inferred scale, -scale: ", shift, -scale)
+
+        # logx = np.log2(x_offset)
+
+        # want to find the smallest left shift amount such that the diffs
+        # are all multiples of 10**(-shift), ignoring floating point error
+        diffs = np.unique(x_offset) # actually, just reconstruct offset x
+        # this catche edge case of max diff being << 1, which makes the
+        # loop break in 1st iter when it shouldn't
+        base_shift = int(max(0, -np.floor(np.log10(np.abs(diffs).max()))))
+        assert base_shift <= maxndecimal_digits
+        for shift in range(base_shift, maxndecimal_digits + 1):
             scale = 10. ** shift
-            x_scaled = x_offset * scale
-            x_scaled_ints = np.round(x_scaled).astype(np.int64)
-            diffs = x_scaled - x_scaled_ints
+            if shift <= 4:
+                diffs_scaled = diffs * scale
+            else: # probably (?) excessive caution wrt numerical issues
+                logscale = shift * np.log2(10.)
+                logdiffs_scaled = np.log2(diffs + 1e-20) + logscale
+                diffs_scaled = 2. ** logdiffs_scaled
+
+            # print("diffs scaled type, dtype", type(diffs_scaled), diffs_scaled.dtype)
+            # diffs_scaled_ints = np.round(diffs_scaled, 0)
+            diffs_scaled_ints = np.round(diffs_scaled)
+            errs = diffs_scaled - diffs_scaled_ints
+            # print(f"shift = {shift}, maxval={diffs.max()} maxerr = {np.abs(errs).max()}")
+
+            # x_scaled = 2 ** logx_scaled
+
+
+
+
+
+
+
+
+            # TODO this code is just broken; returns scale of 1 for gps data
+            # with 6 decimal places
+
+
+
+
+
+
+
+
+
+            # x_scaled_ints = np.round(x_scaled).astype(np.int64)
+            # diffs = x_scaled - x_scaled_ints
             # less than 1% unexplained
-            if np.log10(np.abs(diffs).max() + 1e-20) < -2:
+            # if np.log10(np.abs(errs).max() + 1e-20) < -2:
+            if np.abs(errs).max() < .01:
                 break
         scale = int(scale)
     else:
@@ -278,15 +362,4 @@ def unquantize(x, qparams):
 #     # d = {np.dtype(k): v for k, v in d.items()}
 #     # return d.get(dtype)
 
-def cardinality_to_dtype(cardinality):
-    assert cardinality >= 0
-    assert int(cardinality) == cardinality
-    if cardinality <= 256:
-        return np.uint8
-    if cardinality <= 65536:
-        return np.uint16
-    if cardinality <= (1 << 32):
-        return np.uint32
-    if cardinality <= (1 << 64):
-        return np.uint64
-    raise ValueError(f"No valid dtype for cardinality: '{cardinality}'")
+# # def test_quantize_unquantize
