@@ -107,6 +107,19 @@ class BaseCodec(abc.ABC):
             cols = [col for col in cols if not dtypes.dtype_in_list(
                 df[col].dtype, self._blacklist_types)]
         # print("cols to use before whitelist: ", cols)
+
+
+
+        # TODO rm this whole block after debug
+        # print(f"------------------------ {type(self)} figuring out which cols to use...")
+        # for col in cols:
+        #     print('checking col: ', col, df[col].dtype)
+        #     print("keep = ", dtypes.dtype_in_list(
+        #         df[col].dtype, self._whitelist_types))
+
+
+
+
         if self._whitelist_types:
             cols = [col for col in cols if dtypes.dtype_in_list(
                 df[col].dtype, self._whitelist_types)]
@@ -142,13 +155,12 @@ class BaseCodec(abc.ABC):
 
     def encode(self, df):
         use_cols = self.cols_to_use(df)
-        # print("basecodec encode: using cols: ", use_cols)
         col2header = {}
         for col in use_cols:
+            # print("basecodec encode: encoding col: ", col, df[col].dtype)
             # df[col], header = self.encode_col(df[col].values, col)
             df[col], header = self.encode_col(df[col], col)
-            if col == 'gps_lon':
-                print("codec: dtype retrieved right after encoding: ", df[col].dtype)
+        #     print("codec: dtype retrieved right after encoding: ", df[col].dtype)
             if header is not None:
                 col2header[col] = header
         return df[use_cols], col2header or None  # no headers -> None
@@ -159,6 +171,7 @@ class BaseCodec(abc.ABC):
         use_cols = self.cols_to_use(df)
         # print("basecodec decode: using cols: ", use_cols)
         for col in use_cols:
+            # print(f" {type(self)}: decoding col: ", col, df[col].dtype)
             df[col] = self.decode_col(
                 # df[col].values, col, col2header.get(col))
                 df[col], col, col2header.get(col))
@@ -576,6 +589,16 @@ class ColSumPredictor(NumericCodec):
         return df[[self.col_to_predict]]
 
 
+
+class BooleanToCategorical(BaseCodec):
+    pass
+
+    # TODO impl this; just maps np bools -> bools and nullable bools -> uint8s;
+    # doesn't bitpack so that stuff like delta coding will run on it normally;
+    # also, other categorical types might want the same sort of bitpacking, so
+    # should be factored out into a separate codec
+
+
 class Quantize(NumericCodec):
 
     def __init__(self, *args, col2qparams=None, **kwargs):
@@ -602,7 +625,7 @@ class Quantize(NumericCodec):
 
         # print("quantize: col, dtype, qdtype, orig_dtype", col, vals.dtype, qparams.dtype, qparams.orig_dtype)
         ret = dfq.quantize(vals, qparams)
-        print("ret dtype, qparams: ", ret.dtype, qparams)
+        # print("ret dtype, qparams: ", ret.dtype, qparams)
         # print("qparams: ", qparams)
         # print("returning quantized vals:\n", ret, ret.dtype)
         assert ret.dtype == qparams.dtype

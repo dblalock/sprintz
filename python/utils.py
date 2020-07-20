@@ -15,11 +15,18 @@ _memory = Memory('.', verbose=0)
 
 # XXX TODO support complea numbers (in particular, handle nans)
 def allclose(a, b, rtol=1e-5, atol=1e-5, equal_nan=True):
-    """Like numpb allclose, but handles pandas nullable scalar types"""
+    """Like numpy allclose, but handles pandas nullable scalar types"""
     if isinstance(a, (tuple, list)):
         a = np.array(a)
     if isinstance(b, (tuple, list)):
         b = np.array(b)
+
+    a_numeric = pd.api.types.is_numeric_dtype(a.dtype)
+    b_numeric = pd.api.types.is_numeric_dtype(b.dtype)
+    if a_numeric != b_numeric:
+        return False
+    if not a_numeric:  # exact comparison for non-numeric data
+        return np.all(a == b)
 
     # shape checks
     assert len(a) == len(b)
