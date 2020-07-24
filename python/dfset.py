@@ -137,10 +137,11 @@ class BaseDfSet(abc.ABC):
         ret = sdf.SimpleDataFrame()
         just_one_col = False
         if isinstance(cols, str):
+            # print("getitem() col: ", cols)
             cols = [cols]  # was actually just one col
             just_one_col = True
 
-        # print("getitem() cols: ", cols)
+        # print("getitem() just_one_col: ", just_one_col)
 
         for col in cols:
             # path = self._path(dfid, col)
@@ -158,11 +159,17 @@ class BaseDfSet(abc.ABC):
 
             vals = self._read_col(dfid, col)
             if vals is None:
+                if just_one_col:
+                    return None
                 continue
+            # print(f"col = {col}, vals type, dtype = {type(vals)}, {vals.dtype}")
 
             if just_one_col:
+                # print("returning a series!")
                 # return sdf.SimpleSeries(vals)
                 return pd.Series(vals)
+            # print("not returning a series!")
+
                 # return vals
             ret[col] = vals
         # if 'accel_valid' in ret:
@@ -234,6 +241,7 @@ class BaseDfSet(abc.ABC):
             if self.verbose > 0:
                 # print("dfid, col, vals type, vals dtype: ",
                 #     dfid, col, type(vals), vals.dtype)
+                # print("---- setitem: dfid, col, dtype: ", dfid, col, vals.dtype)
                 print("setitem: dfid, col, dtype: ", dfid, col, vals.dtype)
 
             # print("setting dfid, col, vals: ", dfid, col, vals, vals.dtype)
@@ -295,6 +303,7 @@ class BaseDfSet(abc.ABC):
     def equals(self, other, raise_error=False):
         our_ids = self.ids
         other_ids = other.ids
+
         try:
             assert len(our_ids) == len(other_ids)
             assert np.all(np.sort(our_ids) == np.sort(other_ids))
@@ -309,6 +318,13 @@ class BaseDfSet(abc.ABC):
                     other_vals = other[dfid, col]
 
                     # print(f"checking dfid={dfid}, col={col}")
+                    # print("type(our_vals)", type(our_vals))
+                    # print("type(other_vals)", type(other_vals))
+                    # print("our filetype, other filetype: ", self._filetype, other._filetype)
+
+                    # assert isinstance(our_vals, pd.Series)
+                    # assert isinstance(other_vals, pd.Series)
+
                     close, fail_idxs = utils.allclose(
                         our_vals, other_vals, return_failing_idxs=True)
                     if not close:
@@ -390,7 +406,7 @@ class BaseDfSet(abc.ABC):
         # TODO have a well-defined params() method instead of just
         # looking at which args in init need to be copied
 
-        # print(f"copying from {self.dir} to {dfsdir}")
+        print(f"copying from {self.dir} to {dfsdir}")
 
         if nokwargs:  # same format, so can just copy files
             if clobberdir and os.path.exists(dfsdir):
@@ -509,7 +525,6 @@ class SmartDfSet(BaseDfSet):
 
     def _read_col_from_path(self, path):
         # print("readcol: trying to read from path: ", path)
-
         # df = pf.read_table(path).to_pandas()
         np_path = path + '.npy'
         feather_path = path + '.feather'
@@ -522,22 +537,42 @@ class SmartDfSet(BaseDfSet):
         return None  # neither path exists
 
     def _write_col_to_path(self, path, values):
+        np_path = path + '.npy'
+        feather_path = path + '.feather'
+
         try:
             _ = np.array([], dtype=values.dtype)  # throws if not numpy dtype
             vals = values.values  # pull out np array
-            path += '.npy'
-            np.save(path, vals, **self._np_write_kwargs)
-            altpath = path + '.feather'
-            if os.path.exists(altpath):
-                os.remove(altpath)
+            np.save(np_path, vals, **self._np_write_kwargs)
+            # altpath = path + '.feather'
+            if os.path.exists(feather_path):
+                os.remove(feather_path)
+            assert os.path.exists(np_path)
+            return
         except TypeError:
-            # dtype numpy can't handle; write out a pandas series instead
-            tbl = pa.Table.from_pandas(values.to_frame(), preserve_index=False)
-            pf.write_feather(tbl, path, **self._feather_write_kwargs)
+            pass
 
-            altpath = path + '.npy'
-            if os.path.exists(altpath):
-                os.remove(altpath)
+        # dtype numpy can't handle; write out a pandas series instead
+        tbl = pa.Table.from_pandas(values.to_frame(), preserve_index=False)
+        pf.write_feather(tbl, feather_path, **self._feather_write_kwargs)
+        if os.path.exists(np_path):
+            os.remove(np_path)
+
+        # print("base path: ", path)
+        # print("base path contents: ", os.listdir(os.path.dirname(path)))
+        # print("np_path: ", np_path)
+        # print("feather_path: ", feather_path)
+
+        assert os.path.exists(feather_path)
+
+        # just '.smart' extension should never be present
+        assert not os.path.exists(path)
+
+        # print("base path: ", path)
+        # print("base path contents: ", os.listdir(os.path.dirname(path)))
+        # print("np_path: ", np_path)
+        # print("feather_path: ", feather_path)
+        # assert os.path.exists(np_path) or os.path.exists(feather_path)
 
 
 class ParquetDfSet(BaseDfSet):

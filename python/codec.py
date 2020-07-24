@@ -10,7 +10,6 @@ import pandas as pd
 from scipy import signal
 
 from python import dfquantize2 as dfq
-# from python import learning  # for compute_loss
 from python import compress, dtypes
 
 
@@ -436,9 +435,12 @@ class ByteShuffle(BaseCodec):
         return np.asfortranarray(X).ravel().view(vals.dtype)
 
 
-class CodecSearch(BaseCodec):
+# class CodecSearch(BaseCodec):
+class CodecSearch(NumericCodec):  # TODO use codec blacklists/whitelists
 
-    def __init__(self, pipelines, loss='zstd', *args, **kwargs):
+    # def __init__(self, pipelines, loss='zstd', *args, **kwargs):
+    # TODO get zstd loss working with nullable bool arrays
+    def __init__(self, pipelines, loss='logabs', *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._pipelines = pipelines
         self._loss = loss
@@ -560,7 +562,7 @@ class ColSumPredictor(NumericCodec):
         predictions = df[self.cols_to_sum[0]].values
         if self._weights is not None:
             predictions = signal.correlate(
-                predictions, self._weights[:, 0], padding=self._padding)
+                predictions, self._weights[:, 0], mode=self._padding)
         if len(self.cols_to_sum) > 1:
             for i, col in enumerate(self.cols_to_sum[1:]):
                 # predictions += df[col].values
