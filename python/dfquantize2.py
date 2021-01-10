@@ -148,23 +148,6 @@ def infer_qparams(x, offset=None, scale='lossless_base10', dtype=None,
             # x_scaled = 2 ** logx_scaled
 
 
-
-
-
-
-
-
-            # TODO this code is just broken; returns scale of 1 for gps data
-            # with 6 decimal places
-
-
-
-
-
-
-
-
-
             # x_scaled_ints = np.round(x_scaled).astype(np.int64)
             # diffs = x_scaled - x_scaled_ints
             # less than 1% unexplained
